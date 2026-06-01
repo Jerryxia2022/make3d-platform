@@ -1,0 +1,25 @@
+services:
+  make3d:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: make3d-platform
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      UPLOAD_DIR: ${UPLOAD_DIR}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads

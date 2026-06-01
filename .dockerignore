@@ -1,0 +1,15 @@
+.git
+.next
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.local
+.env.*.local
+data
+uploads
+coverage
+Dockerfile
+docker-compose.yml

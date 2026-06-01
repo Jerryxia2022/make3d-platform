@@ -3,6 +3,8 @@ node_modules
 out
 dist
 coverage
+data
+uploads
 .env
 .env.local
 .env.*.local
