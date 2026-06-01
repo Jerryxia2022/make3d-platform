@@ -1,23 +1,28 @@
-FROM node:24-bookworm-slim AS deps
+FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
+
+ENV NODE_OPTIONS=--experimental-sqlite
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:24-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
+
+ENV NODE_OPTIONS=--experimental-sqlite
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:24-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NODE_OPTIONS=--experimental-sqlite
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
