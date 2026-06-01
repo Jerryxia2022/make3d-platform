@@ -12,6 +12,7 @@ import {
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_MAX_AGE_SECONDS,
+  createAdminLoginRedirectResponse,
   createAdminSessionToken,
   getAdminCookieOptions,
   verifyAdminSessionToken,
@@ -86,6 +87,15 @@ test("uses secure cookie settings in production with seven day max age", () => {
   } finally {
     process.env.NODE_ENV = previousNodeEnv;
   }
+});
+
+test("admin login redirect uses relative Location header", () => {
+  const response = createAdminLoginRedirectResponse("signed-token");
+
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("Location"), "/admin/orders");
+  assert.equal(response.headers.get("Location")?.includes("localhost"), false);
+  assert.match(response.headers.get("Set-Cookie") || "", /make3d_admin=signed-token/);
 });
 
 test("loads order detail with associated uploaded file", () => {

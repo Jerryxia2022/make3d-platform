@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import {
-  ADMIN_SESSION_COOKIE,
+  createAdminLoginRedirectResponse,
   createAdminSessionToken,
-  getAdminCookieOptions,
   verifyAdminCredentials,
 } from "@/backend/adminAuth";
 
@@ -15,10 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.redirect(new URL("/admin/login?error=1", request.url), 303);
   }
 
-  const response = NextResponse.redirect(new URL("/admin/orders", request.url), 303);
-  response.cookies.set(ADMIN_SESSION_COOKIE, createAdminSessionToken(), getAdminCookieOptions());
-
-  return response;
+  return createAdminLoginRedirectResponse(createAdminSessionToken());
 }
 
 function getString(formData: FormData, key: string) {

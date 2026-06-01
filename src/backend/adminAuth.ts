@@ -62,6 +62,57 @@ export function getAdminLogoutCookieOptions() {
   };
 }
 
+export function createAdminLoginRedirectResponse(sessionToken: string) {
+  const response = createRelativeRedirectResponse("/admin/orders");
+  response.headers.append(
+    "Set-Cookie",
+    serializeCookie(ADMIN_SESSION_COOKIE, sessionToken, getAdminCookieOptions()),
+  );
+
+  return response;
+}
+
+export function createAdminLogoutRedirectResponse() {
+  const response = createRelativeRedirectResponse("/admin/login");
+  response.headers.append(
+    "Set-Cookie",
+    serializeCookie(ADMIN_SESSION_COOKIE, "", getAdminLogoutCookieOptions()),
+  );
+
+  return response;
+}
+
+function createRelativeRedirectResponse(location: string) {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      Location: location,
+    },
+  });
+}
+
+function serializeCookie(
+  name: string,
+  value: string,
+  options: ReturnType<typeof getAdminCookieOptions>,
+) {
+  const parts = [`${name}=${value}`, `Path=${options.path}`, `Max-Age=${options.maxAge}`];
+
+  if (options.httpOnly) {
+    parts.push("HttpOnly");
+  }
+
+  if (options.secure) {
+    parts.push("Secure");
+  }
+
+  if (options.sameSite) {
+    parts.push(`SameSite=${options.sameSite}`);
+  }
+
+  return parts.join("; ");
+}
+
 function signPayload(payload: string) {
   const secret = process.env.SESSION_SECRET;
 
