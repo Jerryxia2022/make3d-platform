@@ -27,9 +27,9 @@ function createFixtureOrder(db) {
     email: "jerry@example.com",
     company: "Make3D",
     material: "PLA",
-    color: "白色",
+    color: "white",
     quantity: 2,
-    remark: "后台测试订单",
+    remark: "admin test order",
     estimatedPrice: 30,
     file: {
       filename: "fixture.stl",
@@ -110,7 +110,7 @@ test("loads order detail with associated uploaded file", () => {
   const detail = getOrderById(db, order.id);
 
   assert.equal(detail.customerName, "Jerry");
-  assert.equal(detail.remark, "后台测试订单");
+  assert.equal(detail.remark, "admin test order");
   assert.equal(detail.files.length, 1);
   assert.equal(detail.files[0].filename, "fixture.stl");
 

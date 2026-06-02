@@ -14,7 +14,7 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
   assert.match(source, /ContactSection/);
 });
 
-test("quote page exposes the V1.1 multi-file upload and customer form shell", async () => {
+test("quote page exposes V1.1 upload, estimate, shipping, address, and contact fields", async () => {
   const source = await readSource("src/app/quote/page.tsx");
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
 
@@ -32,8 +32,21 @@ test("quote page exposes the V1.1 multi-file upload and customer form shell", as
   assert.match(formSource, /fileMaterials/);
   assert.match(formSource, /fileColors/);
   assert.match(formSource, /removeFile/);
-  assert.match(formSource, /占位缩略图/);
-  assert.match(formSource, /联系方式/);
+  assert.match(formSource, /estimateFileBySize/);
+  assert.match(formSource, /orderSummary/);
+  assert.match(formSource, /shippingFeeEstimate/);
+  assert.match(formSource, /shippingMethod/);
+  assert.match(formSource, /普通快递/);
+  assert.match(formSource, /顺丰快递/);
+  assert.match(formSource, /西安本地跑腿/);
+  assert.match(formSource, /到店自取/);
+  assert.match(formSource, /recipientName/);
+  assert.match(formSource, /recipientPhone/);
+  assert.match(formSource, /addressRegion/);
+  assert.match(formSource, /addressDetail/);
+  assert.match(formSource, /shippingRemark/);
+  assert.match(formSource, /系统预估/);
+  assert.match(formSource, /运费为预估/);
   assert.match(formSource, /name="customerName"/);
   assert.match(formSource, /name="phone"/);
   assert.match(formSource, /name="wechat"/);
@@ -65,6 +78,26 @@ test("admin pages display contact fields from the matching order properties", as
   assert.match(detailSource, /label="公司" value={order\.company \|\| "-"}/);
 });
 
+test("admin pages show estimate and shipping fields", async () => {
+  const listSource = await readSource("src/app/admin/orders/page.tsx");
+  const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
+
+  assert.match(listSource, /formatPriceRange\(order\)/);
+  assert.match(listSource, /formatLeadTimeRange\(order\)/);
+  assert.match(listSource, /order\.shippingMethod/);
+  assert.match(detailSource, /estimatedPriceMin/);
+  assert.match(detailSource, /estimatedPriceMax/);
+  assert.match(detailSource, /estimatedLeadTimeMinHours/);
+  assert.match(detailSource, /estimatedLeadTimeMaxHours/);
+  assert.match(detailSource, /shippingMethod/);
+  assert.match(detailSource, /shippingFeeEstimate/);
+  assert.match(detailSource, /recipientName/);
+  assert.match(detailSource, /recipientPhone/);
+  assert.match(detailSource, /addressRegion/);
+  assert.match(detailSource, /addressDetail/);
+  assert.match(detailSource, /shippingRemark/);
+});
+
 test("admin order detail page shows complete order fields and per-file actions", async () => {
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
 
@@ -73,7 +106,6 @@ test("admin order detail page shows complete order fields and per-file actions",
   assert.match(detailSource, /AdminStatusForm orderId={order\.id} status={order\.status}/);
   assert.match(detailSource, /value={order\.orderNo}/);
   assert.match(detailSource, /value={String\(order\.id\)}/);
-  assert.match(detailSource, /value={formatPrice\(order\.estimatedPrice\)}/);
   assert.match(detailSource, /value={String\(order\.quantity\)}/);
   assert.match(detailSource, /value={order\.status}/);
   assert.match(detailSource, /order\.remark/);
@@ -85,13 +117,20 @@ test("admin order detail page shows complete order fields and per-file actions",
   assert.match(detailSource, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
 });
 
-test("orders API accepts up to five uploaded model files with per-file options", async () => {
+test("orders API accepts estimates, shipping, address, and up to five uploaded model files", async () => {
   const apiSource = await readSource("src/app/api/orders/route.ts");
 
   assert.match(apiSource, /MAX_FILE_COUNT = 5/);
   assert.match(apiSource, /formData\.getAll\("modelFiles"\)/);
   assert.match(apiSource, /formData\.getAll\("fileMaterials"\)/);
   assert.match(apiSource, /formData\.getAll\("fileColors"\)/);
+  assert.match(apiSource, /estimateOrderSummary/);
+  assert.match(apiSource, /shippingMethod: getString\(formData, "shippingMethod"\)/);
+  assert.match(apiSource, /recipientName: getString\(formData, "recipientName"\)/);
+  assert.match(apiSource, /recipientPhone: getString\(formData, "recipientPhone"\)/);
+  assert.match(apiSource, /addressRegion: getString\(formData, "addressRegion"\)/);
+  assert.match(apiSource, /addressDetail: getString\(formData, "addressDetail"\)/);
+  assert.match(apiSource, /shippingRemark: getString\(formData, "shippingRemark"\)/);
   assert.match(apiSource, /createOrderWithFiles/);
   assert.doesNotMatch(apiSource, /company: getString\(formData, "company"\)/);
 });

@@ -13,6 +13,17 @@ export type OrderInput = {
   quantity: number;
   remark?: string;
   estimatedPrice: number;
+  estimatedPriceMin?: number;
+  estimatedPriceMax?: number;
+  estimatedLeadTimeMinHours?: number;
+  estimatedLeadTimeMaxHours?: number;
+  shippingMethod?: string;
+  shippingFeeEstimate?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  addressRegion?: string;
+  addressDetail?: string;
+  shippingRemark?: string;
   files: Array<{
     filename: string;
     filepath: string;
@@ -70,6 +81,17 @@ export type OrderRecord = {
   quantity: number;
   remark: string | null;
   estimatedPrice: number;
+  estimatedPriceMin: number | null;
+  estimatedPriceMax: number | null;
+  estimatedLeadTimeMinHours: number | null;
+  estimatedLeadTimeMaxHours: number | null;
+  shippingMethod: string | null;
+  shippingFeeEstimate: string | null;
+  recipientName: string | null;
+  recipientPhone: string | null;
+  addressRegion: string | null;
+  addressDetail: string | null;
+  shippingRemark: string | null;
   status: OrderStatus;
   createdAt: string;
 };
@@ -101,6 +123,17 @@ export function initDatabase(dbPath = getDatabasePath()) {
       quantity INTEGER NOT NULL,
       remark TEXT,
       estimated_price REAL NOT NULL DEFAULT 0,
+      estimated_price_min REAL,
+      estimated_price_max REAL,
+      estimated_lead_time_min_hours INTEGER,
+      estimated_lead_time_max_hours INTEGER,
+      shipping_method TEXT,
+      shipping_fee_estimate TEXT,
+      recipient_name TEXT,
+      recipient_phone TEXT,
+      address_region TEXT,
+      address_detail TEXT,
+      shipping_remark TEXT,
       status TEXT NOT NULL DEFAULT '待处理',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -123,7 +156,29 @@ export function initDatabase(dbPath = getDatabasePath()) {
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
   `);
-  ensureFilesModelColumns(db);
+  ensureColumns(db, "files", [
+    ["bounding_box_x", "REAL"],
+    ["bounding_box_y", "REAL"],
+    ["bounding_box_z", "REAL"],
+    ["volume", "REAL"],
+    ["surface_area", "REAL"],
+    ["process_type", "TEXT"],
+    ["material", "TEXT"],
+    ["color", "TEXT"],
+  ]);
+  ensureColumns(db, "orders", [
+    ["estimated_price_min", "REAL"],
+    ["estimated_price_max", "REAL"],
+    ["estimated_lead_time_min_hours", "INTEGER"],
+    ["estimated_lead_time_max_hours", "INTEGER"],
+    ["shipping_method", "TEXT"],
+    ["shipping_fee_estimate", "TEXT"],
+    ["recipient_name", "TEXT"],
+    ["recipient_phone", "TEXT"],
+    ["address_region", "TEXT"],
+    ["address_detail", "TEXT"],
+    ["shipping_remark", "TEXT"],
+  ]);
 
   return db;
 }
@@ -155,8 +210,19 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           quantity,
           remark,
           estimated_price,
+          estimated_price_min,
+          estimated_price_max,
+          estimated_lead_time_min_hours,
+          estimated_lead_time_max_hours,
+          shipping_method,
+          shipping_fee_estimate,
+          recipient_name,
+          recipient_phone,
+          address_region,
+          address_detail,
+          shipping_remark,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待处理')`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待处理')`,
       )
       .run(
         orderNo,
@@ -170,6 +236,17 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.quantity,
         input.remark || null,
         input.estimatedPrice,
+        input.estimatedPriceMin ?? null,
+        input.estimatedPriceMax ?? null,
+        input.estimatedLeadTimeMinHours ?? null,
+        input.estimatedLeadTimeMaxHours ?? null,
+        input.shippingMethod || null,
+        input.shippingFeeEstimate || null,
+        input.recipientName || null,
+        input.recipientPhone || null,
+        input.addressRegion || null,
+        input.addressDetail || null,
+        input.shippingRemark || null,
       );
 
     const orderId = Number(order.lastInsertRowid);
@@ -200,6 +277,8 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
 export function createOrderWithFile(db: DatabaseSync, input: SingleFileOrderInput): CreatedOrder {
   return createOrderWithFiles(db, {
     ...input,
+    estimatedPriceMin: input.estimatedPriceMin ?? input.estimatedPrice,
+    estimatedPriceMax: input.estimatedPriceMax ?? input.estimatedPrice,
     files: [
       {
         ...input.file,
@@ -211,51 +290,11 @@ export function createOrderWithFile(db: DatabaseSync, input: SingleFileOrderInpu
 }
 
 export function listOrders(db: DatabaseSync): OrderRecord[] {
-  return db
-    .prepare(
-      `SELECT
-        id,
-        order_no AS orderNo,
-        customer_name AS customerName,
-        phone,
-        wechat,
-        email,
-        company,
-        material,
-        color,
-        quantity,
-        remark,
-        estimated_price AS estimatedPrice,
-        status,
-        created_at AS createdAt
-      FROM orders
-      ORDER BY created_at DESC`,
-    )
-    .all() as OrderRecord[];
+  return db.prepare(orderSelectSql("ORDER BY created_at DESC")).all() as OrderRecord[];
 }
 
 export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
-  const order = db
-    .prepare(
-      `SELECT
-        id,
-        order_no AS orderNo,
-        customer_name AS customerName,
-        phone,
-        wechat,
-        email,
-        company,
-        material,
-        color,
-        quantity,
-        remark,
-        estimated_price AS estimatedPrice,
-        status,
-        created_at AS createdAt
-      FROM orders
-      WHERE id = ?`,
-    )
-    .get(id) as OrderRecord | undefined;
+  const order = db.prepare(orderSelectSql("WHERE id = ?")).get(id) as OrderRecord | undefined;
 
   if (!order) {
     throw new Error("订单不存在");
@@ -326,6 +365,36 @@ export function updateOrderStatus(db: DatabaseSync, id: number, status: string) 
   return result.changes > 0;
 }
 
+function orderSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    order_no AS orderNo,
+    customer_name AS customerName,
+    phone,
+    wechat,
+    email,
+    company,
+    material,
+    color,
+    quantity,
+    remark,
+    estimated_price AS estimatedPrice,
+    estimated_price_min AS estimatedPriceMin,
+    estimated_price_max AS estimatedPriceMax,
+    estimated_lead_time_min_hours AS estimatedLeadTimeMinHours,
+    estimated_lead_time_max_hours AS estimatedLeadTimeMaxHours,
+    shipping_method AS shippingMethod,
+    shipping_fee_estimate AS shippingFeeEstimate,
+    recipient_name AS recipientName,
+    recipient_phone AS recipientPhone,
+    address_region AS addressRegion,
+    address_detail AS addressDetail,
+    shipping_remark AS shippingRemark,
+    status,
+    created_at AS createdAt
+  FROM orders
+  ${suffix}`;
+}
 
 function createOrderNo() {
   const now = new Date();
@@ -346,26 +415,16 @@ function isOrderStatus(status: string): status is OrderStatus {
   return ORDER_STATUSES.includes(status as OrderStatus);
 }
 
-function ensureFilesModelColumns(db: DatabaseSync) {
+function ensureColumns(db: DatabaseSync, tableName: string, requiredColumns: readonly (readonly [string, string])[]) {
   const existingColumns = new Set(
-    (db.prepare("PRAGMA table_info(files)").all() as Array<{ name: string }>).map(
+    (db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>).map(
       (column) => column.name,
     ),
   );
-  const requiredColumns = [
-    ["bounding_box_x", "REAL"],
-    ["bounding_box_y", "REAL"],
-    ["bounding_box_z", "REAL"],
-    ["volume", "REAL"],
-    ["surface_area", "REAL"],
-    ["process_type", "TEXT"],
-    ["material", "TEXT"],
-    ["color", "TEXT"],
-  ] as const;
 
   for (const [name, type] of requiredColumns) {
     if (!existingColumns.has(name)) {
-      db.exec(`ALTER TABLE files ADD COLUMN ${name} ${type}`);
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${name} ${type}`);
     }
   }
 }

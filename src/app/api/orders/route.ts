@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createOrderWithFiles, openDatabase } from "@/backend/database";
+import { estimateOrderSummary } from "@/backend/estimates";
 import { notifyAdminNewOrder } from "@/backend/email";
 import { consumeUploadRateLimit, getClientIp } from "@/backend/rateLimit";
 import { saveUploadFile } from "@/backend/uploads";
@@ -7,7 +8,16 @@ import { saveUploadFile } from "@/backend/uploads";
 export const runtime = "nodejs";
 
 const MAX_FILE_COUNT = 5;
-const requiredFields = ["customerName", "phone", "wechat"] as const;
+const requiredFields = [
+  "customerName",
+  "phone",
+  "wechat",
+  "shippingMethod",
+  "recipientName",
+  "recipientPhone",
+  "addressRegion",
+  "addressDetail",
+] as const;
 
 export async function POST(request: Request) {
   try {
@@ -64,6 +74,8 @@ export async function POST(request: Request) {
       })),
     );
     const firstFile = savedFiles[0];
+    const shippingMethod = getString(formData, "shippingMethod");
+    const estimate = estimateOrderSummary(savedFiles, shippingMethod);
     const db = openDatabase();
 
     try {
@@ -77,7 +89,18 @@ export async function POST(request: Request) {
         color: firstFile.color,
         quantity: savedFiles.length,
         remark: getString(formData, "remark"),
-        estimatedPrice: 0,
+        estimatedPrice: estimate.priceMax,
+        estimatedPriceMin: estimate.priceMin,
+        estimatedPriceMax: estimate.priceMax,
+        estimatedLeadTimeMinHours: estimate.leadTimeMinHours,
+        estimatedLeadTimeMaxHours: estimate.leadTimeMaxHours,
+        shippingMethod: getString(formData, "shippingMethod"),
+        shippingFeeEstimate: estimate.shippingFeeEstimate,
+        recipientName: getString(formData, "recipientName"),
+        recipientPhone: getString(formData, "recipientPhone"),
+        addressRegion: getString(formData, "addressRegion"),
+        addressDetail: getString(formData, "addressDetail"),
+        shippingRemark: getString(formData, "shippingRemark"),
         files: savedFiles,
       };
       const order = createOrderWithFiles(db, orderInput);

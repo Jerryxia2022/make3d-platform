@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { listOrders, openDatabase } from "@/backend/database";
+import { listOrders, openDatabase, type OrderRecord } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
 
@@ -32,16 +32,26 @@ export default async function AdminOrdersPage() {
         </div>
 
         <div className="mt-8 overflow-x-auto border border-ink/10 bg-white/80 shadow-sm">
-          <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
             <thead className="bg-ink text-white">
               <tr>
-                {["订单编号", "提交时间", "客户姓名", "电话", "微信", "材料", "数量", "状态"].map(
-                  (header) => (
-                    <th className="px-4 py-3 font-semibold" key={header}>
-                      {header}
-                    </th>
-                  ),
-                )}
+                {[
+                  "订单编号",
+                  "提交时间",
+                  "客户姓名",
+                  "电话",
+                  "微信",
+                  "材料",
+                  "数量",
+                  "预估价格",
+                  "预估货期",
+                  "配送方式",
+                  "状态",
+                ].map((header) => (
+                  <th className="px-4 py-3 font-semibold" key={header}>
+                    {header}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -58,12 +68,15 @@ export default async function AdminOrdersPage() {
                   <td className="px-4 py-3">{order.wechat}</td>
                   <td className="px-4 py-3">{order.material}</td>
                   <td className="px-4 py-3">{order.quantity}</td>
+                  <td className="px-4 py-3">{formatPriceRange(order)}</td>
+                  <td className="px-4 py-3">{formatLeadTimeRange(order)}</td>
+                  <td className="px-4 py-3">{order.shippingMethod || "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
                 </tr>
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-graphite" colSpan={8}>
+                  <td className="px-4 py-8 text-center text-graphite" colSpan={11}>
                     暂无订单
                   </td>
                 </tr>
@@ -78,4 +91,20 @@ export default async function AdminOrdersPage() {
 
 function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatPriceRange(order: OrderRecord) {
+  if (order.estimatedPriceMin == null || order.estimatedPriceMax == null) {
+    return order.estimatedPrice ? `¥${order.estimatedPrice.toFixed(2)}` : "-";
+  }
+
+  return `¥${order.estimatedPriceMin.toFixed(2)} - ¥${order.estimatedPriceMax.toFixed(2)}`;
+}
+
+function formatLeadTimeRange(order: OrderRecord) {
+  if (order.estimatedLeadTimeMinHours == null || order.estimatedLeadTimeMaxHours == null) {
+    return "-";
+  }
+
+  return `${order.estimatedLeadTimeMinHours}-${order.estimatedLeadTimeMaxHours} 小时`;
 }

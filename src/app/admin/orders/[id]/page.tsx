@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getOrderById, openDatabase } from "@/backend/database";
+import { getOrderById, openDatabase, type OrderDetail } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 
@@ -42,7 +42,8 @@ export default async function AdminOrderDetailPage({
                 <Detail label="订单编号" value={order.orderNo} />
                 <Detail label="订单ID" value={String(order.id)} />
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
-                <Detail label="预估价格" value={formatPrice(order.estimatedPrice)} />
+                <Detail label="预估价格" value={formatPriceRange(order)} />
+                <Detail label="预估货期" value={formatLeadTimeRange(order)} />
                 <Detail label="状态" value={order.status} />
               </dl>
             </section>
@@ -67,6 +68,19 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
           </div>
+
+          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">配送信息</h2>
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+              <Detail label="配送方式" value={order.shippingMethod || "-"} />
+              <Detail label="预估运费" value={order.shippingFeeEstimate || "-"} />
+              <Detail label="收件人" value={order.recipientName || "-"} />
+              <Detail label="手机号" value={order.recipientPhone || "-"} />
+              <Detail label="省市区" value={order.addressRegion || "-"} />
+              <Detail label="详细地址" value={order.addressDetail || "-"} />
+              <Detail label="配送备注" value={order.shippingRemark || "-"} />
+            </dl>
+          </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">备注</h2>
@@ -123,8 +137,20 @@ function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
 }
 
-function formatPrice(value: number) {
-  return `¥${value.toFixed(2)}`;
+function formatPriceRange(order: OrderDetail) {
+  if (order.estimatedPriceMin == null || order.estimatedPriceMax == null) {
+    return order.estimatedPrice ? `¥${order.estimatedPrice.toFixed(2)}` : "-";
+  }
+
+  return `¥${order.estimatedPriceMin.toFixed(2)} - ¥${order.estimatedPriceMax.toFixed(2)}`;
+}
+
+function formatLeadTimeRange(order: OrderDetail) {
+  if (order.estimatedLeadTimeMinHours == null || order.estimatedLeadTimeMaxHours == null) {
+    return "-";
+  }
+
+  return `${order.estimatedLeadTimeMinHours}-${order.estimatedLeadTimeMaxHours} 小时`;
 }
 
 function formatBytes(value: number) {
