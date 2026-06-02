@@ -72,20 +72,26 @@ test("creates signed admin session tokens with SESSION_SECRET", () => {
   }
 });
 
-test("uses secure cookie settings in production with seven day max age", () => {
+test("uses COOKIE_SECURE for secure cookie settings with seven day max age", () => {
   const previousNodeEnv = process.env.NODE_ENV;
+  const previousCookieSecure = process.env.COOKIE_SECURE;
 
   try {
     process.env.NODE_ENV = "production";
-    const options = getAdminCookieOptions();
+    process.env.COOKIE_SECURE = "false";
+    const httpOptions = getAdminCookieOptions();
 
-    assert.equal(options.httpOnly, true);
-    assert.equal(options.sameSite, "lax");
-    assert.equal(options.secure, true);
-    assert.equal(options.path, "/");
-    assert.equal(options.maxAge, ADMIN_SESSION_MAX_AGE_SECONDS);
+    assert.equal(httpOptions.httpOnly, true);
+    assert.equal(httpOptions.sameSite, "lax");
+    assert.equal(httpOptions.secure, false);
+    assert.equal(httpOptions.path, "/");
+    assert.equal(httpOptions.maxAge, ADMIN_SESSION_MAX_AGE_SECONDS);
+
+    process.env.COOKIE_SECURE = "true";
+    assert.equal(getAdminCookieOptions().secure, true);
   } finally {
     process.env.NODE_ENV = previousNodeEnv;
+    process.env.COOKIE_SECURE = previousCookieSecure;
   }
 });
 

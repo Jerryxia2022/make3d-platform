@@ -87,6 +87,7 @@ UPLOAD_DIR=/app/uploads
 ADMIN_USERNAME=
 ADMIN_PASSWORD=
 SESSION_SECRET=
+COOKIE_SECURE=false
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
@@ -95,6 +96,8 @@ ADMIN_EMAIL=
 ```
 
 `SESSION_SECRET` 必须是随机长字符串，生产环境建议至少 32 字节随机值。
+
+HTTP 测试环境使用 `COOKIE_SECURE=false`，否则浏览器不会保存管理员登录 cookie。HTTPS 正式环境使用 `COOKIE_SECURE=true`。
 
 3. 构建并启动：
 
@@ -139,6 +142,7 @@ UPLOAD_DIR=./uploads
 ADMIN_USERNAME=
 ADMIN_PASSWORD=
 SESSION_SECRET=
+COOKIE_SECURE=false
 ADMIN_EMAIL=
 SMTP_HOST=
 SMTP_PORT=587
@@ -149,5 +153,7 @@ SMTP_PASS=
 未配置数据库和上传目录时，默认使用项目根目录下的 `data/make3d.db` 和 `uploads`。管理员登录必须配置 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `SESSION_SECRET`。
 
 `SESSION_SECRET` 用于签名管理员登录 session，必须设置为随机长字符串。生产环境建议至少 32 字节随机值，例如使用 `openssl rand -base64 32` 生成。
+
+`COOKIE_SECURE` 控制管理员登录 cookie 是否带 `Secure` 属性。HTTP 测试环境使用 `COOKIE_SECURE=false`；HTTPS 正式环境使用 `COOKIE_SECURE=true`。
 
 新订单邮件通知需要配置 `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS` 和 `ADMIN_EMAIL`。客户提交订单成功后，系统会发送标题为 `Make3D 新订单通知 - 订单编号` 的邮件给管理员；如果 SMTP 发送失败，订单提交仍会成功。
