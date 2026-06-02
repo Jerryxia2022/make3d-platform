@@ -28,3 +28,5 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./profiles:/app/profiles
+      - ./gcode:/app/gcode
