@@ -8,6 +8,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { getPrusaSlicerConfig } from "@/backend/slicer";
+import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 
 export default async function AdminOrderDetailPage({
@@ -106,13 +107,11 @@ export default async function AdminOrderDetailPage({
                     : "自动切片报价尚未启用。"}
                 </p>
               </div>
-              <button
-                className="bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-graphite/40"
-                disabled={!slicerConfig.enabled}
-                type="button"
-              >
-                后台测试切片报价
-              </button>
+              <AdminSlicerTestButton
+                enabled={slicerConfig.enabled}
+                orderId={order.id}
+                profilePath={slicerConfig.profilePath}
+              />
             </div>
           </section>
 
