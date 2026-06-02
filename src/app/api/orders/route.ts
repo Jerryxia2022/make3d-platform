@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createOrderWithFiles, openDatabase } from "@/backend/database";
-import { estimateOrderSummary } from "@/backend/estimates";
+import { estimateFileBySize, estimateOrderSummary } from "@/backend/estimates";
 import { notifyAdminNewOrder } from "@/backend/email";
 import { consumeUploadRateLimit, getClientIp } from "@/backend/rateLimit";
 import { saveUploadFile } from "@/backend/uploads";
@@ -60,6 +60,9 @@ export async function POST(request: Request) {
 
     const rawMaterials = formData.getAll("fileMaterials");
     const rawColors = formData.getAll("fileColors");
+    const dimensionXs = getNumberList(formData, "fileDimensionX");
+    const dimensionYs = getNumberList(formData, "fileDimensionY");
+    const dimensionZs = getNumberList(formData, "fileDimensionZ");
     const materials = rawMaterials
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter(Boolean);
@@ -67,11 +70,33 @@ export async function POST(request: Request) {
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter(Boolean);
     const savedFiles = await Promise.all(
-      uploadedFiles.map(async (file, index) => ({
-        ...(await saveUploadFile(file)),
-        material: materials[index] || "PLA",
-        color: colors[index] || "黑",
-      })),
+      uploadedFiles.map(async (file, index) => {
+        const material = materials[index] || "PLA";
+        const dimensions = {
+          x: dimensionXs[index],
+          y: dimensionYs[index],
+          z: dimensionZs[index],
+        };
+        const estimate = estimateFileBySize(file.size, material, dimensions);
+
+        return {
+          ...(await saveUploadFile(file)),
+          material,
+          color: colors[index] || "黑",
+          boundingBoxX: dimensions.x,
+          boundingBoxY: dimensions.y,
+          boundingBoxZ: dimensions.z,
+          estimatedPriceMin: estimate.priceMin,
+          estimatedPriceMax: estimate.priceMax,
+          estimatedLeadTimeMinHours: estimate.leadTimeMinHours,
+          estimatedLeadTimeMaxHours: estimate.leadTimeMaxHours,
+          riskNotice: estimate.riskNotice,
+          riskLevel: estimate.riskLevel,
+          requiresManualConfirmation: estimate.requiresManualConfirmation,
+          materialSalesRate: estimate.materialSalesRate,
+          materialCostRate: estimate.materialCostRate,
+        };
+      }),
     );
     const firstFile = savedFiles[0];
     const shippingMethod = getString(formData, "shippingMethod");
@@ -94,6 +119,8 @@ export async function POST(request: Request) {
         estimatedPriceMax: estimate.priceMax,
         estimatedLeadTimeMinHours: estimate.leadTimeMinHours,
         estimatedLeadTimeMaxHours: estimate.leadTimeMaxHours,
+        packagingFee: estimate.packagingFee,
+        shippingFee: estimate.shippingFee,
         shippingMethod: getString(formData, "shippingMethod"),
         shippingFeeEstimate: estimate.shippingFeeEstimate,
         recipientName: getString(formData, "recipientName"),
@@ -123,4 +150,11 @@ export async function POST(request: Request) {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getNumberList(formData: FormData, key: string) {
+  return formData.getAll(key).map((value) => {
+    const parsed = typeof value === "string" ? Number(value) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  });
 }

@@ -42,6 +42,15 @@ test("initializes orders and files tables with estimate, shipping, and model opt
     "process_type",
     "material",
     "color",
+    "estimated_price_min",
+    "estimated_price_max",
+    "estimated_lead_time_min_hours",
+    "estimated_lead_time_max_hours",
+    "risk_notice",
+    "risk_level",
+    "requires_manual_confirmation",
+    "material_sales_rate",
+    "material_cost_rate",
   ]) {
     assert.equal(fileColumns.includes(column), true);
   }
@@ -54,6 +63,8 @@ test("initializes orders and files tables with estimate, shipping, and model opt
     "estimated_lead_time_max_hours",
     "shipping_method",
     "shipping_fee_estimate",
+    "packaging_fee",
+    "shipping_fee",
     "recipient_name",
     "recipient_phone",
     "address_region",
@@ -130,6 +141,8 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
     estimatedPriceMax: 110,
     estimatedLeadTimeMinHours: 8,
     estimatedLeadTimeMaxHours: 16,
+    packagingFee: 3,
+    shippingFee: 18,
     shippingMethod: "顺丰快递",
     shippingFeeEstimate: "18 元起",
     recipientName: "Jerry",
@@ -144,6 +157,18 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
         filesize: 128,
         material: "PLA",
         color: "黑",
+        boundingBoxX: 9,
+        boundingBoxY: 30,
+        boundingBoxZ: 30,
+        estimatedPriceMin: 26,
+        estimatedPriceMax: 63,
+        estimatedLeadTimeMinHours: 4,
+        estimatedLeadTimeMaxHours: 8,
+        riskNotice: "模型尺寸较小，可能无法稳定打印，需要人工确认。",
+        riskLevel: "warning",
+        requiresManualConfirmation: false,
+        materialSalesRate: 0.25,
+        materialCostRate: 0.05,
       },
       {
         filename: "demo-b.step",
@@ -151,6 +176,18 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
         filesize: 256,
         material: "PETG",
         color: "白",
+        boundingBoxX: 260,
+        boundingBoxY: 120,
+        boundingBoxZ: 80,
+        estimatedPriceMin: 21,
+        estimatedPriceMax: 95,
+        estimatedLeadTimeMinHours: 8,
+        estimatedLeadTimeMaxHours: 24,
+        riskNotice: "模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。",
+        riskLevel: "danger",
+        requiresManualConfirmation: true,
+        materialSalesRate: 0.2,
+        materialCostRate: 0.03,
       },
     ],
   });
@@ -166,6 +203,8 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
   assert.equal(detail.estimatedPriceMax, 110);
   assert.equal(detail.estimatedLeadTimeMinHours, 8);
   assert.equal(detail.estimatedLeadTimeMaxHours, 16);
+  assert.equal(detail.packagingFee, 3);
+  assert.equal(detail.shippingFee, 18);
   assert.equal(detail.shippingMethod, "顺丰快递");
   assert.equal(detail.shippingFeeEstimate, "18 元起");
   assert.equal(detail.recipientName, "Jerry");
@@ -180,10 +219,27 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
       filename: file.filename,
       material: file.material,
       color: file.color,
+      boundingBoxX: file.boundingBoxX,
+      riskLevel: file.riskLevel,
+      requiresManualConfirmation: file.requiresManualConfirmation,
     })),
     [
-      { filename: "demo-a.stl", material: "PLA", color: "黑" },
-      { filename: "demo-b.step", material: "PETG", color: "白" },
+      {
+        filename: "demo-a.stl",
+        material: "PLA",
+        color: "黑",
+        boundingBoxX: 9,
+        riskLevel: "warning",
+        requiresManualConfirmation: false,
+      },
+      {
+        filename: "demo-b.step",
+        material: "PETG",
+        color: "白",
+        boundingBoxX: 260,
+        riskLevel: "danger",
+        requiresManualConfirmation: true,
+      },
     ],
   );
 

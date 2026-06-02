@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getOrderById, openDatabase, type OrderDetail } from "@/backend/database";
+import { getOrderById, openDatabase, type OrderDetail, type OrderFileRecord } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 
@@ -44,6 +44,8 @@ export default async function AdminOrderDetailPage({
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
                 <Detail label="预估价格" value={formatPriceRange(order)} />
                 <Detail label="预估货期" value={formatLeadTimeRange(order)} />
+                <Detail label="包装费" value={formatMoney(order.packagingFee)} />
+                <Detail label="运费" value={formatMoney(order.shippingFee)} />
                 <Detail label="状态" value={order.status} />
               </dl>
             </section>
@@ -95,14 +97,22 @@ export default async function AdminOrderDetailPage({
                   className="flex flex-col gap-3 border border-ink/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                   key={file.id}
                 >
-                  <div>
+                  <div className="space-y-1">
                     <p className="font-semibold">{file.filename}</p>
                     <p className="text-sm text-graphite">
                       {formatBytes(file.filesize)} · 上传时间：{formatDate(file.createdAt)}
                     </p>
-                    <p className="mt-1 text-sm text-graphite">
+                    <p className="text-sm text-graphite">
                       材料：{file.material || "-"} · 颜色：{file.color || "-"}
                     </p>
+                    <p className="text-sm text-graphite">尺寸：{formatDimensions(file)}</p>
+                    <p className="text-sm text-graphite">
+                      文件估价：{formatFilePriceRange(file)} · 文件工期：
+                      {formatFileLeadTimeRange(file)}
+                    </p>
+                    {file.riskNotice ? (
+                      <p className="text-sm font-semibold text-coral">{file.riskNotice}</p>
+                    ) : null}
                   </div>
                   <a
                     className="inline-flex bg-ink px-4 py-2 text-sm font-semibold text-white"
@@ -151,6 +161,34 @@ function formatLeadTimeRange(order: OrderDetail) {
   }
 
   return `${order.estimatedLeadTimeMinHours}-${order.estimatedLeadTimeMaxHours} 小时`;
+}
+
+function formatFilePriceRange(file: OrderFileRecord) {
+  if (file.estimatedPriceMin == null || file.estimatedPriceMax == null) {
+    return "-";
+  }
+
+  return `¥${file.estimatedPriceMin.toFixed(2)} - ¥${file.estimatedPriceMax.toFixed(2)}`;
+}
+
+function formatFileLeadTimeRange(file: OrderFileRecord) {
+  if (file.estimatedLeadTimeMinHours == null || file.estimatedLeadTimeMaxHours == null) {
+    return "-";
+  }
+
+  return `${file.estimatedLeadTimeMinHours}-${file.estimatedLeadTimeMaxHours} 小时`;
+}
+
+function formatDimensions(file: OrderFileRecord) {
+  if (file.boundingBoxX == null && file.boundingBoxY == null && file.boundingBoxZ == null) {
+    return "-";
+  }
+
+  return `${file.boundingBoxX || "-"} × ${file.boundingBoxY || "-"} × ${file.boundingBoxZ || "-"} mm`;
+}
+
+function formatMoney(value: number | null) {
+  return value == null ? "-" : `¥${value.toFixed(2)}`;
 }
 
 function formatBytes(value: number) {

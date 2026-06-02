@@ -2,36 +2,52 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEVICE_COUNT,
+  PACKAGING_FEE,
   estimateFileBySize,
   estimateOrderSummary,
+  getMaterialCostRate,
+  getMaterialSalesRate,
   getShippingEstimate,
 } from "../src/backend/estimates.ts";
 
-test("estimates file price and lead time from file size buckets", () => {
-  assert.deepEqual(estimateFileBySize(4 * 1024 * 1024, "PLA"), {
-    priceMin: 20,
-    priceMax: 50,
-    leadTimeMinHours: 4,
-    leadTimeMaxHours: 8,
-    materialRate: 0.15,
-  });
-  assert.deepEqual(estimateFileBySize(10 * 1024 * 1024, "PETG"), {
-    priceMin: 50,
-    priceMax: 120,
-    leadTimeMinHours: 8,
-    leadTimeMaxHours: 24,
-    materialRate: 0.25,
-  });
-  assert.deepEqual(estimateFileBySize(30 * 1024 * 1024, "ABS"), {
-    priceMin: 120,
-    priceMax: 300,
-    leadTimeMinHours: 24,
-    leadTimeMaxHours: 48,
-    materialRate: 0.3,
-  });
+test("uses V2 material sales and cost rates", () => {
+  assert.equal(getMaterialSalesRate("PLA"), 0.25);
+  assert.equal(getMaterialSalesRate("PETG"), 0.2);
+  assert.equal(getMaterialSalesRate("ABS"), 0.35);
+  assert.equal(getMaterialCostRate("PLA"), 0.05);
+  assert.equal(getMaterialCostRate("PETG"), 0.03);
+  assert.equal(getMaterialCostRate("ABS"), 0.05);
 });
 
-test("estimates order totals by summing files and adding manual order fee", () => {
+test("estimates file price with labor minimum and dimension risks", () => {
+  const smallPla = estimateFileBySize(4 * 1024 * 1024, "PLA", {
+    x: 9,
+    y: 30,
+    z: 30,
+  });
+
+  assert.equal(smallPla.priceMin, 26);
+  assert.equal(smallPla.priceMax, 63);
+  assert.equal(smallPla.leadTimeMinHours, 4);
+  assert.equal(smallPla.leadTimeMaxHours, 8);
+  assert.equal(smallPla.riskLevel, "warning");
+  assert.match(smallPla.riskNotice, /模型尺寸较小/);
+
+  const oversizedAbs = estimateFileBySize(30 * 1024 * 1024, "ABS", {
+    x: 260,
+    y: 120,
+    z: 80,
+  });
+
+  assert.equal(oversizedAbs.requiresManualConfirmation, true);
+  assert.equal(oversizedAbs.riskLevel, "danger");
+  assert.match(oversizedAbs.riskNotice, /超出单台设备成型尺寸/);
+  assert.equal(oversizedAbs.materialSalesRate, 0.35);
+  assert.equal(oversizedAbs.materialCostRate, 0.05);
+});
+
+test("estimates order total with packaging, fixed freight, minimum price and six-device lead time", () => {
   const summary = estimateOrderSummary(
     [
       { filesize: 4 * 1024 * 1024, material: "PLA", color: "黑" },
@@ -40,18 +56,36 @@ test("estimates order totals by summing files and adding manual order fee", () =
     "普通快递",
   );
 
-  assert.deepEqual(summary, {
-    priceMin: 80,
-    priceMax: 180,
-    leadTimeMinHours: 12,
-    leadTimeMaxHours: 32,
-    shippingFeeEstimate: "10 元起",
-  });
+  assert.equal(DEVICE_COUNT, 6);
+  assert.equal(PACKAGING_FEE, 3);
+  assert.equal(summary.packagingFee, 3);
+  assert.equal(summary.shippingFee, 10);
+  assert.equal(summary.shippingFeeEstimate, "10 元");
+  assert.equal(summary.priceMin, 55);
+  assert.equal(summary.priceMax, 154);
+  assert.equal(summary.leadTimeMinHours, 4);
+  assert.equal(summary.leadTimeMaxHours, 8);
 });
 
-test("returns shipping fee estimates for supported shipping methods", () => {
-  assert.equal(getShippingEstimate("普通快递"), "10 元起");
-  assert.equal(getShippingEstimate("顺丰快递"), "18 元起");
-  assert.equal(getShippingEstimate("西安本地跑腿"), "需人工确认");
-  assert.equal(getShippingEstimate("到店自取"), "0 元");
+test("returns V2 shipping estimates for supported shipping methods", () => {
+  assert.deepEqual(getShippingEstimate("普通快递"), {
+    label: "10 元",
+    amount: 10,
+    includedInAutoPrice: true,
+  });
+  assert.deepEqual(getShippingEstimate("顺丰快递"), {
+    label: "18 元",
+    amount: 18,
+    includedInAutoPrice: true,
+  });
+  assert.deepEqual(getShippingEstimate("西安本地跑腿"), {
+    label: "人工确认",
+    amount: null,
+    includedInAutoPrice: false,
+  });
+  assert.deepEqual(getShippingEstimate("到店自取"), {
+    label: "0 元",
+    amount: 0,
+    includedInAutoPrice: true,
+  });
 });

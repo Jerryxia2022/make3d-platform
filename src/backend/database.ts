@@ -17,6 +17,8 @@ export type OrderInput = {
   estimatedPriceMax?: number;
   estimatedLeadTimeMinHours?: number;
   estimatedLeadTimeMaxHours?: number;
+  packagingFee?: number;
+  shippingFee?: number | null;
   shippingMethod?: string;
   shippingFeeEstimate?: string;
   recipientName?: string;
@@ -24,13 +26,27 @@ export type OrderInput = {
   addressRegion?: string;
   addressDetail?: string;
   shippingRemark?: string;
-  files: Array<{
-    filename: string;
-    filepath: string;
-    filesize: number;
-    material: string;
-    color: string;
-  }>;
+  files: OrderFileInput[];
+};
+
+export type OrderFileInput = {
+  filename: string;
+  filepath: string;
+  filesize: number;
+  material: string;
+  color: string;
+  boundingBoxX?: number | null;
+  boundingBoxY?: number | null;
+  boundingBoxZ?: number | null;
+  estimatedPriceMin?: number;
+  estimatedPriceMax?: number;
+  estimatedLeadTimeMinHours?: number;
+  estimatedLeadTimeMaxHours?: number;
+  riskNotice?: string;
+  riskLevel?: string;
+  requiresManualConfirmation?: boolean;
+  materialSalesRate?: number;
+  materialCostRate?: number;
 };
 
 export type SingleFileOrderInput = Omit<OrderInput, "files"> & {
@@ -65,6 +81,15 @@ export type OrderFileRecord = {
   volume: number | null;
   surfaceArea: number | null;
   processType: string | null;
+  estimatedPriceMin: number | null;
+  estimatedPriceMax: number | null;
+  estimatedLeadTimeMinHours: number | null;
+  estimatedLeadTimeMaxHours: number | null;
+  riskNotice: string | null;
+  riskLevel: string | null;
+  requiresManualConfirmation: boolean;
+  materialSalesRate: number | null;
+  materialCostRate: number | null;
   createdAt: string;
 };
 
@@ -85,6 +110,8 @@ export type OrderRecord = {
   estimatedPriceMax: number | null;
   estimatedLeadTimeMinHours: number | null;
   estimatedLeadTimeMaxHours: number | null;
+  packagingFee: number | null;
+  shippingFee: number | null;
   shippingMethod: string | null;
   shippingFeeEstimate: string | null;
   recipientName: string | null;
@@ -127,6 +154,8 @@ export function initDatabase(dbPath = getDatabasePath()) {
       estimated_price_max REAL,
       estimated_lead_time_min_hours INTEGER,
       estimated_lead_time_max_hours INTEGER,
+      packaging_fee REAL,
+      shipping_fee REAL,
       shipping_method TEXT,
       shipping_fee_estimate TEXT,
       recipient_name TEXT,
@@ -152,10 +181,34 @@ export function initDatabase(dbPath = getDatabasePath()) {
       volume REAL,
       surface_area REAL,
       process_type TEXT,
+      estimated_price_min REAL,
+      estimated_price_max REAL,
+      estimated_lead_time_min_hours INTEGER,
+      estimated_lead_time_max_hours INTEGER,
+      risk_notice TEXT,
+      risk_level TEXT,
+      requires_manual_confirmation INTEGER NOT NULL DEFAULT 0,
+      material_sales_rate REAL,
+      material_cost_rate REAL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
   `);
+  ensureColumns(db, "orders", [
+    ["estimated_price_min", "REAL"],
+    ["estimated_price_max", "REAL"],
+    ["estimated_lead_time_min_hours", "INTEGER"],
+    ["estimated_lead_time_max_hours", "INTEGER"],
+    ["packaging_fee", "REAL"],
+    ["shipping_fee", "REAL"],
+    ["shipping_method", "TEXT"],
+    ["shipping_fee_estimate", "TEXT"],
+    ["recipient_name", "TEXT"],
+    ["recipient_phone", "TEXT"],
+    ["address_region", "TEXT"],
+    ["address_detail", "TEXT"],
+    ["shipping_remark", "TEXT"],
+  ]);
   ensureColumns(db, "files", [
     ["bounding_box_x", "REAL"],
     ["bounding_box_y", "REAL"],
@@ -165,19 +218,15 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["process_type", "TEXT"],
     ["material", "TEXT"],
     ["color", "TEXT"],
-  ]);
-  ensureColumns(db, "orders", [
     ["estimated_price_min", "REAL"],
     ["estimated_price_max", "REAL"],
     ["estimated_lead_time_min_hours", "INTEGER"],
     ["estimated_lead_time_max_hours", "INTEGER"],
-    ["shipping_method", "TEXT"],
-    ["shipping_fee_estimate", "TEXT"],
-    ["recipient_name", "TEXT"],
-    ["recipient_phone", "TEXT"],
-    ["address_region", "TEXT"],
-    ["address_detail", "TEXT"],
-    ["shipping_remark", "TEXT"],
+    ["risk_notice", "TEXT"],
+    ["risk_level", "TEXT"],
+    ["requires_manual_confirmation", "INTEGER NOT NULL DEFAULT 0"],
+    ["material_sales_rate", "REAL"],
+    ["material_cost_rate", "REAL"],
   ]);
 
   return db;
@@ -194,6 +243,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
 
   const firstFile = input.files[0];
   const orderNo = createOrderNo();
+
   try {
     db.exec("BEGIN");
     const order = db
@@ -214,6 +264,8 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           estimated_price_max,
           estimated_lead_time_min_hours,
           estimated_lead_time_max_hours,
+          packaging_fee,
+          shipping_fee,
           shipping_method,
           shipping_fee_estimate,
           recipient_name,
@@ -222,7 +274,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           address_detail,
           shipping_remark,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待处理')`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待处理')`,
       )
       .run(
         orderNo,
@@ -240,6 +292,8 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.estimatedPriceMax ?? null,
         input.estimatedLeadTimeMinHours ?? null,
         input.estimatedLeadTimeMaxHours ?? null,
+        input.packagingFee ?? null,
+        input.shippingFee ?? null,
         input.shippingMethod || null,
         input.shippingFeeEstimate || null,
         input.recipientName || null,
@@ -251,8 +305,26 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
 
     const orderId = Number(order.lastInsertRowid);
     const insertFile = db.prepare(
-      `INSERT INTO files (order_id, filename, filepath, filesize, material, color)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO files (
+        order_id,
+        filename,
+        filepath,
+        filesize,
+        material,
+        color,
+        bounding_box_x,
+        bounding_box_y,
+        bounding_box_z,
+        estimated_price_min,
+        estimated_price_max,
+        estimated_lead_time_min_hours,
+        estimated_lead_time_max_hours,
+        risk_notice,
+        risk_level,
+        requires_manual_confirmation,
+        material_sales_rate,
+        material_cost_rate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     for (const file of input.files) {
@@ -263,6 +335,18 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         file.filesize,
         file.material,
         file.color || null,
+        file.boundingBoxX ?? null,
+        file.boundingBoxY ?? null,
+        file.boundingBoxZ ?? null,
+        file.estimatedPriceMin ?? null,
+        file.estimatedPriceMax ?? null,
+        file.estimatedLeadTimeMinHours ?? null,
+        file.estimatedLeadTimeMaxHours ?? null,
+        file.riskNotice || null,
+        file.riskLevel || null,
+        file.requiresManualConfirmation ? 1 : 0,
+        file.materialSalesRate ?? null,
+        file.materialCostRate ?? null,
       );
     }
 
@@ -316,12 +400,22 @@ export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
         volume,
         surface_area AS surfaceArea,
         process_type AS processType,
+        estimated_price_min AS estimatedPriceMin,
+        estimated_price_max AS estimatedPriceMax,
+        estimated_lead_time_min_hours AS estimatedLeadTimeMinHours,
+        estimated_lead_time_max_hours AS estimatedLeadTimeMaxHours,
+        risk_notice AS riskNotice,
+        risk_level AS riskLevel,
+        requires_manual_confirmation AS requiresManualConfirmation,
+        material_sales_rate AS materialSalesRate,
+        material_cost_rate AS materialCostRate,
         created_at AS createdAt
       FROM files
       WHERE order_id = ?
       ORDER BY created_at ASC`,
     )
-    .all(id) as OrderFileRecord[];
+    .all(id)
+    .map(normalizeFileRecord) as OrderFileRecord[];
 
   return { ...order, files };
 }
@@ -343,17 +437,26 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
         volume,
         surface_area AS surfaceArea,
         process_type AS processType,
+        estimated_price_min AS estimatedPriceMin,
+        estimated_price_max AS estimatedPriceMax,
+        estimated_lead_time_min_hours AS estimatedLeadTimeMinHours,
+        estimated_lead_time_max_hours AS estimatedLeadTimeMaxHours,
+        risk_notice AS riskNotice,
+        risk_level AS riskLevel,
+        requires_manual_confirmation AS requiresManualConfirmation,
+        material_sales_rate AS materialSalesRate,
+        material_cost_rate AS materialCostRate,
         created_at AS createdAt
       FROM files
       WHERE id = ?`,
     )
-    .get(id) as OrderFileRecord | undefined;
+    .get(id);
 
   if (!file) {
     throw new Error("文件不存在");
   }
 
-  return file;
+  return normalizeFileRecord(file) as OrderFileRecord;
 }
 
 export function updateOrderStatus(db: DatabaseSync, id: number, status: string) {
@@ -383,6 +486,8 @@ function orderSelectSql(suffix: string) {
     estimated_price_max AS estimatedPriceMax,
     estimated_lead_time_min_hours AS estimatedLeadTimeMinHours,
     estimated_lead_time_max_hours AS estimatedLeadTimeMaxHours,
+    packaging_fee AS packagingFee,
+    shipping_fee AS shippingFee,
     shipping_method AS shippingMethod,
     shipping_fee_estimate AS shippingFeeEstimate,
     recipient_name AS recipientName,
@@ -394,6 +499,14 @@ function orderSelectSql(suffix: string) {
     created_at AS createdAt
   FROM orders
   ${suffix}`;
+}
+
+function normalizeFileRecord(file: unknown) {
+  const record = file as Record<string, unknown> & { requiresManualConfirmation: 0 | 1 };
+  return {
+    ...record,
+    requiresManualConfirmation: Boolean(record.requiresManualConfirmation),
+  } as OrderFileRecord;
 }
 
 function createOrderNo() {
@@ -415,7 +528,11 @@ function isOrderStatus(status: string): status is OrderStatus {
   return ORDER_STATUSES.includes(status as OrderStatus);
 }
 
-function ensureColumns(db: DatabaseSync, tableName: string, requiredColumns: readonly (readonly [string, string])[]) {
+function ensureColumns(
+  db: DatabaseSync,
+  tableName: string,
+  requiredColumns: readonly (readonly [string, string])[],
+) {
   const existingColumns = new Set(
     (db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>).map(
       (column) => column.name,
