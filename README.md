@@ -165,3 +165,6 @@ Production Docker images include PrusaSlicer in the runtime container. After reb
 ```bash
 docker compose exec make3d prusa-slicer --version
 ```
+
+默认 PrusaSlicer 配置文件位于 `profiles/bambu-p1s.ini`，用于 Bambu Lab P1S / 0.4mm 喷嘴 / FDM 的基础估价配置。
+该配置仅用于后台自动切片报价的基础估算，不代表最终打印配置；实际生产时仍需根据模型结构、材料、强度、支撑、表面效果和设备状态由人工确认。
