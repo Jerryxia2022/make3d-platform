@@ -76,3 +76,17 @@ test("admin order detail page shows complete order fields and file actions", asy
   assert.match(detailSource, /file\.filesize/);
   assert.match(detailSource, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
 });
+
+test("home and quote pages include the Make3D contact information section", async () => {
+  const homeSource = await readSource("src/app/page.tsx");
+  const quoteSource = await readSource("src/app/quote/page.tsx");
+  const contactSource = await readSource("src/frontend/components/ContactSection.tsx");
+
+  assert.match(homeSource, /ContactSection/);
+  assert.match(quoteSource, /ContactSection/);
+  assert.match(contactSource, /微信：请填写你的微信号/);
+  assert.match(contactSource, /电话：请填写你的手机号/);
+  assert.match(contactSource, /邮箱：21899835@qq\.com/);
+  assert.match(contactSource, /服务时间：工作日晚上及周末可处理订单/);
+  assert.match(contactSource, /提交模型后，我们会人工确认最终报价和生产安排。/);
+});

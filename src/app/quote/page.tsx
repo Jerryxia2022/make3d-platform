@@ -1,4 +1,5 @@
 import { QuoteForm } from "@/frontend/components/QuoteForm";
+import { ContactSection } from "@/frontend/components/ContactSection";
 
 const materials = [
   { name: "PLA", price: "0.15元/克" },
@@ -43,6 +44,7 @@ export default function QuotePage() {
 
         <QuoteForm />
       </section>
+      <ContactSection />
     </main>
   );
 }

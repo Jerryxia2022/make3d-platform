@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ContactSection } from "@/frontend/components/ContactSection";
 
 const serviceItems = ["快速打样", "小批量试产", "毕业设计打印"];
 
@@ -39,6 +40,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      <ContactSection />
     </main>
   );
 }
