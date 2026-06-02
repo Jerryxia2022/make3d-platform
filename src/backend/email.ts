@@ -82,5 +82,5 @@ function hasSmtpConfig() {
 }
 
 function getAppUrl() {
-  return process.env.APP_URL || "http://localhost:3000";
+  return process.env.APP_URL || "https://make3d.com.cn";
 }

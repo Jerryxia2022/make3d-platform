@@ -34,6 +34,20 @@ test("builds new order notification email with admin detail link", () => {
   assert.match(email.text, /后台订单详情：https:\/\/make3d\.com\.cn\/admin\/orders\/7/);
 });
 
+test("uses production app URL for default email order detail link", () => {
+  const previousAppUrl = process.env.APP_URL;
+
+  try {
+    delete process.env.APP_URL;
+    const email = buildNewOrderEmail(order);
+
+    assert.match(email.text, /后台订单详情：https:\/\/make3d\.com\.cn\/admin\/orders\/7/);
+    assert.doesNotMatch(email.text, /localhost/);
+  } finally {
+    restoreEnv({ APP_URL: previousAppUrl });
+  }
+});
+
 test("sends admin notification when SMTP configuration is complete", async () => {
   const previous = snapshotEnv();
   const sent = [];
