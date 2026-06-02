@@ -86,6 +86,9 @@ export default async function AdminOrderDetailPage({
                     <p className="text-sm text-graphite">
                       {formatBytes(file.filesize)} · 上传时间：{formatDate(file.createdAt)}
                     </p>
+                    <p className="mt-1 text-sm text-graphite">
+                      材料：{file.material || "-"} · 颜色：{file.color || "-"}
+                    </p>
                   </div>
                   <a
                     className="inline-flex bg-ink px-4 py-2 text-sm font-semibold text-white"

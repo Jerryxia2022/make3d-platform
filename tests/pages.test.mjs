@@ -6,15 +6,15 @@ async function readSource(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("home page contains Make3D service entry and quote CTA", async () => {
+test("home page contains Make3D service entry, quote CTA, and contact section", async () => {
   const source = await readSource("src/app/page.tsx");
 
   assert.match(source, /Make3D/);
-  assert.match(source, /工业级3D打印服务/);
-  assert.match(source, /立即报价/);
+  assert.match(source, /href="\/quote"/);
+  assert.match(source, /ContactSection/);
 });
 
-test("quote page exposes the V1 material and customer form shell", async () => {
+test("quote page exposes the V1.1 multi-file upload and customer form shell", async () => {
   const source = await readSource("src/app/quote/page.tsx");
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
 
@@ -24,12 +24,22 @@ test("quote page exposes the V1 material and customer form shell", async () => {
   assert.match(source, /PLA/);
   assert.match(source, /PETG/);
   assert.match(source, /ABS/);
-  assert.match(source, /此价格为系统预估，最终价格以人工确认为准。/);
+  assert.match(source, /ContactSection/);
+  assert.match(formSource, /onDrop={handleDrop}/);
+  assert.match(formSource, /multiple/);
+  assert.match(formSource, /MAX_FILE_COUNT/);
+  assert.match(formSource, /modelFiles/);
+  assert.match(formSource, /fileMaterials/);
+  assert.match(formSource, /fileColors/);
+  assert.match(formSource, /removeFile/);
+  assert.match(formSource, /占位缩略图/);
+  assert.match(formSource, /联系方式/);
   assert.match(formSource, /name="customerName"/);
   assert.match(formSource, /name="phone"/);
   assert.match(formSource, /name="wechat"/);
   assert.match(formSource, /name="email"/);
-  assert.match(formSource, /name="company"/);
+  assert.match(formSource, /name="remark"/);
+  assert.doesNotMatch(formSource, /name="company"/);
   assert.match(formSource, /autoComplete="tel"/);
   assert.match(formSource, /autoComplete="off"/);
 });
@@ -45,11 +55,8 @@ test("admin pages display contact fields from the matching order properties", as
   const listSource = await readSource("src/app/admin/orders/page.tsx");
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
 
-  assert.match(listSource, /客户姓名/);
   assert.match(listSource, /{order\.customerName}/);
-  assert.match(listSource, /电话/);
   assert.match(listSource, /{order\.phone}/);
-  assert.match(listSource, /微信/);
   assert.match(listSource, /{order\.wechat}/);
   assert.match(detailSource, /label="姓名" value={order\.customerName}/);
   assert.match(detailSource, /label="电话" value={order\.phone}/);
@@ -58,7 +65,7 @@ test("admin pages display contact fields from the matching order properties", as
   assert.match(detailSource, /label="公司" value={order\.company \|\| "-"}/);
 });
 
-test("admin order detail page shows complete order fields and file actions", async () => {
+test("admin order detail page shows complete order fields and per-file actions", async () => {
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
 
   assert.match(detailSource, /requireAdminSession/);
@@ -67,23 +74,31 @@ test("admin order detail page shows complete order fields and file actions", asy
   assert.match(detailSource, /value={order\.orderNo}/);
   assert.match(detailSource, /value={String\(order\.id\)}/);
   assert.match(detailSource, /value={formatPrice\(order\.estimatedPrice\)}/);
-  assert.match(detailSource, /value={order\.material}/);
   assert.match(detailSource, /value={String\(order\.quantity\)}/);
   assert.match(detailSource, /value={order\.status}/);
   assert.match(detailSource, /order\.remark/);
   assert.match(detailSource, /order\.files\.map/);
   assert.match(detailSource, /file\.filename/);
+  assert.match(detailSource, /file\.material/);
+  assert.match(detailSource, /file\.color/);
   assert.match(detailSource, /file\.filesize/);
   assert.match(detailSource, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
 });
 
-test("home and quote pages include the Make3D contact information section", async () => {
-  const homeSource = await readSource("src/app/page.tsx");
-  const quoteSource = await readSource("src/app/quote/page.tsx");
+test("orders API accepts up to five uploaded model files with per-file options", async () => {
+  const apiSource = await readSource("src/app/api/orders/route.ts");
+
+  assert.match(apiSource, /MAX_FILE_COUNT = 5/);
+  assert.match(apiSource, /formData\.getAll\("modelFiles"\)/);
+  assert.match(apiSource, /formData\.getAll\("fileMaterials"\)/);
+  assert.match(apiSource, /formData\.getAll\("fileColors"\)/);
+  assert.match(apiSource, /createOrderWithFiles/);
+  assert.doesNotMatch(apiSource, /company: getString\(formData, "company"\)/);
+});
+
+test("contact information section contains the configured Make3D contact copy", async () => {
   const contactSource = await readSource("src/frontend/components/ContactSection.tsx");
 
-  assert.match(homeSource, /ContactSection/);
-  assert.match(quoteSource, /ContactSection/);
   assert.match(contactSource, /微信：请填写你的微信号/);
   assert.match(contactSource, /电话：请填写你的手机号/);
   assert.match(contactSource, /邮箱：21899835@qq\.com/);

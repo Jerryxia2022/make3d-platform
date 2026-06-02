@@ -8,11 +8,22 @@ export type OrderInput = {
   wechat: string;
   email?: string;
   company?: string;
-  material: string;
+  material?: string;
   color?: string;
   quantity: number;
   remark?: string;
   estimatedPrice: number;
+  files: Array<{
+    filename: string;
+    filepath: string;
+    filesize: number;
+    material: string;
+    color: string;
+  }>;
+};
+
+export type SingleFileOrderInput = Omit<OrderInput, "files"> & {
+  material: string;
   file: {
     filename: string;
     filepath: string;
@@ -35,6 +46,8 @@ export type OrderFileRecord = {
   filename: string;
   filepath: string;
   filesize: number;
+  material: string | null;
+  color: string | null;
   boundingBoxX: number | null;
   boundingBoxY: number | null;
   boundingBoxZ: number | null;
@@ -98,6 +111,8 @@ export function initDatabase(dbPath = getDatabasePath()) {
       filename TEXT NOT NULL,
       filepath TEXT NOT NULL,
       filesize INTEGER NOT NULL,
+      material TEXT,
+      color TEXT,
       bounding_box_x REAL,
       bounding_box_y REAL,
       bounding_box_z REAL,
@@ -117,7 +132,12 @@ export function openDatabase() {
   return initDatabase();
 }
 
-export function createOrderWithFile(db: DatabaseSync, input: OrderInput): CreatedOrder {
+export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): CreatedOrder {
+  if (input.files.length === 0) {
+    throw new Error("请上传模型文件");
+  }
+
+  const firstFile = input.files[0];
   const orderNo = createOrderNo();
   try {
     db.exec("BEGIN");
@@ -145,18 +165,29 @@ export function createOrderWithFile(db: DatabaseSync, input: OrderInput): Create
         input.wechat,
         input.email || null,
         input.company || null,
-        input.material,
-        input.color || null,
+        input.material || firstFile.material,
+        input.color || firstFile.color || null,
         input.quantity,
         input.remark || null,
         input.estimatedPrice,
       );
 
     const orderId = Number(order.lastInsertRowid);
-    db.prepare(
-      `INSERT INTO files (order_id, filename, filepath, filesize)
-       VALUES (?, ?, ?, ?)`,
-    ).run(orderId, input.file.filename, input.file.filepath, input.file.filesize);
+    const insertFile = db.prepare(
+      `INSERT INTO files (order_id, filename, filepath, filesize, material, color)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+
+    for (const file of input.files) {
+      insertFile.run(
+        orderId,
+        file.filename,
+        file.filepath,
+        file.filesize,
+        file.material,
+        file.color || null,
+      );
+    }
 
     db.exec("COMMIT");
     return { id: orderId, orderNo };
@@ -164,6 +195,19 @@ export function createOrderWithFile(db: DatabaseSync, input: OrderInput): Create
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+export function createOrderWithFile(db: DatabaseSync, input: SingleFileOrderInput): CreatedOrder {
+  return createOrderWithFiles(db, {
+    ...input,
+    files: [
+      {
+        ...input.file,
+        material: input.material,
+        color: input.color || "",
+      },
+    ],
+  });
 }
 
 export function listOrders(db: DatabaseSync): OrderRecord[] {
@@ -225,6 +269,8 @@ export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
         filename,
         filepath,
         filesize,
+        material,
+        color,
         bounding_box_x AS boundingBoxX,
         bounding_box_y AS boundingBoxY,
         bounding_box_z AS boundingBoxZ,
@@ -250,6 +296,8 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
         filename,
         filepath,
         filesize,
+        material,
+        color,
         bounding_box_x AS boundingBoxX,
         bounding_box_y AS boundingBoxY,
         bounding_box_z AS boundingBoxZ,
@@ -311,6 +359,8 @@ function ensureFilesModelColumns(db: DatabaseSync) {
     ["volume", "REAL"],
     ["surface_area", "REAL"],
     ["process_type", "TEXT"],
+    ["material", "TEXT"],
+    ["color", "TEXT"],
   ] as const;
 
   for (const [name, type] of requiredColumns) {

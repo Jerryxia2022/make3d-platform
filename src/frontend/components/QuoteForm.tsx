@@ -1,28 +1,96 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 
-const materials = [
-  { name: "PLA", price: "0.15元/克" },
-  { name: "PETG", price: "0.25元/克" },
-  { name: "ABS", price: "0.30元/克" },
-];
+const materials = ["PLA", "PETG", "ABS"];
+const colors = ["黑", "白", "红", "蓝"];
+const allowedExtensions = [".stl", ".step", ".stp", ".3mf"];
+const MAX_FILE_COUNT = 5;
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+type SelectedModelFile = {
+  id: string;
+  file: File;
+  material: string;
+  color: string;
+};
 
 export function QuoteForm() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<SelectedModelFile[]>([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function addFiles(nextFiles: FileList | File[]) {
+    setError("");
+    const incomingFiles = Array.from(nextFiles);
+
+    if (files.length + incomingFiles.length > MAX_FILE_COUNT) {
+      setError("一次最多上传 5 个模型文件");
+      return;
+    }
+
+    const invalidFile = incomingFiles.find((file) => !isAllowedFile(file));
+
+    if (invalidFile) {
+      setError("仅支持 .stl / .step / .stp / .3mf，单文件最大 50MB");
+      return;
+    }
+
+    setFiles((currentFiles) => [
+      ...currentFiles,
+      ...incomingFiles.map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        file,
+        material: "PLA",
+        color: "黑",
+      })),
+    ]);
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    addFiles(event.dataTransfer.files);
+  }
+
+  function updateFileOption(id: string, option: "material" | "color", value: string) {
+    setFiles((currentFiles) =>
+      currentFiles.map((item) => (item.id === id ? { ...item, [option]: value } : item)),
+    );
+  }
+
+  function removeFile(id: string) {
+    setFiles((currentFiles) => currentFiles.filter((item) => item.id !== id));
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
+    if (files.length === 0) {
+      setError("请先上传模型文件");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      const formData = new FormData(event.currentTarget);
+      formData.delete("modelFiles");
+      formData.delete("fileMaterials");
+      formData.delete("fileColors");
+
+      for (const item of files) {
+        formData.append("modelFiles", item.file);
+        formData.append("fileMaterials", item.material);
+        formData.append("fileColors", item.color);
+      }
+
       const response = await fetch("/api/orders", {
         method: "POST",
-        body: new FormData(event.currentTarget),
+        body: formData,
       });
       const result = await response.json();
 
@@ -43,125 +111,165 @@ export function QuoteForm() {
       className="space-y-6 border border-ink/10 bg-white/75 p-6 shadow-sm"
       onSubmit={handleSubmit}
     >
-      <div>
-        <label className="block text-sm font-semibold" htmlFor="modelFile">
-          模型文件
-        </label>
+      <section>
+        <div
+          className="flex min-h-56 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-6 py-10 text-center"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleDrop}
+        >
+          <p className="text-lg font-bold">拖拽模型文件到这里</p>
+          <p className="mt-3 max-w-md text-sm leading-6 text-graphite">
+            支持 .stl / .step / .stp / .3mf，最多一次上传 5 个文件，单文件最大 50MB。
+          </p>
+        </div>
         <input
-          accept=".stl,.step,.stp,.3mf"
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 text-sm"
-          id="modelFile"
-          name="modelFile"
-          required
+          accept={allowedExtensions.join(",")}
+          className="sr-only"
+          id="modelFiles"
+          multiple
+          name="modelFiles"
+          onChange={(event) => {
+            if (event.target.files) {
+              addFiles(event.target.files);
+              event.target.value = "";
+            }
+          }}
+          ref={fileInputRef}
           type="file"
         />
-        <p className="mt-2 text-xs text-graphite">支持 STL、STEP、STP、3MF，最大 50MB。</p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-semibold" htmlFor="material">
-          材料
-        </label>
-        <select
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3"
-          defaultValue="PLA"
-          id="material"
-          name="material"
+        <button
+          className="mt-4 w-full border border-ink/20 bg-white px-5 py-3 font-semibold text-ink transition hover:border-ink"
+          onClick={() => fileInputRef.current?.click()}
+          type="button"
         >
-          {materials.map((material) => (
-            <option key={material.name} value={material.name}>
-              {material.name} - {material.price}
-            </option>
+          选择文件
+        </button>
+      </section>
+
+      {files.length > 0 ? (
+        <section className="space-y-3">
+          {files.map((item) => (
+            <article className="border border-ink/10 bg-white/80 p-4" key={item.id}>
+              <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+                <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
+                  占位缩略图
+                </div>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-semibold">{item.file.name}</p>
+                      <p className="mt-1 text-sm text-graphite">
+                        {formatBytes(item.file.size)} · {getFileType(item.file.name)}
+                      </p>
+                    </div>
+                    <button
+                      className="self-start text-sm font-semibold text-coral"
+                      onClick={() => removeFile(item.id)}
+                      type="button"
+                    >
+                      删除该文件
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block text-sm font-semibold">
+                      材料
+                      <select
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        name="fileMaterials"
+                        onChange={(event) =>
+                          updateFileOption(item.id, "material", event.target.value)
+                        }
+                        value={item.material}
+                      >
+                        {materials.map((material) => (
+                          <option key={material} value={material}>
+                            {material}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm font-semibold">
+                      颜色
+                      <select
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        name="fileColors"
+                        onChange={(event) => updateFileOption(item.id, "color", event.target.value)}
+                        value={item.color}
+                      >
+                        {colors.map((color) => (
+                          <option key={color} value={color}>
+                            {color}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </article>
           ))}
-        </select>
-      </div>
+        </section>
+      ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold">
-          颜色
-          <input
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            name="color"
-            placeholder="例如：白色"
-          />
-        </label>
-        <label className="block text-sm font-semibold">
-          数量
-          <input
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            defaultValue={1}
-            min={1}
-            name="quantity"
-            type="number"
-          />
-        </label>
-      </div>
+      <section className="border border-ink/10 bg-white/70 p-5">
+        <h2 className="text-lg font-bold">联系方式</h2>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-semibold" htmlFor="customerName">
+            姓名
+            <input
+              autoComplete="name"
+              className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+              id="customerName"
+              name="customerName"
+              required
+            />
+          </label>
+          <label className="block text-sm font-semibold" htmlFor="phone">
+            电话
+            <input
+              autoComplete="tel"
+              className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+              id="phone"
+              name="phone"
+              required
+              type="tel"
+            />
+          </label>
+        </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold" htmlFor="customerName">
-          姓名
-          <input
-            autoComplete="name"
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            id="customerName"
-            name="customerName"
-            required
-          />
-        </label>
-        <label className="block text-sm font-semibold" htmlFor="phone">
-          电话
-          <input
-            autoComplete="tel"
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            id="phone"
-            name="phone"
-            required
-            type="tel"
-          />
-        </label>
-      </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-semibold" htmlFor="wechat">
+            微信
+            <input
+              autoComplete="off"
+              className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+              id="wechat"
+              name="wechat"
+              required
+            />
+          </label>
+          <label className="block text-sm font-semibold" htmlFor="email">
+            邮箱
+            <input
+              autoComplete="email"
+              className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+              id="email"
+              name="email"
+              type="email"
+            />
+          </label>
+        </div>
 
-      <label className="block text-sm font-semibold" htmlFor="wechat">
-        微信
-        <input
-          autoComplete="off"
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-          id="wechat"
-          name="wechat"
-          required
-        />
-      </label>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold" htmlFor="email">
-          邮箱
-          <input
-            autoComplete="email"
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            id="email"
-            name="email"
-            type="email"
+        <label className="mt-4 block text-sm font-semibold">
+          备注
+          <textarea
+            className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            name="remark"
+            placeholder="补充尺寸、强度、交期等要求"
           />
         </label>
-        <label className="block text-sm font-semibold" htmlFor="company">
-          公司名称
-          <input
-            autoComplete="organization"
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            id="company"
-            name="company"
-          />
-        </label>
-      </div>
-
-      <label className="block text-sm font-semibold">
-        备注
-        <textarea
-          className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-          name="remark"
-          placeholder="补充尺寸、强度、交期等要求"
-        />
-      </label>
+      </section>
 
       {error ? (
         <p className="border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
@@ -178,4 +286,21 @@ export function QuoteForm() {
       </button>
     </form>
   );
+}
+
+function isAllowedFile(file: File) {
+  const fileName = file.name.toLowerCase();
+  return allowedExtensions.some((extension) => fileName.endsWith(extension)) && file.size <= MAX_FILE_BYTES;
+}
+
+function getFileType(filename: string) {
+  return filename.split(".").pop()?.toUpperCase() || "UNKNOWN";
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(2)} MB`;
 }

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 
 import {
   createOrderWithFile,
+  createOrderWithFiles,
   getOrderById,
   initDatabase,
   listOrders,
@@ -40,6 +41,8 @@ test("initializes orders and files tables", async () => {
       "volume",
       "surface_area",
       "process_type",
+      "material",
+      "color",
     ].every((column) => fileColumns.includes(column)),
     true,
   );
@@ -91,6 +94,55 @@ test("creates an order and associated uploaded file record", async () => {
     surface_area: null,
     process_type: null,
   });
+  db.close();
+});
+
+test("creates one order with multiple uploaded files and per-file options", async () => {
+  const db = initDatabase(":memory:");
+  const order = createOrderWithFiles(db, {
+    customerName: "Jerry",
+    phone: "13800000000",
+    wechat: "make3d",
+    email: "jerry@example.com",
+    quantity: 2,
+    remark: "multi file order",
+    estimatedPrice: 0,
+    files: [
+      {
+        filename: "demo-a.stl",
+        filepath: "/uploads/demo-a.stl",
+        filesize: 128,
+        material: "PLA",
+        color: "黑",
+      },
+      {
+        filename: "demo-b.step",
+        filepath: "/uploads/demo-b.step",
+        filesize: 256,
+        material: "PETG",
+        color: "白",
+      },
+    ],
+  });
+
+  const detail = getOrderById(db, order.id);
+
+  assert.equal(detail.company, null);
+  assert.equal(detail.quantity, 2);
+  assert.equal(detail.material, "PLA");
+  assert.equal(detail.color, "黑");
+  assert.deepEqual(
+    detail.files.map((file) => ({
+      filename: file.filename,
+      material: file.material,
+      color: file.color,
+    })),
+    [
+      { filename: "demo-a.stl", material: "PLA", color: "黑" },
+      { filename: "demo-b.step", material: "PETG", color: "白" },
+    ],
+  );
+
   db.close();
 });
 
