@@ -1,12 +1,6 @@
 import { QuoteForm } from "@/frontend/components/QuoteForm";
 import { ContactSection } from "@/frontend/components/ContactSection";
 
-const materials = [
-  { name: "PLA", price: "0.15元/克" },
-  { name: "PETG", price: "0.25元/克" },
-  { name: "ABS", price: "0.30元/克" },
-];
-
 const supportedFormats = ["STL", "3MF", "STEP", "STP"];
 
 export default function QuotePage() {
@@ -19,7 +13,7 @@ export default function QuotePage() {
           </p>
           <h1 className="mt-4 text-4xl font-bold sm:text-5xl">打印报价</h1>
           <p className="mt-5 max-w-xl text-lg leading-8 text-graphite">
-            上传模型并填写联系方式，系统会保存订单和模型文件，提交后进入成功页面。
+            上传模型并填写联系与收货信息，系统会保存订单和模型文件，提交后由人工确认最终报价与生产安排。
           </p>
           <div className="mt-8 space-y-4">
             <div className="border border-ink/10 bg-white/70 p-5">
@@ -28,15 +22,18 @@ export default function QuotePage() {
               <p className="mt-2 text-sm text-graphite">单文件最大 50MB</p>
             </div>
             <div className="border border-ink/10 bg-white/70 p-5">
-              <h2 className="text-lg font-semibold">报价说明</h2>
+              <h2 className="text-lg font-semibold">FDM 工艺说明</h2>
               <p className="mt-3 text-graphite">
-                价格 = 材料费 + 设备费 + 人工费，最低消费 20 元，人工处理费 10 元。
+                FDM 是通过热熔材料逐层堆叠成型的3D打印工艺，适合结构验证、外壳打样、毕业设计、小批量试制。
               </p>
-              <p className="mt-3 text-sm text-graphite">
-                {materials.map((material) => `${material.name} ${material.price}`).join(" / ")}
+            </div>
+            <div className="border border-ink/10 bg-white/70 p-5">
+              <h2 className="text-lg font-semibold">基础打印标准</h2>
+              <p className="mt-3 text-graphite">
+                默认按 0.4mm 喷嘴、0.2mm 层高、50% 填充进行预估。
               </p>
-              <p className="mt-3 font-semibold text-coral">
-                此价格为系统预估，最终价格以人工确认为准。
+              <p className="mt-3 text-sm leading-6 text-graphite">
+                如需特殊层高、强度、表面效果、支撑方式、分件打印等，请在备注中说明，最终由人工确认。
               </p>
             </div>
           </div>

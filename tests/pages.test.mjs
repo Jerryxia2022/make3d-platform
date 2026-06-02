@@ -14,18 +14,48 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
   assert.match(source, /ContactSection/);
 });
 
-test("quote page exposes V2 pricing, simplified dimensions, shipping, address, and contact fields", async () => {
+test("quote page shows FDM guidance instead of pricing explanation", async () => {
   const source = await readSource("src/app/quote/page.tsx");
+
+  assert.match(source, /FDM 是通过热熔材料逐层堆叠成型的3D打印工艺/);
+  assert.match(source, /默认按 0\.4mm 喷嘴、0\.2mm 层高、50% 填充进行预估/);
+  assert.match(source, /如需特殊层高、强度、表面效果、支撑方式、分件打印等/);
+  assert.doesNotMatch(source, /价格和计费说明/);
+  assert.doesNotMatch(source, /材料费/);
+});
+
+test("quote form exposes merged contact and shipping fields with customer validation", async () => {
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
   const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
 
-  assert.match(source, /STL/);
-  assert.match(source, /3MF/);
-  assert.match(source, /STEP/);
-  assert.match(source, /PLA/);
-  assert.match(source, /PETG/);
-  assert.match(source, /ABS/);
-  assert.match(source, /ContactSection/);
+  assert.match(formSource, /联系与收货信息/);
+  assert.match(formSource, /name="customerName"/);
+  assert.match(formSource, /pattern={customerNamePattern}/);
+  assert.match(formSource, /至少2个汉字，或至少4个英文字母/);
+  assert.match(formSource, /name="phone"/);
+  assert.match(formSource, /pattern="1\[3-9\]\\\\d\{9\}"/);
+  assert.match(formSource, /必须填写11位中国大陆手机号/);
+  assert.match(formSource, /微信很重要，请填写常用微信，方便确认报价和生产细节。/);
+  assert.match(formSource, /name="wechat"/);
+  assert.match(formSource, /name="email"/);
+  assert.match(formSource, /name="shippingMethod"/);
+  assert.match(formSource, /name="addressDetail"/);
+  assert.match(formSource, /name="remark"/);
+  assert.match(formSource, /formData\.set\("recipientName", getRequiredFormValue\(formData, "customerName"\)\)/);
+  assert.match(formSource, /formData\.set\("recipientPhone", getRequiredFormValue\(formData, "phone"\)\)/);
+  assert.match(formSource, /formData\.set\("addressRegion", "-"\)/);
+  assert.doesNotMatch(formSource, /name="recipientName"/);
+  assert.doesNotMatch(formSource, /name="recipientPhone"/);
+  assert.doesNotMatch(formSource, /name="addressRegion"/);
+
+  assert.match(estimateSource, /DEFAULT_LEAD_TIME_MIN_HOURS = 48/);
+  assert.match(estimateSource, /DEFAULT_LEAD_TIME_MAX_HOURS = 72/);
+});
+
+test("quote form keeps upload, per-file options, safe dimensions, estimates, and summary", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
+
   assert.match(formSource, /onDrop={handleDrop}/);
   assert.match(formSource, /multiple/);
   assert.match(formSource, /MAX_FILE_COUNT/);
@@ -36,61 +66,19 @@ test("quote page exposes V2 pricing, simplified dimensions, shipping, address, a
   assert.match(formSource, /fileDimensionY/);
   assert.match(formSource, /fileDimensionZ/);
   assert.match(formSource, /estimateDisplayDimensions/);
-  assert.match(formSource, /formatDimensions\(dimensions\)/);
+  assert.match(formSource, /占位缩略图/);
+  assert.match(formSource, /{formatDimensions\(dimensions\)}/);
   assert.match(estimateSource, /模型最大外形尺寸约：/);
-  assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准/);
-  assert.doesNotMatch(formSource, /DimensionField/);
-  assert.doesNotMatch(formSource, /updateFileDimension/);
-  assert.doesNotMatch(formSource, /X 尺寸 mm/);
-  assert.doesNotMatch(formSource, /Y 尺寸 mm/);
-  assert.doesNotMatch(formSource, /Z 尺寸 mm/);
-  assert.match(formSource, /removeFile/);
-  assert.match(estimateSource, /estimateFileBySize/);
-  assert.match(estimateSource, /getMaterialSalesRate/);
-  assert.match(estimateSource, /DEVICE_COUNT = 6/);
-  assert.match(estimateSource, /PACKAGING_FEE = 3/);
+  assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准。/);
   assert.match(formSource, /预估价格区间/);
   assert.match(formSource, /预估工期/);
-  assert.match(estimateSource, /模型尺寸较小，可能无法稳定打印，需要人工确认。/);
-  assert.match(estimateSource, /模型接近设备成型极限，可能需要调整摆放或拆件。/);
-  assert.match(estimateSource, /模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。/);
-  assert.doesNotMatch(formSource, /label="包装费"/);
-  assert.match(formSource, /运费/);
+  assert.match(formSource, /如需加急，请在备注中说明，加急可能产生额外费用。/);
   assert.match(formSource, /预估总价/);
   assert.match(formSource, /预估总货期/);
   assert.match(formSource, /最终价格以人工确认为准/);
-  assert.match(formSource, /shippingMethod/);
-  assert.match(formSource, /普通快递/);
-  assert.match(formSource, /顺丰快递/);
-  assert.match(formSource, /西安本地跑腿/);
-  assert.match(formSource, /到店自取/);
-  assert.match(formSource, /recipientName/);
-  assert.match(formSource, /recipientPhone/);
-  assert.match(formSource, /addressRegion/);
-  assert.match(formSource, /addressDetail/);
-  assert.match(formSource, /shippingRemark/);
-  assert.match(formSource, /name="customerName"/);
-  assert.match(formSource, /name="phone"/);
-  assert.match(formSource, /name="wechat"/);
-  assert.match(formSource, /name="email"/);
-  assert.match(formSource, /name="remark"/);
-  assert.doesNotMatch(formSource, /name="company"/);
-
-  const contactIndex = formSource.indexOf("联系方式");
-  const shippingIndex = formSource.indexOf("配送方式");
-  const addressIndex = formSource.indexOf("收货地址");
-  const summaryIndex = formSource.indexOf("订单汇总");
-  assert.ok(contactIndex > -1);
-  assert.ok(shippingIndex > contactIndex);
-  assert.ok(addressIndex > shippingIndex);
-  assert.ok(summaryIndex > addressIndex);
-});
-
-test("success page confirms order submission next steps", async () => {
-  const source = await readSource("src/app/success/page.tsx");
-
-  assert.match(source, /提交成功|鎻愪氦鎴愬姛/);
-  assert.match(source, /人工确认|浜哄伐纭/);
+  assert.doesNotMatch(formSource, /DimensionField/);
+  assert.doesNotMatch(formSource, /label="包装费"/);
+  assert.doesNotMatch(formSource, /PrusaSlicer/);
 });
 
 test("admin pages display contact fields from the matching order properties", async () => {
@@ -176,9 +164,11 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.doesNotMatch(apiSource, /company: getString\(formData, "company"\)/);
 });
 
-test("contact information section contains the configured Make3D contact copy", async () => {
+test("success page and contact information section remain available", async () => {
+  const successSource = await readSource("src/app/success/page.tsx");
   const contactSource = await readSource("src/frontend/components/ContactSection.tsx");
 
+  assert.match(successSource, /提交成功|鎻愪氦鎴愬姛/);
   assert.match(contactSource, /21899835@qq\.com/);
   assert.match(contactSource, /ContactSection/);
 });

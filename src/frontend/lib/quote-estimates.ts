@@ -3,6 +3,8 @@ export const DEVICE_COUNT = 6;
 export const PACKAGING_FEE = 3;
 export const PACKAGING_TIME_HOURS = 2;
 export const ORDER_MIN_PRICE = 20;
+export const DEFAULT_LEAD_TIME_MIN_HOURS = 48;
+export const DEFAULT_LEAD_TIME_MAX_HOURS = 72;
 
 export type QuoteDimensions = {
   x: number | null;
@@ -70,8 +72,8 @@ export function estimateFileBySize(
   return {
     priceMin: Math.ceil((bucket.weightMinGrams * salesRate + laborMin) * riskMultiplier),
     priceMax: Math.ceil((bucket.weightMaxGrams * salesRate + laborMax) * riskMultiplier),
-    leadTimeMinHours: bucket.leadTimeMinHours,
-    leadTimeMaxHours: bucket.leadTimeMaxHours,
+    leadTimeMinHours: DEFAULT_LEAD_TIME_MIN_HOURS,
+    leadTimeMaxHours: DEFAULT_LEAD_TIME_MAX_HOURS,
     riskNotice: risk.notice,
     riskLevel: risk.level,
   };
@@ -84,14 +86,6 @@ export function estimateOrderSummary(
   const safeEstimates = Array.isArray(fileEstimates) ? fileEstimates : [];
   const shipping = getShippingEstimate(shippingMethod);
   const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
-  const printMin = safeEstimates.reduce(
-    (total, entry) => total + safePositiveNumber(entry.estimate?.leadTimeMinHours),
-    0,
-  );
-  const printMax = safeEstimates.reduce(
-    (total, entry) => total + safePositiveNumber(entry.estimate?.leadTimeMaxHours),
-    0,
-  );
   const filePriceMin = safeEstimates.reduce(
     (total, entry) => total + safePositiveNumber(entry.estimate?.priceMin),
     0,
@@ -104,8 +98,8 @@ export function estimateOrderSummary(
   return {
     priceMin: Math.max(Math.ceil(filePriceMin + shippingAmount), ORDER_MIN_PRICE),
     priceMax: Math.max(Math.ceil(filePriceMax + shippingAmount), ORDER_MIN_PRICE),
-    leadTimeMinHours: Math.ceil(printMin / DEVICE_COUNT + PACKAGING_TIME_HOURS),
-    leadTimeMaxHours: Math.ceil(printMax / DEVICE_COUNT + PACKAGING_TIME_HOURS),
+    leadTimeMinHours: DEFAULT_LEAD_TIME_MIN_HOURS,
+    leadTimeMaxHours: DEFAULT_LEAD_TIME_MAX_HOURS,
     shippingFeeEstimate: shipping.label,
   };
 }
@@ -140,7 +134,7 @@ export function formatDimensions(dimensions: QuoteDimensions | null | undefined)
   const values = getValidDimensionValues(dimensions);
 
   if (values.length !== 3) {
-    return "尺寸暂未识别，最终以人工确认为准";
+    return "尺寸暂未识别，最终以人工确认为准。";
   }
 
   return `模型最大外形尺寸约：${values[0]} × ${values[1]} × ${values[2]} mm`;

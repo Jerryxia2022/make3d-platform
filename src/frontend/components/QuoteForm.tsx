@@ -24,6 +24,7 @@ const shippingMethods = ["普通快递", "顺丰快递", "西安本地跑腿", "
 const allowedExtensions = [".stl", ".step", ".stp", ".3mf"];
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const customerNamePattern = "(?:[\\u4e00-\\u9fa5]{2,}|[A-Za-z][A-Za-z\\s'-]{3,})";
 
 type SelectedModelFile = SelectedQuoteFile & {
   file: File;
@@ -103,6 +104,10 @@ export function QuoteForm() {
       formData.delete("fileDimensionX");
       formData.delete("fileDimensionY");
       formData.delete("fileDimensionZ");
+      formData.set("recipientName", getRequiredFormValue(formData, "customerName"));
+      formData.set("recipientPhone", getRequiredFormValue(formData, "phone"));
+      formData.set("addressRegion", "-");
+      formData.set("shippingRemark", "");
 
       for (const item of files) {
         const dimensions = estimateDisplayDimensions(item.file);
@@ -193,8 +198,13 @@ export function QuoteForm() {
                 value={formatDimensionFormValue(dimensions?.z)}
               />
               <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
-                <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
-                  占位缩略图
+                <div>
+                  <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
+                    占位缩略图
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-graphite">
+                    {formatDimensions(dimensions)}
+                  </p>
                 </div>
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -202,9 +212,6 @@ export function QuoteForm() {
                       <p className="font-semibold">{item.file.name || "未命名模型文件"}</p>
                       <p className="mt-1 text-sm text-graphite">
                         {formatBytes(item.file.size)} · {getFileType(item.file.name)}
-                      </p>
-                      <p className="mt-2 text-sm text-graphite">
-                        {formatDimensions(dimensions)}
                       </p>
                       <p className="mt-2 text-sm font-semibold text-ink">
                         预估价格区间：{formatPriceRange(estimate.priceMin, estimate.priceMax)}
@@ -215,6 +222,9 @@ export function QuoteForm() {
                           estimate.leadTimeMinHours,
                           estimate.leadTimeMaxHours,
                         )}
+                      </p>
+                      <p className="mt-1 text-sm text-graphite">
+                        如需加急，请在备注中说明，加急可能产生额外费用。
                       </p>
                       {estimate.riskNotice ? (
                         <p
@@ -279,31 +289,41 @@ export function QuoteForm() {
       ) : null}
 
       <section className="border border-ink/10 bg-white/70 p-5">
-        <h2 className="text-lg font-bold">联系方式</h2>
+        <h2 className="text-lg font-bold">联系与收货信息</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <TextField autoComplete="name" label="姓名" name="customerName" required />
-          <TextField autoComplete="tel" label="电话" name="phone" required type="tel" />
+          <TextField
+            autoComplete="name"
+            label="姓名"
+            name="customerName"
+            pattern={customerNamePattern}
+            required
+            title="姓名必填：至少2个汉字，或至少4个英文字母"
+          />
+          <TextField
+            autoComplete="tel"
+            inputMode="tel"
+            label="手机号"
+            name="phone"
+            pattern="1[3-9]\\d{9}"
+            required
+            title="必须填写11位中国大陆手机号"
+            type="tel"
+          />
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <TextField autoComplete="off" label="微信" name="wechat" required />
+          <TextField
+            autoComplete="off"
+            helpText="微信很重要，请填写常用微信，方便确认报价和生产细节。"
+            label="微信"
+            name="wechat"
+            required
+          />
           <TextField autoComplete="email" label="邮箱" name="email" type="email" />
         </div>
 
-        <label className="mt-4 block text-sm font-semibold">
-          备注
-          <textarea
-            className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            name="remark"
-            placeholder="补充强度、用途、交期等要求"
-          />
-        </label>
-      </section>
-
-      <section className="border border-ink/10 bg-white/70 p-5">
-        <h2 className="text-lg font-bold">配送方式</h2>
         <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
-          选择配送方式
+          配送方式
           <select
             className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
             id="shippingMethod"
@@ -318,24 +338,23 @@ export function QuoteForm() {
             ))}
           </select>
         </label>
-      </section>
 
-      <section className="border border-ink/10 bg-white/70 p-5">
-        <h2 className="text-lg font-bold">收货地址</h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <TextField autoComplete="name" label="收件人" name="recipientName" required />
-          <TextField autoComplete="tel" label="手机号" name="recipientPhone" required type="tel" />
-        </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <TextField label="省市区" name="addressRegion" required />
-          <TextField label="详细地址" name="addressDetail" required />
-        </div>
         <label className="mt-4 block text-sm font-semibold">
-          配送备注
+          收货地址
           <textarea
             className="mt-2 min-h-24 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            name="shippingRemark"
-            placeholder="补充配送时间、门牌号、取件说明等"
+            name="addressDetail"
+            placeholder="填写省市区、详细地址、收件说明等"
+            required
+          />
+        </label>
+
+        <label className="mt-4 block text-sm font-semibold">
+          备注
+          <textarea
+            className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            name="remark"
+            placeholder="补充特殊层高、强度、表面效果、支撑方式、分件打印、加急等要求"
           />
         </label>
       </section>
@@ -359,6 +378,9 @@ export function QuoteForm() {
           <SummaryItem label="材料和颜色摘要" value={formatOptionSummary(files)} />
         </dl>
         <p className="mt-4 text-sm font-semibold text-coral">最终价格以人工确认为准。</p>
+        <p className="mt-2 text-sm text-graphite">
+          如需加急，请在备注中说明，加急可能产生额外费用。
+        </p>
       </section>
 
       {error ? (
@@ -380,15 +402,23 @@ export function QuoteForm() {
 
 function TextField({
   autoComplete,
+  helpText,
+  inputMode,
   label,
   name,
+  pattern,
   required,
+  title,
   type = "text",
 }: {
   autoComplete?: string;
+  helpText?: string;
+  inputMode?: "email" | "numeric" | "search" | "tel" | "text" | "url";
   label: string;
   name: string;
+  pattern?: string;
   required?: boolean;
+  title?: string;
   type?: string;
 }) {
   return (
@@ -397,10 +427,14 @@ function TextField({
       <input
         autoComplete={autoComplete}
         className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+        inputMode={inputMode}
         name={name}
+        pattern={pattern}
         required={required}
+        title={title}
         type={type}
       />
+      {helpText ? <span className="mt-2 block text-xs leading-5 text-graphite">{helpText}</span> : null}
     </label>
   );
 }
@@ -412,6 +446,11 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 font-semibold text-ink">{value}</dd>
     </div>
   );
+}
+
+function getRequiredFormValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function formatDimensionFormValue(value: QuoteDimensions["x"] | undefined) {

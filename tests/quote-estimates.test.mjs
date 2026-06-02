@@ -30,11 +30,11 @@ test("keeps quote estimates safe when uploaded STL dimensions are unavailable", 
   const summary = estimateOrderSummary(estimates, "普通快递");
 
   assert.equal(dimensions, null);
-  assert.equal(formatDimensions(dimensions), "尺寸暂未识别，最终以人工确认为准");
+  assert.equal(formatDimensions(dimensions), "尺寸暂未识别，最终以人工确认为准。");
   assert.equal(estimates.length, 1);
   assert.equal(estimates[0].estimate.riskNotice, "");
   assert.equal(formatPriceRange(estimates[0].estimate.priceMin, estimates[0].estimate.priceMax), "26-58 元");
-  assert.equal(formatLeadTimeRange(summary.leadTimeMinHours, summary.leadTimeMaxHours), "预计 3-4 小时");
+  assert.equal(formatLeadTimeRange(summary.leadTimeMinHours, summary.leadTimeMaxHours), "预计 48-72 小时");
 });
 
 test("formats invalid numeric inputs without throwing", () => {
@@ -49,6 +49,7 @@ test("formats invalid numeric inputs without throwing", () => {
   assert.equal(summary.priceMin, 20);
   assert.equal(summary.priceMax, 20);
   assert.equal(summary.shippingFeeEstimate, "人工确认");
+  assert.equal(formatLeadTimeRange(summary.leadTimeMinHours, summary.leadTimeMaxHours), "预计 48-72 小时");
 });
 
 test("creates file ids without requiring crypto.randomUUID", () => {
