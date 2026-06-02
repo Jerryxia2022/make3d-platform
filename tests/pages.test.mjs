@@ -57,3 +57,22 @@ test("admin pages display contact fields from the matching order properties", as
   assert.match(detailSource, /label="邮箱" value={order\.email \|\| "-"}/);
   assert.match(detailSource, /label="公司" value={order\.company \|\| "-"}/);
 });
+
+test("admin order detail page shows complete order fields and file actions", async () => {
+  const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
+
+  assert.match(detailSource, /requireAdminSession/);
+  assert.match(detailSource, /redirect\("\/admin\/login"\)/);
+  assert.match(detailSource, /AdminStatusForm orderId={order\.id} status={order\.status}/);
+  assert.match(detailSource, /value={order\.orderNo}/);
+  assert.match(detailSource, /value={String\(order\.id\)}/);
+  assert.match(detailSource, /value={formatPrice\(order\.estimatedPrice\)}/);
+  assert.match(detailSource, /value={order\.material}/);
+  assert.match(detailSource, /value={String\(order\.quantity\)}/);
+  assert.match(detailSource, /value={order\.status}/);
+  assert.match(detailSource, /order\.remark/);
+  assert.match(detailSource, /order\.files\.map/);
+  assert.match(detailSource, /file\.filename/);
+  assert.match(detailSource, /file\.filesize/);
+  assert.match(detailSource, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
+});

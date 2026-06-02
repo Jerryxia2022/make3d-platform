@@ -35,7 +35,18 @@ export default async function AdminOrderDetailPage({
             <AdminStatusForm orderId={order.id} status={order.status} />
           </div>
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+              <h2 className="text-xl font-bold">订单信息</h2>
+              <dl className="mt-5 grid gap-4 text-sm">
+                <Detail label="订单编号" value={order.orderNo} />
+                <Detail label="订单ID" value={String(order.id)} />
+                <Detail label="提交时间" value={formatDate(order.createdAt)} />
+                <Detail label="预估价格" value={formatPrice(order.estimatedPrice)} />
+                <Detail label="状态" value={order.status} />
+              </dl>
+            </section>
+
             <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
               <h2 className="text-xl font-bold">客户信息</h2>
               <dl className="mt-5 grid gap-4 text-sm">
@@ -53,8 +64,6 @@ export default async function AdminOrderDetailPage({
                 <Detail label="材料" value={order.material} />
                 <Detail label="颜色" value={order.color || "-"} />
                 <Detail label="数量" value={String(order.quantity)} />
-                <Detail label="状态" value={order.status} />
-                <Detail label="提交时间" value={formatDate(order.createdAt)} />
               </dl>
             </section>
           </div>
@@ -74,7 +83,9 @@ export default async function AdminOrderDetailPage({
                 >
                   <div>
                     <p className="font-semibold">{file.filename}</p>
-                    <p className="text-sm text-graphite">{formatBytes(file.filesize)}</p>
+                    <p className="text-sm text-graphite">
+                      {formatBytes(file.filesize)} · 上传时间：{formatDate(file.createdAt)}
+                    </p>
                   </div>
                   <a
                     className="inline-flex bg-ink px-4 py-2 text-sm font-semibold text-white"
@@ -107,6 +118,10 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatPrice(value: number) {
+  return `¥${value.toFixed(2)}`;
 }
 
 function formatBytes(value: number) {
