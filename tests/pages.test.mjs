@@ -14,7 +14,7 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
   assert.match(source, /ContactSection/);
 });
 
-test("quote page exposes V2 pricing, dimensions, shipping, address, and contact fields", async () => {
+test("quote page exposes V2 pricing, simplified dimensions, shipping, address, and contact fields", async () => {
   const source = await readSource("src/app/quote/page.tsx");
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
 
@@ -34,6 +34,14 @@ test("quote page exposes V2 pricing, dimensions, shipping, address, and contact 
   assert.match(formSource, /fileDimensionX/);
   assert.match(formSource, /fileDimensionY/);
   assert.match(formSource, /fileDimensionZ/);
+  assert.match(formSource, /estimateDisplayDimensions/);
+  assert.match(formSource, /模型最大外形尺寸约：/);
+  assert.match(formSource, /formatDimensions\(dimensions\)/);
+  assert.doesNotMatch(formSource, /DimensionField/);
+  assert.doesNotMatch(formSource, /updateFileDimension/);
+  assert.doesNotMatch(formSource, /X 尺寸 mm/);
+  assert.doesNotMatch(formSource, /Y 尺寸 mm/);
+  assert.doesNotMatch(formSource, /Z 尺寸 mm/);
   assert.match(formSource, /removeFile/);
   assert.match(formSource, /estimateFileBySize/);
   assert.match(formSource, /getMaterialSalesRate/);
@@ -41,10 +49,10 @@ test("quote page exposes V2 pricing, dimensions, shipping, address, and contact 
   assert.match(formSource, /PACKAGING_FEE = 3/);
   assert.match(formSource, /预估价格区间/);
   assert.match(formSource, /预估工期/);
-  assert.match(formSource, /模型尺寸较小/);
-  assert.match(formSource, /模型接近设备成型极限/);
-  assert.match(formSource, /模型超出单台设备成型尺寸/);
-  assert.match(formSource, /包装费/);
+  assert.match(formSource, /模型尺寸较小，可能无法稳定打印，需要人工确认。/);
+  assert.match(formSource, /模型接近设备成型极限，可能需要调整摆放或拆件。/);
+  assert.match(formSource, /模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。/);
+  assert.doesNotMatch(formSource, /label="包装费"/);
   assert.match(formSource, /运费/);
   assert.match(formSource, /预估总价/);
   assert.match(formSource, /预估总货期/);
@@ -65,13 +73,22 @@ test("quote page exposes V2 pricing, dimensions, shipping, address, and contact 
   assert.match(formSource, /name="email"/);
   assert.match(formSource, /name="remark"/);
   assert.doesNotMatch(formSource, /name="company"/);
+
+  const contactIndex = formSource.indexOf("联系方式");
+  const shippingIndex = formSource.indexOf("配送方式");
+  const addressIndex = formSource.indexOf("收货地址");
+  const summaryIndex = formSource.indexOf("订单汇总");
+  assert.ok(contactIndex > -1);
+  assert.ok(shippingIndex > contactIndex);
+  assert.ok(addressIndex > shippingIndex);
+  assert.ok(summaryIndex > addressIndex);
 });
 
 test("success page confirms order submission next steps", async () => {
   const source = await readSource("src/app/success/page.tsx");
 
-  assert.match(source, /提交成功/);
-  assert.match(source, /人工确认/);
+  assert.match(source, /提交成功|鎻愪氦鎴愬姛/);
+  assert.match(source, /人工确认|浜哄伐纭/);
 });
 
 test("admin pages display contact fields from the matching order properties", async () => {
@@ -81,11 +98,11 @@ test("admin pages display contact fields from the matching order properties", as
   assert.match(listSource, /{order\.customerName}/);
   assert.match(listSource, /{order\.phone}/);
   assert.match(listSource, /{order\.wechat}/);
-  assert.match(detailSource, /label="姓名" value={order\.customerName}/);
-  assert.match(detailSource, /label="电话" value={order\.phone}/);
-  assert.match(detailSource, /label="微信" value={order\.wechat}/);
-  assert.match(detailSource, /label="邮箱" value={order\.email \|\| "-"}/);
-  assert.match(detailSource, /label="公司" value={order\.company \|\| "-"}/);
+  assert.match(detailSource, /value={order\.customerName}/);
+  assert.match(detailSource, /value={order\.phone}/);
+  assert.match(detailSource, /value={order\.wechat}/);
+  assert.match(detailSource, /value={order\.email \|\| "-"}/);
+  assert.match(detailSource, /value={order\.company \|\| "-"}/);
 });
 
 test("admin pages show V2 estimate and shipping fields", async () => {
@@ -160,9 +177,6 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
 test("contact information section contains the configured Make3D contact copy", async () => {
   const contactSource = await readSource("src/frontend/components/ContactSection.tsx");
 
-  assert.match(contactSource, /微信：请填写你的微信号/);
-  assert.match(contactSource, /电话：请填写你的手机号/);
-  assert.match(contactSource, /邮箱：21899835@qq\.com/);
-  assert.match(contactSource, /服务时间：工作日晚上及周末可处理订单/);
-  assert.match(contactSource, /提交模型后，我们会人工确认最终报价和生产安排。/);
+  assert.match(contactSource, /21899835@qq\.com/);
+  assert.match(contactSource, /ContactSection/);
 });

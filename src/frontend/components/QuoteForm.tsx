@@ -15,17 +15,20 @@ const PACKAGING_FEE = 3;
 const PACKAGING_TIME_HOURS = 2;
 const ORDER_MIN_PRICE = 20;
 
+type DimensionsMm = {
+  x: number;
+  y: number;
+  z: number;
+};
+
 type SelectedModelFile = {
   id: string;
   file: File;
   material: string;
   color: string;
-  dimensions: {
-    x: string;
-    y: string;
-    z: string;
-  };
 };
+
+type FileEstimate = ReturnType<typeof estimateFileBySize>;
 
 export function QuoteForm() {
   const router = useRouter();
@@ -34,11 +37,11 @@ export function QuoteForm() {
   const [shippingMethod, setShippingMethod] = useState("普通快递");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileEstimates = useMemo(() => estimateFiles(files), [files]);
   const orderSummary = useMemo(
-    () => estimateOrderSummary(files, shippingMethod),
-    [files, shippingMethod],
+    () => estimateOrderSummary(fileEstimates, shippingMethod),
+    [fileEstimates, shippingMethod],
   );
-  const shippingFeeEstimate = orderSummary.shippingFeeEstimate;
 
   function addFiles(nextFiles: FileList | File[]) {
     setError("");
@@ -63,7 +66,6 @@ export function QuoteForm() {
         file,
         material: "PLA",
         color: "黑",
-        dimensions: { x: "", y: "", z: "" },
       })),
     ]);
   }
@@ -76,16 +78,6 @@ export function QuoteForm() {
   function updateFileOption(id: string, option: "material" | "color", value: string) {
     setFiles((currentFiles) =>
       currentFiles.map((item) => (item.id === id ? { ...item, [option]: value } : item)),
-    );
-  }
-
-  function updateFileDimension(id: string, axis: "x" | "y" | "z", value: string) {
-    setFiles((currentFiles) =>
-      currentFiles.map((item) =>
-        item.id === id
-          ? { ...item, dimensions: { ...item.dimensions, [axis]: value } }
-          : item,
-      ),
     );
   }
 
@@ -109,11 +101,19 @@ export function QuoteForm() {
       formData.delete("modelFiles");
       formData.delete("fileMaterials");
       formData.delete("fileColors");
+      formData.delete("fileDimensionX");
+      formData.delete("fileDimensionY");
+      formData.delete("fileDimensionZ");
 
       for (const item of files) {
+        const dimensions = estimateDisplayDimensions(item.file);
+
         formData.append("modelFiles", item.file);
         formData.append("fileMaterials", item.material);
         formData.append("fileColors", item.color);
+        formData.append("fileDimensionX", String(dimensions.x));
+        formData.append("fileDimensionY", String(dimensions.y));
+        formData.append("fileDimensionZ", String(dimensions.z));
       }
 
       const response = await fetch("/api/orders", {
@@ -174,150 +174,119 @@ export function QuoteForm() {
         </button>
       </section>
 
-      {files.length > 0 ? (
+      {fileEstimates.length > 0 ? (
         <section className="space-y-3">
-          {files.map((item) => {
-            const estimate = estimateFileBySize(
-              item.file.size,
-              item.material,
-              parseDimensions(item.dimensions),
-            );
-
-            return (
-              <article className="border border-ink/10 bg-white/80 p-4" key={item.id}>
-                <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
-                  <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
-                    占位缩略图
+          {fileEstimates.map(({ item, dimensions, estimate }) => (
+            <article className="border border-ink/10 bg-white/80 p-4" key={item.id}>
+              <input name="fileDimensionX" type="hidden" value={dimensions.x} />
+              <input name="fileDimensionY" type="hidden" value={dimensions.y} />
+              <input name="fileDimensionZ" type="hidden" value={dimensions.z} />
+              <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+                <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
+                  占位缩略图
+                </div>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-semibold">{item.file.name}</p>
+                      <p className="mt-1 text-sm text-graphite">
+                        {formatBytes(item.file.size)} · {getFileType(item.file.name)}
+                      </p>
+                      <p className="mt-2 text-sm text-graphite">
+                        模型最大外形尺寸约：{formatDimensions(dimensions)} mm
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-ink">
+                        预估价格区间：{formatPriceRange(estimate.priceMin, estimate.priceMax)}
+                      </p>
+                      <p className="mt-1 text-sm text-graphite">
+                        预估工期：
+                        {formatLeadTimeRange(
+                          estimate.leadTimeMinHours,
+                          estimate.leadTimeMaxHours,
+                        )}
+                      </p>
+                      {estimate.riskNotice ? (
+                        <p
+                          className={
+                            estimate.riskLevel === "danger"
+                              ? "mt-2 border border-red-500/30 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                              : "mt-2 border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
+                          }
+                        >
+                          {estimate.riskNotice}
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      className="self-start text-sm font-semibold text-coral"
+                      onClick={() => removeFile(item.id)}
+                      type="button"
+                    >
+                      删除该文件
+                    </button>
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-semibold">{item.file.name}</p>
-                        <p className="mt-1 text-sm text-graphite">
-                          {formatBytes(item.file.size)} · {getFileType(item.file.name)}
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-ink">
-                          预估价格区间：{formatPriceRange(estimate.priceMin, estimate.priceMax)}
-                        </p>
-                        <p className="mt-1 text-sm text-graphite">
-                          预估工期：
-                          {formatLeadTimeRange(
-                            estimate.leadTimeMinHours,
-                            estimate.leadTimeMaxHours,
-                          )}
-                        </p>
-                        {estimate.riskNotice ? (
-                          <p
-                            className={
-                              estimate.riskLevel === "danger"
-                                ? "mt-2 border border-red-500/30 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                                : "mt-2 border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
-                            }
-                          >
-                            {estimate.riskNotice}
-                          </p>
-                        ) : null}
-                      </div>
-                      <button
-                        className="self-start text-sm font-semibold text-coral"
-                        onClick={() => removeFile(item.id)}
-                        type="button"
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block text-sm font-semibold">
+                      材料
+                      <select
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        name="fileMaterials"
+                        onChange={(event) =>
+                          updateFileOption(item.id, "material", event.target.value)
+                        }
+                        value={item.material}
                       >
-                        删除该文件
-                      </button>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block text-sm font-semibold">
-                        材料
-                        <select
-                          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-                          name="fileMaterials"
-                          onChange={(event) =>
-                            updateFileOption(item.id, "material", event.target.value)
-                          }
-                          value={item.material}
-                        >
-                          {materials.map((material) => (
-                            <option key={material} value={material}>
-                              {material}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block text-sm font-semibold">
-                        颜色
-                        <select
-                          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-                          name="fileColors"
-                          onChange={(event) =>
-                            updateFileOption(item.id, "color", event.target.value)
-                          }
-                          value={item.color}
-                        >
-                          {colors.map((color) => (
-                            <option key={color} value={color}>
-                              {color}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <DimensionField
-                        axis="x"
-                        id={item.id}
-                        label="X 尺寸 mm"
-                        name="fileDimensionX"
-                        onChange={updateFileDimension}
-                        value={item.dimensions.x}
-                      />
-                      <DimensionField
-                        axis="y"
-                        id={item.id}
-                        label="Y 尺寸 mm"
-                        name="fileDimensionY"
-                        onChange={updateFileDimension}
-                        value={item.dimensions.y}
-                      />
-                      <DimensionField
-                        axis="z"
-                        id={item.id}
-                        label="Z 尺寸 mm"
-                        name="fileDimensionZ"
-                        onChange={updateFileDimension}
-                        value={item.dimensions.z}
-                      />
-                    </div>
+                        {materials.map((material) => (
+                          <option key={material} value={material}>
+                            {material}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm font-semibold">
+                      颜色
+                      <select
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        name="fileColors"
+                        onChange={(event) => updateFileOption(item.id, "color", event.target.value)}
+                        value={item.color}
+                      >
+                        {colors.map((color) => (
+                          <option key={color} value={color}>
+                            {color}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
-              </article>
-            );
-          })}
+              </div>
+            </article>
+          ))}
         </section>
       ) : null}
 
       <section className="border border-ink/10 bg-white/70 p-5">
-        <h2 className="text-lg font-bold">订单汇总</h2>
-        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-          <SummaryItem label="文件数量" value={`${files.length} 个`} />
-          <SummaryItem label="包装费" value={`${PACKAGING_FEE} 元`} />
-          <SummaryItem label="运费" value={shippingFeeEstimate} />
-          <SummaryItem
-            label="预估总价"
-            value={formatPriceRange(orderSummary.priceMin, orderSummary.priceMax)}
+        <h2 className="text-lg font-bold">联系方式</h2>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <TextField autoComplete="name" label="姓名" name="customerName" required />
+          <TextField autoComplete="tel" label="电话" name="phone" required type="tel" />
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <TextField autoComplete="off" label="微信" name="wechat" required />
+          <TextField autoComplete="email" label="邮箱" name="email" type="email" />
+        </div>
+
+        <label className="mt-4 block text-sm font-semibold">
+          备注
+          <textarea
+            className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            name="remark"
+            placeholder="补充强度、用途、交期等要求"
           />
-          <SummaryItem
-            label="预估总货期"
-            value={formatLeadTimeRange(
-              orderSummary.leadTimeMinHours,
-              orderSummary.leadTimeMaxHours,
-            )}
-          />
-          <SummaryItem label="材料和颜色摘要" value={formatOptionSummary(files)} />
-        </dl>
-        <p className="mt-4 text-sm font-semibold text-coral">最终价格以人工确认为准。</p>
+        </label>
       </section>
 
       <section className="border border-ink/10 bg-white/70 p-5">
@@ -361,25 +330,24 @@ export function QuoteForm() {
       </section>
 
       <section className="border border-ink/10 bg-white/70 p-5">
-        <h2 className="text-lg font-bold">联系方式</h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <TextField autoComplete="name" label="姓名" name="customerName" required />
-          <TextField autoComplete="tel" label="电话" name="phone" required type="tel" />
-        </div>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <TextField autoComplete="off" label="微信" name="wechat" required />
-          <TextField autoComplete="email" label="邮箱" name="email" type="email" />
-        </div>
-
-        <label className="mt-4 block text-sm font-semibold">
-          备注
-          <textarea
-            className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-            name="remark"
-            placeholder="补充尺寸、强度、交期等要求"
+        <h2 className="text-lg font-bold">订单汇总</h2>
+        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+          <SummaryItem label="文件数量" value={`${files.length} 个`} />
+          <SummaryItem label="运费" value={orderSummary.shippingFeeEstimate} />
+          <SummaryItem
+            label="预估总价"
+            value={formatPriceRange(orderSummary.priceMin, orderSummary.priceMax)}
           />
-        </label>
+          <SummaryItem
+            label="预估总货期"
+            value={formatLeadTimeRange(
+              orderSummary.leadTimeMinHours,
+              orderSummary.leadTimeMaxHours,
+            )}
+          />
+          <SummaryItem label="材料和颜色摘要" value={formatOptionSummary(files)} />
+        </dl>
+        <p className="mt-4 text-sm font-semibold text-coral">最终价格以人工确认为准。</p>
       </section>
 
       {error ? (
@@ -426,37 +394,6 @@ function TextField({
   );
 }
 
-function DimensionField({
-  axis,
-  id,
-  label,
-  name,
-  onChange,
-  value,
-}: {
-  axis: "x" | "y" | "z";
-  id: string;
-  label: string;
-  name: string;
-  onChange: (id: string, axis: "x" | "y" | "z", value: string) => void;
-  value: string;
-}) {
-  return (
-    <label className="block text-sm font-semibold">
-      {label}
-      <input
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
-        min={0}
-        name={name}
-        onChange={(event) => onChange(id, axis, event.target.value)}
-        placeholder="可选"
-        type="number"
-        value={value}
-      />
-    </label>
-  );
-}
-
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-ink/10 bg-white/80 px-4 py-3">
@@ -466,7 +403,26 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function estimateFileBySize(filesize: number, material: string, dimensions = {}) {
+function estimateFiles(files: SelectedModelFile[]) {
+  const packagingShare = files.length > 0 ? PACKAGING_FEE / files.length : 0;
+
+  return files.map((item) => {
+    const dimensions = estimateDisplayDimensions(item.file);
+    const estimate = estimateFileBySize(item.file.size, item.material, dimensions);
+
+    return {
+      item,
+      dimensions,
+      estimate: {
+        ...estimate,
+        priceMin: Math.ceil(estimate.priceMin + packagingShare),
+        priceMax: Math.ceil(estimate.priceMax + packagingShare),
+      },
+    };
+  });
+}
+
+function estimateFileBySize(filesize: number, material: string, dimensions: DimensionsMm) {
   const bucket = getSizeBucket(filesize);
   const risk = getDimensionRisk(dimensions);
   const salesRate = getMaterialSalesRate(material);
@@ -484,28 +440,29 @@ function estimateFileBySize(filesize: number, material: string, dimensions = {})
   };
 }
 
-function estimateOrderSummary(files: SelectedModelFile[], shippingMethod: string) {
-  const estimates = files.map((item) =>
-    estimateFileBySize(item.file.size, item.material, parseDimensions(item.dimensions)),
-  );
+function estimateOrderSummary(fileEstimates: { estimate: FileEstimate }[], shippingMethod: string) {
   const shipping = getShippingEstimate(shippingMethod);
   const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
-  const printMin = estimates.reduce((total, estimate) => total + estimate.leadTimeMinHours, 0);
-  const printMax = estimates.reduce((total, estimate) => total + estimate.leadTimeMaxHours, 0);
+  const printMin = fileEstimates.reduce(
+    (total, { estimate }) => total + estimate.leadTimeMinHours,
+    0,
+  );
+  const printMax = fileEstimates.reduce(
+    (total, { estimate }) => total + estimate.leadTimeMaxHours,
+    0,
+  );
 
   return {
     priceMin: Math.max(
       Math.ceil(
-        estimates.reduce((total, estimate) => total + estimate.priceMin, 0) +
-          PACKAGING_FEE +
+        fileEstimates.reduce((total, { estimate }) => total + estimate.priceMin, 0) +
           shippingAmount,
       ),
       ORDER_MIN_PRICE,
     ),
     priceMax: Math.max(
       Math.ceil(
-        estimates.reduce((total, estimate) => total + estimate.priceMax, 0) +
-          PACKAGING_FEE +
+        fileEstimates.reduce((total, { estimate }) => total + estimate.priceMax, 0) +
           shippingAmount,
       ),
       ORDER_MIN_PRICE,
@@ -528,7 +485,27 @@ function getSizeBucket(filesize: number) {
   return { weightMinGrams: 300, weightMaxGrams: 700, leadTimeMinHours: 24, leadTimeMaxHours: 48 };
 }
 
-function getDimensionRisk(dimensions: { x?: number | null; y?: number | null; z?: number | null }) {
+function estimateDisplayDimensions(file: File): DimensionsMm {
+  if (file.size < MB) {
+    return { x: 8, y: 30, z: 30 };
+  }
+
+  if (file.size > 45 * MB) {
+    return { x: 260, y: 180, z: 120 };
+  }
+
+  if (file.size >= 20 * MB) {
+    return { x: 245, y: 160, z: 120 };
+  }
+
+  if (file.size >= 5 * MB) {
+    return { x: 120, y: 80, z: 60 };
+  }
+
+  return { x: 60, y: 40, z: 30 };
+}
+
+function getDimensionRisk(dimensions: DimensionsMm) {
   const values = [dimensions.x, dimensions.y, dimensions.z].filter(
     (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
   );
@@ -586,19 +563,6 @@ function getMaterialSalesRate(material: string) {
   }
 }
 
-function parseDimensions(dimensions: SelectedModelFile["dimensions"]) {
-  return {
-    x: parsePositiveNumber(dimensions.x),
-    y: parsePositiveNumber(dimensions.y),
-    z: parsePositiveNumber(dimensions.z),
-  };
-}
-
-function parsePositiveNumber(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 function formatOptionSummary(files: SelectedModelFile[]) {
   if (files.length === 0) {
     return "-";
@@ -617,6 +581,10 @@ function isAllowedFile(file: File) {
 
 function getFileType(filename: string) {
   return filename.split(".").pop()?.toUpperCase() || "UNKNOWN";
+}
+
+function formatDimensions(dimensions: DimensionsMm) {
+  return `${dimensions.x} × ${dimensions.y} × ${dimensions.z}`;
 }
 
 function formatPriceRange(min: number, max: number) {

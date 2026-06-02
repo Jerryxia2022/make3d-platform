@@ -32,7 +32,17 @@ test("estimates file price with labor minimum and dimension risks", () => {
   assert.equal(smallPla.leadTimeMinHours, 4);
   assert.equal(smallPla.leadTimeMaxHours, 8);
   assert.equal(smallPla.riskLevel, "warning");
-  assert.match(smallPla.riskNotice, /模型尺寸较小/);
+  assert.equal(smallPla.riskNotice, "模型尺寸较小，可能无法稳定打印，需要人工确认。");
+
+  const nearLimitPla = estimateFileBySize(30 * 1024 * 1024, "PLA", {
+    x: 241,
+    y: 120,
+    z: 80,
+  });
+
+  assert.equal(nearLimitPla.requiresManualConfirmation, false);
+  assert.equal(nearLimitPla.riskLevel, "warning");
+  assert.equal(nearLimitPla.riskNotice, "模型接近设备成型极限，可能需要调整摆放或拆件。");
 
   const oversizedAbs = estimateFileBySize(30 * 1024 * 1024, "ABS", {
     x: 260,
@@ -42,7 +52,10 @@ test("estimates file price with labor minimum and dimension risks", () => {
 
   assert.equal(oversizedAbs.requiresManualConfirmation, true);
   assert.equal(oversizedAbs.riskLevel, "danger");
-  assert.match(oversizedAbs.riskNotice, /超出单台设备成型尺寸/);
+  assert.equal(
+    oversizedAbs.riskNotice,
+    "模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。",
+  );
   assert.equal(oversizedAbs.materialSalesRate, 0.35);
   assert.equal(oversizedAbs.materialCostRate, 0.05);
 });

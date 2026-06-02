@@ -82,7 +82,9 @@ export function estimateOrderSummary(files: EstimateFileInput[], shippingMethod:
     packagingFee: PACKAGING_FEE,
     shippingFee: shipping.amount,
     shippingFeeEstimate: shipping.label,
-    requiresManualConfirmation: fileEstimates.some((estimate) => estimate.requiresManualConfirmation),
+    requiresManualConfirmation: fileEstimates.some(
+      (estimate) => estimate.requiresManualConfirmation,
+    ),
   };
 }
 
