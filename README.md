@@ -157,3 +157,11 @@ SMTP_PASS=
 `COOKIE_SECURE` 控制管理员登录 cookie 是否带 `Secure` 属性。HTTP 测试环境使用 `COOKIE_SECURE=false`；HTTPS 正式环境使用 `COOKIE_SECURE=true`。
 
 新订单邮件通知需要配置 `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS` 和 `ADMIN_EMAIL`。客户提交订单成功后，系统会发送标题为 `Make3D 新订单通知 - 订单编号` 的邮件给管理员；如果 SMTP 发送失败，订单提交仍会成功。
+
+## Docker PrusaSlicer
+
+Production Docker images include PrusaSlicer in the runtime container. After rebuilding the image, verify it with:
+
+```bash
+docker compose exec make3d prusa-slicer --version
+```

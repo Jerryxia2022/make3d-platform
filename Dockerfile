@@ -26,6 +26,10 @@ ENV NODE_OPTIONS=--experimental-sqlite
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends prusa-slicer \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
