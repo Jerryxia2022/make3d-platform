@@ -17,6 +17,7 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
 test("quote page exposes V2 pricing, simplified dimensions, shipping, address, and contact fields", async () => {
   const source = await readSource("src/app/quote/page.tsx");
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
 
   assert.match(source, /STL/);
   assert.match(source, /3MF/);
@@ -35,23 +36,24 @@ test("quote page exposes V2 pricing, simplified dimensions, shipping, address, a
   assert.match(formSource, /fileDimensionY/);
   assert.match(formSource, /fileDimensionZ/);
   assert.match(formSource, /estimateDisplayDimensions/);
-  assert.match(formSource, /模型最大外形尺寸约：/);
   assert.match(formSource, /formatDimensions\(dimensions\)/);
+  assert.match(estimateSource, /模型最大外形尺寸约：/);
+  assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准/);
   assert.doesNotMatch(formSource, /DimensionField/);
   assert.doesNotMatch(formSource, /updateFileDimension/);
   assert.doesNotMatch(formSource, /X 尺寸 mm/);
   assert.doesNotMatch(formSource, /Y 尺寸 mm/);
   assert.doesNotMatch(formSource, /Z 尺寸 mm/);
   assert.match(formSource, /removeFile/);
-  assert.match(formSource, /estimateFileBySize/);
-  assert.match(formSource, /getMaterialSalesRate/);
-  assert.match(formSource, /DEVICE_COUNT = 6/);
-  assert.match(formSource, /PACKAGING_FEE = 3/);
+  assert.match(estimateSource, /estimateFileBySize/);
+  assert.match(estimateSource, /getMaterialSalesRate/);
+  assert.match(estimateSource, /DEVICE_COUNT = 6/);
+  assert.match(estimateSource, /PACKAGING_FEE = 3/);
   assert.match(formSource, /预估价格区间/);
   assert.match(formSource, /预估工期/);
-  assert.match(formSource, /模型尺寸较小，可能无法稳定打印，需要人工确认。/);
-  assert.match(formSource, /模型接近设备成型极限，可能需要调整摆放或拆件。/);
-  assert.match(formSource, /模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。/);
+  assert.match(estimateSource, /模型尺寸较小，可能无法稳定打印，需要人工确认。/);
+  assert.match(estimateSource, /模型接近设备成型极限，可能需要调整摆放或拆件。/);
+  assert.match(estimateSource, /模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。/);
   assert.doesNotMatch(formSource, /label="包装费"/);
   assert.match(formSource, /运费/);
   assert.match(formSource, /预估总价/);

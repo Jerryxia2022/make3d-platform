@@ -3,32 +3,31 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  createQuoteFileId,
+  estimateDisplayDimensions,
+  estimateFiles,
+  estimateOrderSummary,
+  formatBytes,
+  formatDimensions,
+  formatLeadTimeRange,
+  formatOptionSummary,
+  formatPriceRange,
+  safeFileSize,
+  type QuoteDimensions,
+  type SelectedQuoteFile,
+} from "@/frontend/lib/quote-estimates";
+
 const materials = ["PLA", "PETG", "ABS"];
 const colors = ["黑", "白", "红", "蓝"];
 const shippingMethods = ["普通快递", "顺丰快递", "西安本地跑腿", "到店自取"];
 const allowedExtensions = [".stl", ".step", ".stp", ".3mf"];
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const MB = 1024 * 1024;
-const DEVICE_COUNT = 6;
-const PACKAGING_FEE = 3;
-const PACKAGING_TIME_HOURS = 2;
-const ORDER_MIN_PRICE = 20;
 
-type DimensionsMm = {
-  x: number;
-  y: number;
-  z: number;
-};
-
-type SelectedModelFile = {
-  id: string;
+type SelectedModelFile = SelectedQuoteFile & {
   file: File;
-  material: string;
-  color: string;
 };
-
-type FileEstimate = ReturnType<typeof estimateFileBySize>;
 
 export function QuoteForm() {
   const router = useRouter();
@@ -62,7 +61,7 @@ export function QuoteForm() {
     setFiles((currentFiles) => [
       ...currentFiles,
       ...incomingFiles.map((file) => ({
-        id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        id: createQuoteFileId(file),
         file,
         material: "PLA",
         color: "黑",
@@ -111,9 +110,9 @@ export function QuoteForm() {
         formData.append("modelFiles", item.file);
         formData.append("fileMaterials", item.material);
         formData.append("fileColors", item.color);
-        formData.append("fileDimensionX", String(dimensions.x));
-        formData.append("fileDimensionY", String(dimensions.y));
-        formData.append("fileDimensionZ", String(dimensions.z));
+        formData.append("fileDimensionX", formatDimensionFormValue(dimensions?.x));
+        formData.append("fileDimensionY", formatDimensionFormValue(dimensions?.y));
+        formData.append("fileDimensionZ", formatDimensionFormValue(dimensions?.z));
       }
 
       const response = await fetch("/api/orders", {
@@ -178,9 +177,21 @@ export function QuoteForm() {
         <section className="space-y-3">
           {fileEstimates.map(({ item, dimensions, estimate }) => (
             <article className="border border-ink/10 bg-white/80 p-4" key={item.id}>
-              <input name="fileDimensionX" type="hidden" value={dimensions.x} />
-              <input name="fileDimensionY" type="hidden" value={dimensions.y} />
-              <input name="fileDimensionZ" type="hidden" value={dimensions.z} />
+              <input
+                name="fileDimensionX"
+                type="hidden"
+                value={formatDimensionFormValue(dimensions?.x)}
+              />
+              <input
+                name="fileDimensionY"
+                type="hidden"
+                value={formatDimensionFormValue(dimensions?.y)}
+              />
+              <input
+                name="fileDimensionZ"
+                type="hidden"
+                value={formatDimensionFormValue(dimensions?.z)}
+              />
               <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
                 <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
                   占位缩略图
@@ -188,12 +199,12 @@ export function QuoteForm() {
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="font-semibold">{item.file.name}</p>
+                      <p className="font-semibold">{item.file.name || "未命名模型文件"}</p>
                       <p className="mt-1 text-sm text-graphite">
                         {formatBytes(item.file.size)} · {getFileType(item.file.name)}
                       </p>
                       <p className="mt-2 text-sm text-graphite">
-                        模型最大外形尺寸约：{formatDimensions(dimensions)} mm
+                        {formatDimensions(dimensions)}
                       </p>
                       <p className="mt-2 text-sm font-semibold text-ink">
                         预估价格区间：{formatPriceRange(estimate.priceMin, estimate.priceMax)}
@@ -403,202 +414,18 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function estimateFiles(files: SelectedModelFile[]) {
-  const packagingShare = files.length > 0 ? PACKAGING_FEE / files.length : 0;
-
-  return files.map((item) => {
-    const dimensions = estimateDisplayDimensions(item.file);
-    const estimate = estimateFileBySize(item.file.size, item.material, dimensions);
-
-    return {
-      item,
-      dimensions,
-      estimate: {
-        ...estimate,
-        priceMin: Math.ceil(estimate.priceMin + packagingShare),
-        priceMax: Math.ceil(estimate.priceMax + packagingShare),
-      },
-    };
-  });
-}
-
-function estimateFileBySize(filesize: number, material: string, dimensions: DimensionsMm) {
-  const bucket = getSizeBucket(filesize);
-  const risk = getDimensionRisk(dimensions);
-  const salesRate = getMaterialSalesRate(material);
-  const laborMin = Math.max(bucket.leadTimeMinHours * 1.5, 5);
-  const laborMax = Math.max(bucket.leadTimeMaxHours * 1.5, 5);
-  const riskMultiplier = (material === "ABS" ? 1.15 : 1) * risk.priceMultiplier;
-
-  return {
-    priceMin: Math.ceil((bucket.weightMinGrams * salesRate + laborMin) * riskMultiplier),
-    priceMax: Math.ceil((bucket.weightMaxGrams * salesRate + laborMax) * riskMultiplier),
-    leadTimeMinHours: bucket.leadTimeMinHours,
-    leadTimeMaxHours: bucket.leadTimeMaxHours,
-    riskNotice: risk.notice,
-    riskLevel: risk.level,
-  };
-}
-
-function estimateOrderSummary(fileEstimates: { estimate: FileEstimate }[], shippingMethod: string) {
-  const shipping = getShippingEstimate(shippingMethod);
-  const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
-  const printMin = fileEstimates.reduce(
-    (total, { estimate }) => total + estimate.leadTimeMinHours,
-    0,
-  );
-  const printMax = fileEstimates.reduce(
-    (total, { estimate }) => total + estimate.leadTimeMaxHours,
-    0,
-  );
-
-  return {
-    priceMin: Math.max(
-      Math.ceil(
-        fileEstimates.reduce((total, { estimate }) => total + estimate.priceMin, 0) +
-          shippingAmount,
-      ),
-      ORDER_MIN_PRICE,
-    ),
-    priceMax: Math.max(
-      Math.ceil(
-        fileEstimates.reduce((total, { estimate }) => total + estimate.priceMax, 0) +
-          shippingAmount,
-      ),
-      ORDER_MIN_PRICE,
-    ),
-    leadTimeMinHours: Math.ceil(printMin / DEVICE_COUNT + PACKAGING_TIME_HOURS),
-    leadTimeMaxHours: Math.ceil(printMax / DEVICE_COUNT + PACKAGING_TIME_HOURS),
-    shippingFeeEstimate: shipping.label,
-  };
-}
-
-function getSizeBucket(filesize: number) {
-  if (filesize < 5 * MB) {
-    return { weightMinGrams: 65, weightMaxGrams: 169, leadTimeMinHours: 4, leadTimeMaxHours: 8 };
-  }
-
-  if (filesize < 20 * MB) {
-    return { weightMinGrams: 35, weightMaxGrams: 250, leadTimeMinHours: 8, leadTimeMaxHours: 24 };
-  }
-
-  return { weightMinGrams: 300, weightMaxGrams: 700, leadTimeMinHours: 24, leadTimeMaxHours: 48 };
-}
-
-function estimateDisplayDimensions(file: File): DimensionsMm {
-  if (file.size < MB) {
-    return { x: 8, y: 30, z: 30 };
-  }
-
-  if (file.size > 45 * MB) {
-    return { x: 260, y: 180, z: 120 };
-  }
-
-  if (file.size >= 20 * MB) {
-    return { x: 245, y: 160, z: 120 };
-  }
-
-  if (file.size >= 5 * MB) {
-    return { x: 120, y: 80, z: 60 };
-  }
-
-  return { x: 60, y: 40, z: 30 };
-}
-
-function getDimensionRisk(dimensions: DimensionsMm) {
-  const values = [dimensions.x, dimensions.y, dimensions.z].filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
-  );
-
-  if (values.some((value) => value > 256)) {
-    return {
-      notice: "模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。",
-      level: "danger",
-      priceMultiplier: 1.1,
-    };
-  }
-
-  if (values.some((value) => value > 240)) {
-    return {
-      notice: "模型接近设备成型极限，可能需要调整摆放或拆件。",
-      level: "warning",
-      priceMultiplier: 1.1,
-    };
-  }
-
-  if (values.some((value) => value < 10)) {
-    return {
-      notice: "模型尺寸较小，可能无法稳定打印，需要人工确认。",
-      level: "warning",
-      priceMultiplier: 1.15,
-    };
-  }
-
-  return { notice: "", level: "none", priceMultiplier: 1 };
-}
-
-function getShippingEstimate(method: string) {
-  switch (method) {
-    case "顺丰快递":
-      return { label: "18 元", amount: 18, includedInAutoPrice: true };
-    case "西安本地跑腿":
-      return { label: "人工确认", amount: null, includedInAutoPrice: false };
-    case "到店自取":
-      return { label: "0 元", amount: 0, includedInAutoPrice: true };
-    case "普通快递":
-    default:
-      return { label: "10 元", amount: 10, includedInAutoPrice: true };
-  }
-}
-
-function getMaterialSalesRate(material: string) {
-  switch (material) {
-    case "PETG":
-      return 0.2;
-    case "ABS":
-      return 0.35;
-    case "PLA":
-    default:
-      return 0.25;
-  }
-}
-
-function formatOptionSummary(files: SelectedModelFile[]) {
-  if (files.length === 0) {
-    return "-";
-  }
-
-  return files.map((item) => `${item.material}/${item.color}`).join("，");
+function formatDimensionFormValue(value: QuoteDimensions["x"] | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? String(value) : "";
 }
 
 function isAllowedFile(file: File) {
   const fileName = file.name.toLowerCase();
   return (
     allowedExtensions.some((extension) => fileName.endsWith(extension)) &&
-    file.size <= MAX_FILE_BYTES
+    safeFileSize(file) <= MAX_FILE_BYTES
   );
 }
 
-function getFileType(filename: string) {
-  return filename.split(".").pop()?.toUpperCase() || "UNKNOWN";
-}
-
-function formatDimensions(dimensions: DimensionsMm) {
-  return `${dimensions.x} × ${dimensions.y} × ${dimensions.z}`;
-}
-
-function formatPriceRange(min: number, max: number) {
-  return min === max ? `${min} 元` : `${min}-${max} 元`;
-}
-
-function formatLeadTimeRange(min: number, max: number) {
-  return min === 0 && max === 0 ? "-" : `预计 ${min}-${max} 小时`;
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`;
-  }
-
-  return `${(value / 1024 / 1024).toFixed(2)} MB`;
+function getFileType(filename: string | null | undefined) {
+  return filename?.split(".").pop()?.toUpperCase() || "UNKNOWN";
 }
