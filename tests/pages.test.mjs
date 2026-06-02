@@ -120,6 +120,10 @@ test("admin pages show V2 estimate and shipping fields", async () => {
 test("admin order detail page shows complete order fields and per-file V2 estimate actions", async () => {
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
 
+  assert.match(detailSource, /getPrusaSlicerConfig/);
+  assert.match(detailSource, /后台测试切片报价/);
+  assert.match(detailSource, /自动切片报价尚未启用。/);
+  assert.match(detailSource, /disabled={!slicerConfig\.enabled}/);
   assert.match(detailSource, /requireAdminSession/);
   assert.match(detailSource, /redirect\("\/admin\/login"\)/);
   assert.match(detailSource, /AdminStatusForm orderId={order\.id} status={order\.status}/);

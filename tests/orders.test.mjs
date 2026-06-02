@@ -21,16 +21,16 @@ import {
   resetUploadRateLimit,
 } from "../src/backend/rateLimit.ts";
 
-test("initializes orders and files tables with estimate, shipping, and model option columns", async () => {
+test("initializes orders, files, and slice_jobs tables with estimate, shipping, and model option columns", async () => {
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
 
-  assert.deepEqual(tables, ["files", "orders"]);
+  assert.deepEqual(tables, ["files", "orders", "slice_jobs"]);
 
   const fileColumns = db.prepare("PRAGMA table_info(files)").all().map((row) => row.name);
   for (const column of [
@@ -72,6 +72,28 @@ test("initializes orders and files tables with estimate, shipping, and model opt
     "shipping_remark",
   ]) {
     assert.equal(orderColumns.includes(column), true);
+  }
+
+  const sliceJobColumns = db.prepare("PRAGMA table_info(slice_jobs)").all().map((row) => row.name);
+  for (const column of [
+    "id",
+    "order_id",
+    "file_id",
+    "status",
+    "input_file_path",
+    "gcode_file_path",
+    "material",
+    "layer_height",
+    "infill_density",
+    "need_support",
+    "filament_weight_g",
+    "print_time_seconds",
+    "estimated_price",
+    "error_message",
+    "created_at",
+    "updated_at",
+  ]) {
+    assert.equal(sliceJobColumns.includes(column), true);
   }
 
   db.close();

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getOrderById, openDatabase, type OrderDetail, type OrderFileRecord } from "@/backend/database";
+import {
+  getOrderById,
+  openDatabase,
+  type OrderDetail,
+  type OrderFileRecord,
+} from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
+import { getPrusaSlicerConfig } from "@/backend/slicer";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 
 export default async function AdminOrderDetailPage({
@@ -15,6 +21,7 @@ export default async function AdminOrderDetailPage({
 
   const { id } = await params;
   const db = openDatabase();
+  const slicerConfig = getPrusaSlicerConfig();
 
   try {
     const order = getOrderById(db, Number(id));
@@ -87,6 +94,26 @@ export default async function AdminOrderDetailPage({
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-graphite">{order.remark || "无备注"}</p>
+          </section>
+
+          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold">自动切片报价</h2>
+                <p className="mt-2 text-sm text-graphite">
+                  {slicerConfig.enabled
+                    ? "可在后台测试 PrusaSlicer 自动切片报价。"
+                    : "自动切片报价尚未启用。"}
+                </p>
+              </div>
+              <button
+                className="bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-graphite/40"
+                disabled={!slicerConfig.enabled}
+                type="button"
+              >
+                后台测试切片报价
+              </button>
+            </div>
           </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">

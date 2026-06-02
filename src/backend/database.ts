@@ -193,6 +193,28 @@ export function initDatabase(dbPath = getDatabasePath()) {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS slice_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      file_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      input_file_path TEXT NOT NULL,
+      gcode_file_path TEXT,
+      material TEXT,
+      layer_height REAL,
+      infill_density INTEGER,
+      need_support INTEGER NOT NULL DEFAULT 0,
+      filament_weight_g REAL,
+      print_time_seconds INTEGER,
+      estimated_price REAL,
+      error_message TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
+      CHECK (status IN ('queued', 'processing', 'success', 'failed'))
+    );
   `);
   ensureColumns(db, "orders", [
     ["estimated_price_min", "REAL"],
@@ -227,6 +249,23 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["requires_manual_confirmation", "INTEGER NOT NULL DEFAULT 0"],
     ["material_sales_rate", "REAL"],
     ["material_cost_rate", "REAL"],
+  ]);
+  ensureColumns(db, "slice_jobs", [
+    ["order_id", "INTEGER"],
+    ["file_id", "INTEGER"],
+    ["status", "TEXT NOT NULL DEFAULT 'queued'"],
+    ["input_file_path", "TEXT"],
+    ["gcode_file_path", "TEXT"],
+    ["material", "TEXT"],
+    ["layer_height", "REAL"],
+    ["infill_density", "INTEGER"],
+    ["need_support", "INTEGER NOT NULL DEFAULT 0"],
+    ["filament_weight_g", "REAL"],
+    ["print_time_seconds", "INTEGER"],
+    ["estimated_price", "REAL"],
+    ["error_message", "TEXT"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
   ]);
 
   return db;

@@ -20,6 +20,11 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      PRUSASLICER_ENABLED: ${PRUSASLICER_ENABLED:-false}
+      PRUSASLICER_BIN: ${PRUSASLICER_BIN:-prusa-slicer}
+      PRUSASLICER_PROFILE_PATH: ${PRUSASLICER_PROFILE_PATH:-/app/profiles/bambu-p1s.ini}
+      SLICE_TIMEOUT_SECONDS: ${SLICE_TIMEOUT_SECONDS:-120}
+      MAX_SLICE_CONCURRENCY: ${MAX_SLICE_CONCURRENCY:-1}
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
