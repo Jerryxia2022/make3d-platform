@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 
 import {
   createOrderWithFile,
+  getOrderById,
   initDatabase,
   listOrders,
 } from "../src/backend/database.ts";
@@ -90,6 +91,43 @@ test("creates an order and associated uploaded file record", async () => {
     surface_area: null,
     process_type: null,
   });
+  db.close();
+});
+
+test("preserves distinct customer contact fields in list and detail views", () => {
+  const db = initDatabase(":memory:");
+  const order = createOrderWithFile(db, {
+    customerName: "客户张三",
+    phone: "13911112222",
+    wechat: "wechat-zhangsan",
+    email: "zhangsan@example.com",
+    company: "张三科技",
+    material: "PETG",
+    color: "黑色",
+    quantity: 3,
+    remark: "字段映射测试",
+    estimatedPrice: 85,
+    file: {
+      filename: "mapping.stl",
+      filepath: "/uploads/mapping.stl",
+      filesize: 256,
+    },
+  });
+
+  const [listItem] = listOrders(db);
+  const detail = getOrderById(db, order.id);
+
+  assert.equal(listItem.customerName, "客户张三");
+  assert.equal(listItem.phone, "13911112222");
+  assert.equal(listItem.wechat, "wechat-zhangsan");
+  assert.equal(listItem.email, "zhangsan@example.com");
+  assert.equal(listItem.company, "张三科技");
+  assert.equal(detail.customerName, "客户张三");
+  assert.equal(detail.phone, "13911112222");
+  assert.equal(detail.wechat, "wechat-zhangsan");
+  assert.equal(detail.email, "zhangsan@example.com");
+  assert.equal(detail.company, "张三科技");
+
   db.close();
 });
 

@@ -98,46 +98,57 @@ export function QuoteForm() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold">
+        <label className="block text-sm font-semibold" htmlFor="customerName">
           姓名
           <input
+            autoComplete="name"
             className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            id="customerName"
             name="customerName"
             required
           />
         </label>
-        <label className="block text-sm font-semibold">
+        <label className="block text-sm font-semibold" htmlFor="phone">
           电话
           <input
+            autoComplete="tel"
             className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            id="phone"
             name="phone"
             required
+            type="tel"
           />
         </label>
       </div>
 
-      <label className="block text-sm font-semibold">
+      <label className="block text-sm font-semibold" htmlFor="wechat">
         微信
         <input
+          autoComplete="off"
           className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          id="wechat"
           name="wechat"
           required
         />
       </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold">
+        <label className="block text-sm font-semibold" htmlFor="email">
           邮箱
           <input
+            autoComplete="email"
             className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            id="email"
             name="email"
             type="email"
           />
         </label>
-        <label className="block text-sm font-semibold">
+        <label className="block text-sm font-semibold" htmlFor="company">
           公司名称
           <input
+            autoComplete="organization"
             className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            id="company"
             name="company"
           />
         </label>
