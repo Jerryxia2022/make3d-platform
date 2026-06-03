@@ -56,6 +56,21 @@ test("converts PrusaSlicer filament volume in cm3 to grams", () => {
   assert.equal(metadata.filamentWeightSource, "cm3");
 });
 
+test("calculates PLA weight from cm3 when G-code density is missing", () => {
+  const metadata = parseGcodeMetadata(
+    `
+; estimated printing time = 1h 0m 0s
+; filament used [cm3] = 692.80
+`,
+    "PLA",
+  );
+
+  assert.equal(metadata.rawFilamentUsedCm3, 692.8);
+  assert.equal(metadata.materialDensity, 1.24);
+  assert.equal(metadata.filamentWeightG, 859.072);
+  assert.equal(metadata.filamentWeightSource, "cm3");
+});
+
 test("reads PrusaSlicer filament weight in grams directly", () => {
   const metadata = parseGcodeMetadata(
     `

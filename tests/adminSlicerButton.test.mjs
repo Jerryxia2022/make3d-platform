@@ -42,7 +42,9 @@ test("admin order detail page wires slicer test button without breaking detail a
   assert.match(source, /rawFilamentUsedMm/);
   assert.match(source, /rawFilamentUsedCm3/);
   assert.match(source, /rawFilamentUsedG/);
-  assert.match(source, /filamentWeightSource/);
+  assert.match(source, /filament used \[cm3\]/);
+  assert.match(source, /density =/);
+  assert.match(source, /calculated weight =/);
   assert.match(source, /AdminStatusForm orderId={order\.id} status={order\.status}/);
   assert.match(source, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
 });

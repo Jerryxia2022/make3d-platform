@@ -201,13 +201,11 @@ function SliceJobResult({ job }: { job: SliceJobRecord | null }) {
       </dl>
       <div className="mt-5 border-t border-ink/10 pt-4">
         <h4 className="text-sm font-bold">原始解析字段</h4>
-        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-          <Detail label="长度mm" value={formatOptionalNumber(job.rawFilamentUsedMm)} />
-          <Detail label="体积cm3" value={formatOptionalNumber(job.rawFilamentUsedCm3)} />
-          <Detail label="重量g" value={formatOptionalNumber(job.rawFilamentUsedG)} />
-          <Detail label="重量来源" value={job.filamentWeightSource || "-"} />
-          <Detail label="材料密度" value={formatOptionalNumber(job.materialDensity)} />
-        </dl>
+        <div className="mt-3 space-y-1 font-mono text-sm text-graphite">
+          <p>{formatFilamentUsedLine(job)}</p>
+          <p>density = {formatDensity(job.materialDensity)}</p>
+          <p>calculated weight = {formatCalculatedWeight(job.filamentWeightG)}</p>
+        </div>
       </div>
     </div>
   );
@@ -269,8 +267,28 @@ function formatSliceMoney(value: number | null) {
   return value == null ? "-" : `${value.toFixed(2)} 元`;
 }
 
-function formatOptionalNumber(value: number | null) {
-  return value == null ? "-" : String(value);
+function formatFilamentUsedLine(job: SliceJobRecord) {
+  if (job.rawFilamentUsedCm3 != null) {
+    return `filament used [cm3] = ${job.rawFilamentUsedCm3.toFixed(2)}`;
+  }
+
+  if (job.rawFilamentUsedMm != null) {
+    return `filament used [mm] = ${job.rawFilamentUsedMm.toFixed(2)}`;
+  }
+
+  if (job.rawFilamentUsedG != null) {
+    return `filament used [g] = ${job.rawFilamentUsedG.toFixed(2)}`;
+  }
+
+  return "filament used = -";
+}
+
+function formatDensity(value: number | null) {
+  return value == null ? "-" : value.toFixed(2);
+}
+
+function formatCalculatedWeight(value: number | null) {
+  return value == null ? "-" : `${value.toFixed(2)}g`;
 }
 
 function formatSlicePrintTime(value: number | null) {
