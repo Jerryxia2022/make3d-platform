@@ -127,6 +127,48 @@ export type OrderDetail = OrderRecord & {
   files: OrderFileRecord[];
 };
 
+export type SliceJobStatus = "queued" | "processing" | "success" | "failed";
+
+export type SliceJobInput = {
+  orderId: number;
+  fileId: number;
+  inputFilePath: string;
+  gcodeFilePath: string;
+  material: string;
+  layerHeight: number;
+  infillDensity: number;
+  needSupport: boolean;
+};
+
+export type SliceJobSuccessInput = {
+  filamentWeightG: number;
+  printTimeSeconds: number;
+  materialFee: number;
+  timeFee: number;
+  estimatedPrice: number;
+};
+
+export type SliceJobRecord = {
+  id: number;
+  orderId: number;
+  fileId: number;
+  status: SliceJobStatus;
+  inputFilePath: string;
+  gcodeFilePath: string | null;
+  material: string | null;
+  layerHeight: number | null;
+  infillDensity: number | null;
+  needSupport: boolean;
+  filamentWeightG: number | null;
+  printTimeSeconds: number | null;
+  materialFee: number | null;
+  timeFee: number | null;
+  estimatedPrice: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export function getDatabasePath() {
   return process.env.DATABASE_URL?.replace(/^file:/, "") || join(process.cwd(), "data", "make3d.db");
 }
@@ -207,6 +249,8 @@ export function initDatabase(dbPath = getDatabasePath()) {
       need_support INTEGER NOT NULL DEFAULT 0,
       filament_weight_g REAL,
       print_time_seconds INTEGER,
+      material_fee REAL,
+      time_fee REAL,
       estimated_price REAL,
       error_message TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -262,6 +306,8 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["need_support", "INTEGER NOT NULL DEFAULT 0"],
     ["filament_weight_g", "REAL"],
     ["print_time_seconds", "INTEGER"],
+    ["material_fee", "REAL"],
+    ["time_fee", "REAL"],
     ["estimated_price", "REAL"],
     ["error_message", "TEXT"],
     ["created_at", "DATETIME"],
@@ -507,6 +553,87 @@ export function updateOrderStatus(db: DatabaseSync, id: number, status: string) 
   return result.changes > 0;
 }
 
+export function createSliceJob(db: DatabaseSync, input: SliceJobInput) {
+  const result = db
+    .prepare(
+      `INSERT INTO slice_jobs (
+        order_id,
+        file_id,
+        status,
+        input_file_path,
+        gcode_file_path,
+        material,
+        layer_height,
+        infill_density,
+        need_support
+      ) VALUES (?, ?, 'processing', ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.orderId,
+      input.fileId,
+      input.inputFilePath,
+      input.gcodeFilePath,
+      input.material,
+      input.layerHeight,
+      input.infillDensity,
+      input.needSupport ? 1 : 0,
+    );
+
+  return Number(result.lastInsertRowid);
+}
+
+export function updateSliceJobSuccess(
+  db: DatabaseSync,
+  id: number,
+  input: SliceJobSuccessInput,
+) {
+  const result = db
+    .prepare(
+      `UPDATE slice_jobs
+       SET status = 'success',
+           filament_weight_g = ?,
+           print_time_seconds = ?,
+           material_fee = ?,
+           time_fee = ?,
+           estimated_price = ?,
+           error_message = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .run(
+      input.filamentWeightG,
+      input.printTimeSeconds,
+      input.materialFee,
+      input.timeFee,
+      input.estimatedPrice,
+      id,
+    );
+
+  return result.changes > 0;
+}
+
+export function updateSliceJobFailure(db: DatabaseSync, id: number, errorMessage: string) {
+  const result = db
+    .prepare(
+      `UPDATE slice_jobs
+       SET status = 'failed',
+           error_message = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .run(errorMessage, id);
+
+  return result.changes > 0;
+}
+
+export function getLatestSliceJobByOrderId(db: DatabaseSync, orderId: number) {
+  const job = db
+    .prepare(sliceJobSelectSql("WHERE order_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1"))
+    .get(orderId);
+
+  return job ? normalizeSliceJobRecord(job) : null;
+}
+
 function orderSelectSql(suffix: string) {
   return `SELECT
     id,
@@ -540,12 +667,44 @@ function orderSelectSql(suffix: string) {
   ${suffix}`;
 }
 
+function sliceJobSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    order_id AS orderId,
+    file_id AS fileId,
+    status,
+    input_file_path AS inputFilePath,
+    gcode_file_path AS gcodeFilePath,
+    material,
+    layer_height AS layerHeight,
+    infill_density AS infillDensity,
+    need_support AS needSupport,
+    filament_weight_g AS filamentWeightG,
+    print_time_seconds AS printTimeSeconds,
+    material_fee AS materialFee,
+    time_fee AS timeFee,
+    estimated_price AS estimatedPrice,
+    error_message AS errorMessage,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM slice_jobs
+  ${suffix}`;
+}
+
 function normalizeFileRecord(file: unknown) {
   const record = file as Record<string, unknown> & { requiresManualConfirmation: 0 | 1 };
   return {
     ...record,
     requiresManualConfirmation: Boolean(record.requiresManualConfirmation),
   } as OrderFileRecord;
+}
+
+function normalizeSliceJobRecord(job: unknown) {
+  const record = job as Record<string, unknown> & { needSupport: 0 | 1 };
+  return {
+    ...record,
+    needSupport: Boolean(record.needSupport),
+  } as SliceJobRecord;
 }
 
 function createOrderNo() {

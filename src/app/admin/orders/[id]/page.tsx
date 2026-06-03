@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  getLatestSliceJobByOrderId,
   getOrderById,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
+  type SliceJobRecord,
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { getPrusaSlicerConfig } from "@/backend/slicer";
@@ -26,6 +28,7 @@ export default async function AdminOrderDetailPage({
 
   try {
     const order = getOrderById(db, Number(id));
+    const latestSliceJob = getLatestSliceJobByOrderId(db, order.id);
 
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
@@ -113,6 +116,7 @@ export default async function AdminOrderDetailPage({
                 profilePath={slicerConfig.profilePath}
               />
             </div>
+            <SliceJobResult job={latestSliceJob} />
           </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
@@ -169,6 +173,36 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SliceJobResult({ job }: { job: SliceJobRecord | null }) {
+  if (!job) {
+    return <p className="mt-4 text-sm text-graphite">暂无切片记录</p>;
+  }
+
+  if (job.status !== "success") {
+    return (
+      <div className="mt-5 border border-coral/30 bg-coral/5 p-4 text-sm">
+        <p className="font-semibold text-coral">最近一次切片记录：{job.status}</p>
+        <p className="mt-2 text-graphite">{job.errorMessage || "切片失败"}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 border border-ink/10 bg-white p-4">
+      <h3 className="text-base font-bold">最近一次切片记录</h3>
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+        <Detail label="耗材重量" value={formatWeight(job.filamentWeightG)} />
+        <Detail label="打印时间" value={formatSlicePrintTime(job.printTimeSeconds)} />
+        <Detail label="自动计算价格" value={formatSliceMoney(job.estimatedPrice)} />
+        <Detail label="材料费" value={formatSliceMoney(job.materialFee)} />
+        <Detail label="工时费" value={formatSliceMoney(job.timeFee)} />
+        <Detail label="使用材料" value={job.material || "-"} />
+        <Detail label="使用配置" value="0.4喷嘴 / 0.2层高 / 50%填充" />
+      </dl>
+    </div>
+  );
+}
+
 function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
 }
@@ -215,6 +249,25 @@ function formatDimensions(file: OrderFileRecord) {
 
 function formatMoney(value: number | null) {
   return value == null ? "-" : `¥${value.toFixed(2)}`;
+}
+
+function formatWeight(value: number | null) {
+  return value == null ? "-" : `${value.toFixed(2)} g`;
+}
+
+function formatSliceMoney(value: number | null) {
+  return value == null ? "-" : `${value.toFixed(2)} 元`;
+}
+
+function formatSlicePrintTime(value: number | null) {
+  if (value == null) {
+    return "-";
+  }
+
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.round((value % 3600) / 60);
+
+  return `${hours} 小时 ${minutes} 分钟`;
 }
 
 function formatBytes(value: number) {

@@ -7,9 +7,13 @@ import assert from "node:assert/strict";
 import {
   createOrderWithFile,
   createOrderWithFiles,
+  createSliceJob,
   getOrderById,
+  getLatestSliceJobByOrderId,
   initDatabase,
   listOrders,
+  updateSliceJobFailure,
+  updateSliceJobSuccess,
 } from "../src/backend/database.ts";
 import {
   MAX_UPLOAD_BYTES,
@@ -88,6 +92,8 @@ test("initializes orders, files, and slice_jobs tables with estimate, shipping, 
     "need_support",
     "filament_weight_g",
     "print_time_seconds",
+    "material_fee",
+    "time_fee",
     "estimated_price",
     "error_message",
     "created_at",
@@ -95,6 +101,103 @@ test("initializes orders, files, and slice_jobs tables with estimate, shipping, 
   ]) {
     assert.equal(sliceJobColumns.includes(column), true);
   }
+
+  db.close();
+});
+
+test("saves and loads the latest successful PrusaSlicer quote result", () => {
+  const db = initDatabase(":memory:");
+  const order = createOrderWithFile(db, {
+    customerName: "Jerry",
+    phone: "13800000000",
+    wechat: "make3d",
+    material: "PLA",
+    color: "black",
+    quantity: 1,
+    estimatedPrice: 30,
+    file: {
+      filename: "slice.stl",
+      filepath: "/uploads/slice.stl",
+      filesize: 128,
+    },
+  });
+  const detail = getOrderById(db, order.id);
+  const file = detail.files[0];
+  const jobId = createSliceJob(db, {
+    orderId: order.id,
+    fileId: file.id,
+    inputFilePath: file.filepath,
+    gcodeFilePath: "/app/gcode/slice.gcode",
+    material: "PLA",
+    layerHeight: 0.2,
+    infillDensity: 50,
+    needSupport: false,
+  });
+
+  updateSliceJobSuccess(db, jobId, {
+    filamentWeightG: 42.6,
+    printTimeSeconds: 5025,
+    materialFee: 10.65,
+    timeFee: 5,
+    estimatedPrice: 18.65,
+  });
+
+  const latest = getLatestSliceJobByOrderId(db, order.id);
+
+  assert.equal(latest?.status, "success");
+  assert.equal(latest?.filamentWeightG, 42.6);
+  assert.equal(latest?.printTimeSeconds, 5025);
+  assert.equal(latest?.materialFee, 10.65);
+  assert.equal(latest?.timeFee, 5);
+  assert.equal(latest?.estimatedPrice, 18.65);
+  assert.equal(latest?.material, "PLA");
+  assert.equal(latest?.layerHeight, 0.2);
+  assert.equal(latest?.infillDensity, 50);
+
+  db.close();
+});
+
+test("saves failed PrusaSlicer quote parsing with clear error message", () => {
+  const db = initDatabase(":memory:");
+  const order = createOrderWithFile(db, {
+    customerName: "Jerry",
+    phone: "13800000000",
+    wechat: "make3d",
+    material: "PLA",
+    color: "black",
+    quantity: 1,
+    estimatedPrice: 30,
+    file: {
+      filename: "slice.stl",
+      filepath: "/uploads/slice.stl",
+      filesize: 128,
+    },
+  });
+  const file = getOrderById(db, order.id).files[0];
+  const jobId = createSliceJob(db, {
+    orderId: order.id,
+    fileId: file.id,
+    inputFilePath: file.filepath,
+    gcodeFilePath: "/app/gcode/slice.gcode",
+    material: "PLA",
+    layerHeight: 0.2,
+    infillDensity: 50,
+    needSupport: false,
+  });
+
+  updateSliceJobFailure(
+    db,
+    jobId,
+    "切片完成，但未解析到重量/时间，请检查 G-code 输出格式。",
+  );
+
+  const latest = getLatestSliceJobByOrderId(db, order.id);
+
+  assert.equal(latest?.status, "failed");
+  assert.equal(
+    latest?.errorMessage,
+    "切片完成，但未解析到重量/时间，请检查 G-code 输出格式。",
+  );
 
   db.close();
 });
