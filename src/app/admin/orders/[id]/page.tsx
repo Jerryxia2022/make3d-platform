@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  getLatestSliceJobByOrderId,
   getOrderById,
+  getSliceJobsByOrderId,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
@@ -28,7 +28,7 @@ export default async function AdminOrderDetailPage({
 
   try {
     const order = getOrderById(db, Number(id));
-    const latestSliceJob = getLatestSliceJobByOrderId(db, order.id);
+    const sliceJobs = getSliceJobsByOrderId(db, order.id);
 
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
@@ -116,7 +116,7 @@ export default async function AdminOrderDetailPage({
                 profilePath={slicerConfig.profilePath}
               />
             </div>
-            <SliceJobResult job={latestSliceJob} />
+            <SliceJobResults jobs={sliceJobs} />
           </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
@@ -173,7 +173,21 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SliceJobResult({ job }: { job: SliceJobRecord | null }) {
+function SliceJobResults({ jobs }: { jobs: SliceJobRecord[] }) {
+  if (jobs.length === 0) {
+    return <p className="mt-4 text-sm text-graphite">暂无切片记录</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {jobs.map((job) => (
+        <SliceJobResult job={job} key={job.id} />
+      ))}
+    </div>
+  );
+}
+
+function SliceJobResult({ job }: { job: SliceJobRecord }) {
   if (!job) {
     return <p className="mt-4 text-sm text-graphite">暂无切片记录</p>;
   }

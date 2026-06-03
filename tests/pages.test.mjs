@@ -57,6 +57,15 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
 
   assert.match(formSource, /onDrop={handleDrop}/);
+  assert.match(formSource, /\/api\/quote\/slice/);
+  assert.match(formSource, /fileSliceStatus/);
+  assert.match(formSource, /fileFilamentWeightG/);
+  assert.match(formSource, /filePrintTimeSeconds/);
+  assert.match(formSource, /等待计算/);
+  assert.match(formSource, /正在计算/);
+  assert.match(formSource, /已完成/);
+  assert.match(formSource, /计算失败，需人工确认/);
+  assert.match(formSource, /需人工确认/);
   assert.match(formSource, /multiple/);
   assert.match(formSource, /MAX_FILE_COUNT/);
   assert.match(formSource, /modelFiles/);
@@ -70,12 +79,16 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /{formatDimensions\(dimensions\)}/);
   assert.match(estimateSource, /模型最大外形尺寸约：/);
   assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准。/);
-  assert.match(formSource, /预估价格/);
+  assert.match(formSource, /单件打印价/);
+  assert.match(formSource, /耗材重量/);
+  assert.match(formSource, /材料费/);
+  assert.match(formSource, /工时费/);
   assert.doesNotMatch(formSource, /预估价格区间/);
-  assert.match(formSource, /预估工期/);
+  assert.match(formSource, /打印时间/);
   assert.match(formSource, /如需加急，请在备注中说明，加急可能产生额外费用。/);
-  assert.match(formSource, /预估总价/);
-  assert.match(formSource, /预估总货期/);
+  assert.match(formSource, /打印费合计/);
+  assert.match(formSource, /应付总价/);
+  assert.match(formSource, /预计交货期/);
   assert.match(formSource, /最终价格以人工确认为准/);
   assert.doesNotMatch(formSource, /DimensionField/);
   assert.doesNotMatch(formSource, /label="包装费"/);
@@ -122,6 +135,8 @@ test("admin order detail page shows complete order fields and per-file V2 estima
 
   assert.match(detailSource, /getPrusaSlicerConfig/);
   assert.match(detailSource, /AdminSlicerTestButton/);
+  assert.match(detailSource, /getSliceJobsByOrderId/);
+  assert.match(detailSource, /SliceJobResults/);
   assert.match(detailSource, /orderId={order\.id}/);
   assert.match(detailSource, /enabled={slicerConfig\.enabled}/);
   assert.match(detailSource, /profilePath={slicerConfig\.profilePath}/);
@@ -159,7 +174,7 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /estimateFileBySize/);
   assert.match(apiSource, /estimateOrderSummary/);
   assert.match(apiSource, /packagingFee: estimate\.packagingFee/);
-  assert.match(apiSource, /shippingFee: estimate\.shippingFee/);
+  assert.match(apiSource, /shippingFee: shipping\.amount/);
   assert.match(apiSource, /shippingMethod: getString\(formData, "shippingMethod"\)/);
   assert.match(apiSource, /recipientName: getString\(formData, "recipientName"\)/);
   assert.match(apiSource, /recipientPhone: getString\(formData, "recipientPhone"\)/);
@@ -167,6 +182,10 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /addressDetail: getString\(formData, "addressDetail"\)/);
   assert.match(apiSource, /shippingRemark: getString\(formData, "shippingRemark"\)/);
   assert.match(apiSource, /createOrderWithFiles/);
+  assert.match(apiSource, /getSliceQuoteList/);
+  assert.match(apiSource, /createSliceJob/);
+  assert.match(apiSource, /updateSliceJobSuccess/);
+  assert.match(apiSource, /calculateAutoLeadTimeHours/);
   assert.doesNotMatch(apiSource, /company: getString\(formData, "company"\)/);
 });
 

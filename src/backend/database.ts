@@ -664,6 +664,13 @@ export function getLatestSliceJobByOrderId(db: DatabaseSync, orderId: number) {
   return job ? normalizeSliceJobRecord(job) : null;
 }
 
+export function getSliceJobsByOrderId(db: DatabaseSync, orderId: number) {
+  return db
+    .prepare(sliceJobSelectSql("WHERE order_id = ? ORDER BY updated_at DESC, id DESC"))
+    .all(orderId)
+    .map(normalizeSliceJobRecord) as SliceJobRecord[];
+}
+
 function orderSelectSql(suffix: string) {
   return `SELECT
     id,

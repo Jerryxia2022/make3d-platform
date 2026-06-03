@@ -10,6 +10,7 @@ import {
   createSliceJob,
   getOrderById,
   getLatestSliceJobByOrderId,
+  getSliceJobsByOrderId,
   initDatabase,
   listOrders,
   updateSliceJobFailure,
@@ -168,6 +169,7 @@ test("saves and loads the latest successful PrusaSlicer quote result", () => {
   assert.equal(latest?.material, "PLA");
   assert.equal(latest?.layerHeight, 0.2);
   assert.equal(latest?.infillDensity, 50);
+  assert.equal(getSliceJobsByOrderId(db, order.id).length, 1);
 
   db.close();
 });

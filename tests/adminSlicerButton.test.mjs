@@ -37,7 +37,8 @@ test("admin order detail page wires slicer test button without breaking detail a
   assert.match(source, /orderId={order\.id}/);
   assert.match(source, /enabled={slicerConfig\.enabled}/);
   assert.match(source, /profilePath={slicerConfig\.profilePath}/);
-  assert.match(source, /getLatestSliceJobByOrderId/);
+  assert.match(source, /getSliceJobsByOrderId/);
+  assert.match(source, /SliceJobResults/);
   assert.match(source, /最近一次切片记录/);
   assert.match(source, /formatSlicePrintTime/);
   assert.match(source, /formatSliceMoney/);
