@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
+import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 
 export default async function AccountPage() {
   const customer = await getCurrentCustomer();
@@ -11,6 +12,7 @@ export default async function AccountPage() {
 
   return (
     <main className="min-h-screen px-6 py-10 text-ink">
+      <CustomerAuthBar />
       <section className="mx-auto max-w-3xl border border-ink/10 bg-white/80 p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

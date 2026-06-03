@@ -1,15 +1,25 @@
 import { QuoteForm } from "@/frontend/components/QuoteForm";
 import { ContactSection } from "@/frontend/components/ContactSection";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
+import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import Link from "next/link";
 
 const supportedFormats = ["STL", "3MF", "STEP", "STP"];
 
 export default async function QuotePage() {
   const customer = await getCurrentCustomer();
+  const quoteCustomer = customer
+    ? {
+        name: customer.name,
+        phone: customer.phone,
+        wechat: customer.wechat,
+        email: customer.email,
+      }
+    : null;
 
   return (
     <main className="min-h-screen px-6 py-8 text-ink">
+      <CustomerAuthBar />
       <section className="mx-auto grid w-full max-w-6xl gap-8 py-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">
@@ -40,31 +50,28 @@ export default async function QuotePage() {
                 如需特殊层高、强度、表面效果、支撑方式、分件打印等，请在备注中说明，最终由人工确认。
               </p>
             </div>
+            {!customer ? (
+              <div className="border border-coral/30 bg-coral/10 p-5">
+                <h2 className="text-lg font-semibold">请先登录</h2>
+                <p className="mt-3 text-sm leading-6 text-graphite">
+                  登录后可上传模型文件，自动计算打印价格和预计交货期。
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <Link className="bg-ink px-5 py-3 font-semibold text-white" href="/account/login">
+                    登录
+                  </Link>
+                  <Link className="border border-ink/20 bg-white px-5 py-3 font-semibold text-ink" href="/account/register">
+                    注册
+                  </Link>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
-        {customer ? <QuoteForm /> : <QuoteLoginPrompt />}
+        <QuoteForm customer={quoteCustomer} disabled={!customer} />
       </section>
       <ContactSection />
     </main>
-  );
-}
-
-function QuoteLoginPrompt() {
-  return (
-    <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
-      <h2 className="text-2xl font-bold">请先登录后使用在线报价功能。</h2>
-      <p className="mt-3 text-graphite">
-        登录后可以上传模型、自动切片报价并提交订单。
-      </p>
-      <div className="mt-6 flex gap-3">
-        <Link className="bg-ink px-5 py-3 font-semibold text-white" href="/account/login">
-          登录
-        </Link>
-        <Link className="border border-ink/20 px-5 py-3 font-semibold text-ink" href="/account/register">
-          注册
-        </Link>
-      </div>
-    </section>
   );
 }

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ContactSection } from "@/frontend/components/ContactSection";
+import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 
 const serviceItems = ["快速打样", "小批量试产", "毕业设计打印"];
 
 export default function HomePage() {
   return (
     <main className="min-h-screen px-6 py-8 text-ink">
+      <CustomerAuthBar />
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-6xl flex-col justify-center gap-12">
         <div className="max-w-3xl">
           <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-coral">

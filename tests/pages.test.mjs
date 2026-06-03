@@ -11,7 +11,29 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
 
   assert.match(source, /Make3D/);
   assert.match(source, /href="\/quote"/);
+  assert.match(source, /CustomerAuthBar/);
   assert.match(source, /ContactSection/);
+});
+
+test("front pages show customer auth state while admin pages stay independent", async () => {
+  const navSource = await readSource("src/frontend/components/CustomerAuthBar.tsx");
+  const homeSource = await readSource("src/app/page.tsx");
+  const quoteSource = await readSource("src/app/quote/page.tsx");
+  const accountSource = await readSource("src/app/account/page.tsx");
+  const adminLoginSource = await readSource("src/app/admin/login/page.tsx");
+  const adminOrdersSource = await readSource("src/app/admin/orders/page.tsx");
+
+  assert.match(navSource, /getCurrentCustomer/);
+  assert.match(navSource, /href="\/account\/login"/);
+  assert.match(navSource, /href="\/account\/register"/);
+  assert.match(navSource, /href="\/account"/);
+  assert.match(navSource, /href="\/account\/logout"/);
+  assert.match(navSource, /customer\.name \|\| customer\.phone/);
+  assert.match(homeSource, /CustomerAuthBar/);
+  assert.match(quoteSource, /CustomerAuthBar/);
+  assert.match(accountSource, /CustomerAuthBar/);
+  assert.doesNotMatch(adminLoginSource, /CustomerAuthBar/);
+  assert.doesNotMatch(adminOrdersSource, /CustomerAuthBar/);
 });
 
 test("customer MVP pages and logout route exist", async () => {
@@ -33,7 +55,7 @@ test("quote page shows FDM guidance instead of pricing explanation", async () =>
   assert.match(source, /getCurrentCustomer/);
   assert.match(source, /href="\/account\/login"/);
   assert.match(source, /href="\/account\/register"/);
-  assert.match(source, /QuoteLoginPrompt/);
+  assert.doesNotMatch(source, /QuoteLoginPrompt/);
 
   assert.match(source, /FDM 是通过热熔材料逐层堆叠成型的3D打印工艺/);
   assert.match(source, /默认按 0\.4mm 喷嘴、0\.2mm 层高、50% 填充进行预估/);
@@ -57,6 +79,28 @@ test("account pages expose registration, login, forgot password, and reset passw
   assert.match(registerSource, /微信很重要/);
   assert.match(loginSource, /\/api\/account\/login/);
   assert.match(forgotSource, /\/api\/account\/forgot-password/);
+});
+
+test("quote form supports disabled guest mode and customer prefill", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const quoteSource = await readSource("src/app/quote/page.tsx");
+
+  assert.match(quoteSource, /<QuoteForm/);
+  assert.match(quoteSource, /disabled={!customer}/);
+  assert.match(quoteSource, /quoteCustomer/);
+  assert.match(quoteSource, /customer={quoteCustomer}/);
+  assert.match(quoteSource, /登录后可上传模型文件，自动计算打印价格和预计交货期。/);
+  assert.match(formSource, /disabled = false/);
+  assert.match(formSource, /customer\?: QuoteFormCustomer/);
+  assert.match(formSource, /guestUploadGateMessage/);
+  assert.match(formSource, /if \(disabled\) \{/);
+  assert.match(formSource, /disabled={disabled}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes \|\| disabled}/);
+  assert.match(formSource, /defaultValue={customer\?\.name \|\| ""}/);
+  assert.match(formSource, /defaultValue={customer\?\.phone \|\| ""}/);
+  assert.match(formSource, /defaultValue={customer\?\.wechat \|\| ""}/);
+  assert.match(formSource, /defaultValue={customer\?\.email \|\| ""}/);
+  assert.match(formSource, /文件卡片区域/);
 });
 
 test("quote form exposes merged contact and shipping fields with customer validation", async () => {
@@ -126,7 +170,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /服务器繁忙/);
   assert.match(formSource, /部分文件仍在计算，报价完成后将自动更新总价。/);
   assert.match(formSource, /请等待报价完成后提交/);
-  assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes \|\| disabled}/);
   assert.match(formSource, /等待计算/);
   assert.match(formSource, /正在计算/);
   assert.match(formSource, /已完成/);

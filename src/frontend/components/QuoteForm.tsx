@@ -24,6 +24,7 @@ const allowedExtensions = [".stl", ".step", ".stp", ".3mf"];
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const customerNamePattern = "(?:[\\u4e00-\\u9fa5]{2,}|[A-Za-z][A-Za-z\\s'-]{3,})";
+const guestUploadGateMessage = "请先登录后使用在线上传和自动报价功能。";
 
 type SelectedModelFile = SelectedQuoteFile & {
   file: File;
@@ -56,7 +57,20 @@ type SliceQuoteState = {
   result?: SliceQuoteResult;
 };
 
-export function QuoteForm() {
+type QuoteFormCustomer = {
+  name: string;
+  phone: string;
+  wechat: string;
+  email: string | null;
+};
+
+export function QuoteForm({
+  customer,
+  disabled = false,
+}: {
+  customer?: QuoteFormCustomer | null;
+  disabled?: boolean;
+}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<SelectedModelFile[]>([]);
@@ -281,6 +295,11 @@ export function QuoteForm() {
   }, [files, sliceRequestKey]);
 
   function addFiles(nextFiles: FileList | File[]) {
+    if (disabled) {
+      setError(guestUploadGateMessage);
+      return;
+    }
+
     setError("");
     const incomingFiles = Array.from(nextFiles);
 
@@ -321,6 +340,10 @@ export function QuoteForm() {
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
+    if (disabled) {
+      setError(guestUploadGateMessage);
+      return;
+    }
     addFiles(event.dataTransfer.files);
   }
 
@@ -364,6 +387,11 @@ export function QuoteForm() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
+    if (disabled) {
+      setError(guestUploadGateMessage);
+      return;
+    }
 
     if (files.length === 0) {
       setError("请先上传模型文件");
@@ -449,7 +477,7 @@ export function QuoteForm() {
     >
       <section>
         <div
-          className="flex min-h-56 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-6 py-10 text-center"
+          className="relative flex min-h-56 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-6 py-10 text-center"
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
         >
@@ -457,10 +485,18 @@ export function QuoteForm() {
           <p className="mt-3 max-w-md text-sm leading-6 text-graphite">
             支持 .stl / .step / .stp / .3mf，最多一次上传 5 个文件，单文件最大 50MB。
           </p>
+          {disabled ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/85 px-6 text-center">
+              <p className="max-w-sm text-base font-bold text-ink">
+                {guestUploadGateMessage}
+              </p>
+            </div>
+          ) : null}
         </div>
         <input
           accept={allowedExtensions.join(",")}
           className="sr-only"
+          disabled={disabled}
           id="modelFiles"
           multiple
           name="modelFiles"
@@ -475,7 +511,14 @@ export function QuoteForm() {
         />
         <button
           className="mt-4 w-full border border-ink/20 bg-white px-5 py-3 font-semibold text-ink transition hover:border-ink"
-          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          onClick={() => {
+            if (disabled) {
+              setError(guestUploadGateMessage);
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
           type="button"
         >
           选择文件
@@ -545,6 +588,7 @@ export function QuoteForm() {
                     </div>
                     <button
                       className="self-start text-sm font-semibold text-coral"
+                      disabled={disabled}
                       onClick={() => removeFile(item.id)}
                       type="button"
                     >
@@ -557,6 +601,7 @@ export function QuoteForm() {
                       材料
                       <select
                         className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        disabled={disabled}
                         name="fileMaterials"
                         onChange={(event) =>
                           updateFileOption(item.id, "material", event.target.value)
@@ -574,6 +619,7 @@ export function QuoteForm() {
                       颜色
                       <select
                         className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        disabled={disabled}
                         name="fileColors"
                         onChange={(event) => updateFileOption(item.id, "color", event.target.value)}
                         value={item.color}
@@ -589,6 +635,7 @@ export function QuoteForm() {
                       数量
                       <input
                         className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        disabled={disabled}
                         inputMode="numeric"
                         max="1000"
                         min="1"
@@ -606,13 +653,22 @@ export function QuoteForm() {
             );
           })}
         </section>
-      ) : null}
+      ) : (
+        <section className="border border-ink/10 bg-white/70 p-5">
+          <h2 className="text-lg font-bold">文件卡片区域</h2>
+          <p className="mt-3 text-sm text-graphite">
+            上传模型后会在这里显示文件名、尺寸、材料、颜色、数量、切片状态和单件价格。
+          </p>
+        </section>
+      )}
 
       <section className="border border-ink/10 bg-white/70 p-5">
         <h2 className="text-lg font-bold">联系与收货信息</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <TextField
             autoComplete="name"
+            defaultValue={customer?.name || ""}
+            disabled={disabled}
             label="姓名"
             name="customerName"
             pattern={customerNamePattern}
@@ -621,6 +677,8 @@ export function QuoteForm() {
           />
           <TextField
             autoComplete="tel"
+            defaultValue={customer?.phone || ""}
+            disabled={disabled}
             inputMode="tel"
             label="手机号"
             name="phone"
@@ -634,18 +692,28 @@ export function QuoteForm() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <TextField
             autoComplete="off"
+            defaultValue={customer?.wechat || ""}
+            disabled={disabled}
             helpText="微信很重要，请填写常用微信，方便确认报价和生产细节。"
             label="微信"
             name="wechat"
             required
           />
-          <TextField autoComplete="email" label="邮箱" name="email" type="email" />
+          <TextField
+            autoComplete="email"
+            defaultValue={customer?.email || ""}
+            disabled={disabled}
+            label="邮箱"
+            name="email"
+            type="email"
+          />
         </div>
 
         <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
           配送方式
           <select
             className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            disabled={disabled}
             id="shippingMethod"
             name="shippingMethod"
             onChange={(event) => setShippingMethod(event.target.value)}
@@ -663,6 +731,7 @@ export function QuoteForm() {
           收货地址
           <textarea
             className="mt-2 min-h-24 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            disabled={disabled}
             name="addressDetail"
             placeholder="填写省市区、详细地址、收件说明等"
             required
@@ -673,6 +742,7 @@ export function QuoteForm() {
           备注
           <textarea
             className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            disabled={disabled}
             name="remark"
             placeholder="补充特殊层高、强度、表面效果、支撑方式、分件打印、加急等要求"
           />
@@ -721,7 +791,7 @@ export function QuoteForm() {
 
       <button
         className="w-full bg-ink px-5 py-3 font-semibold text-white transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/60"
-        disabled={isSubmitting || hasPendingQuotes}
+        disabled={isSubmitting || hasPendingQuotes || disabled}
         type="submit"
       >
         {hasPendingQuotes ? "请等待报价完成后提交" : isSubmitting ? "提交中..." : "提交订单"}
@@ -806,6 +876,8 @@ function QuoteMetric({
 
 function TextField({
   autoComplete,
+  defaultValue,
+  disabled,
   helpText,
   inputMode,
   label,
@@ -816,6 +888,8 @@ function TextField({
   type = "text",
 }: {
   autoComplete?: string;
+  defaultValue?: string;
+  disabled?: boolean;
   helpText?: string;
   inputMode?: "email" | "numeric" | "search" | "tel" | "text" | "url";
   label: string;
@@ -831,6 +905,8 @@ function TextField({
       <input
         autoComplete={autoComplete}
         className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+        defaultValue={defaultValue}
+        disabled={disabled}
         inputMode={inputMode}
         name={name}
         pattern={pattern}

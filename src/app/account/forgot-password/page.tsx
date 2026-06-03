@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 
 export default async function ForgotPasswordPage({
   searchParams,
@@ -10,6 +11,7 @@ export default async function ForgotPasswordPage({
 
   return (
     <main className="min-h-screen px-6 py-10 text-ink">
+      <CustomerAuthBar />
       <section className="mx-auto max-w-md border border-ink/10 bg-white/80 p-6 shadow-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Make3D 会员</p>
         <h1 className="mt-3 text-3xl font-bold">忘记密码</h1>
