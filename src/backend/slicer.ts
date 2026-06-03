@@ -23,6 +23,23 @@ export type RunPrusaSlicerInput = PrusaSlicerJobInput & {
   config?: PrusaSlicerConfig;
 };
 
+export type GcodeMetadata = {
+  printTimeSeconds: number | null;
+  filamentWeightG: number | null;
+  rawFilamentUsedMm: number | null;
+  rawFilamentUsedCm3: number | null;
+  rawFilamentUsedG: number | null;
+  filamentWeightSource: "mm" | "cm3" | "g" | null;
+  materialDensity: number;
+};
+
+const FILAMENT_DIAMETER_MM = 1.75;
+const MATERIAL_DENSITIES: Record<string, number> = {
+  PLA: 1.24,
+  PETG: 1.27,
+  ABS: 1.04,
+};
+
 export function getPrusaSlicerConfig(env: NodeJS.ProcessEnv = process.env): PrusaSlicerConfig {
   return {
     enabled: env.PRUSASLICER_ENABLED === "true",
@@ -76,17 +93,31 @@ export async function runPrusaSlicer(input: RunPrusaSlicerInput) {
   await spawnWithTimeout(config.bin, args, config.timeoutSeconds * 1000);
 
   const gcode = await readFile(input.gcodeFilePath, "utf8");
-  return parseGcodeMetadata(gcode);
+  return parseGcodeMetadata(gcode, input.material);
 }
 
-export function parseGcodeMetadata(gcode: string) {
+export function parseGcodeMetadata(gcode: string, material = "PLA"): GcodeMetadata {
   const tail = gcode.slice(-20000);
   const timeMatch = tail.match(/estimated printing time(?:\s*\([^)]+\))?\s*=\s*([^\n\r]+)/i);
-  const weightMatch = tail.match(/(?:total\s+)?filament used\s*\[g\]\s*=\s*([0-9]+(?:\.[0-9]+)?)/i);
+  const rawFilamentUsedG = readFilamentValue(tail, "g");
+  const rawFilamentUsedCm3 = readFilamentValue(tail, "cm3");
+  const rawFilamentUsedMm = readFilamentValue(tail, "mm");
+  const materialDensity = getMaterialDensity(material);
+  const { filamentWeightG, filamentWeightSource } = calculateFilamentWeight({
+    materialDensity,
+    rawFilamentUsedCm3,
+    rawFilamentUsedG,
+    rawFilamentUsedMm,
+  });
 
   return {
     printTimeSeconds: timeMatch ? parsePrintingTimeSeconds(timeMatch[1]) : null,
-    filamentWeightG: weightMatch ? Number(weightMatch[1]) : null,
+    filamentWeightG,
+    rawFilamentUsedMm,
+    rawFilamentUsedCm3,
+    rawFilamentUsedG,
+    filamentWeightSource,
+    materialDensity,
   };
 }
 
@@ -102,6 +133,63 @@ export function parsePrintingTimeSeconds(value: string) {
 function readTimePart(value: string, unit: "h" | "m" | "s") {
   const match = value.match(new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${unit}`));
   return match ? Number(match[1]) : 0;
+}
+
+function readFilamentValue(gcodeTail: string, unit: "mm" | "cm3" | "g") {
+  const match = gcodeTail.match(
+    new RegExp(`(?:total\\s+)?filament\\s+used\\s*\\[${unit}\\]\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)`, "i"),
+  );
+
+  return match ? Number(match[1]) : null;
+}
+
+function calculateFilamentWeight({
+  materialDensity,
+  rawFilamentUsedCm3,
+  rawFilamentUsedG,
+  rawFilamentUsedMm,
+}: {
+  materialDensity: number;
+  rawFilamentUsedCm3: number | null;
+  rawFilamentUsedG: number | null;
+  rawFilamentUsedMm: number | null;
+}) {
+  if (rawFilamentUsedG != null) {
+    return {
+      filamentWeightG: rawFilamentUsedG,
+      filamentWeightSource: "g" as const,
+    };
+  }
+
+  if (rawFilamentUsedCm3 != null) {
+    return {
+      filamentWeightG: roundWeight(rawFilamentUsedCm3 * materialDensity),
+      filamentWeightSource: "cm3" as const,
+    };
+  }
+
+  if (rawFilamentUsedMm != null) {
+    const volumeMm3 = rawFilamentUsedMm * Math.PI * (FILAMENT_DIAMETER_MM / 2) ** 2;
+    const volumeCm3 = volumeMm3 / 1000;
+
+    return {
+      filamentWeightG: roundWeight(volumeCm3 * materialDensity),
+      filamentWeightSource: "mm" as const,
+    };
+  }
+
+  return {
+    filamentWeightG: null,
+    filamentWeightSource: null,
+  };
+}
+
+function getMaterialDensity(material: string) {
+  return MATERIAL_DENSITIES[String(material).toUpperCase()] ?? MATERIAL_DENSITIES.PLA;
+}
+
+function roundWeight(value: number) {
+  return Math.round(value * 10000) / 10000;
 }
 
 function parsePositiveInteger(value: string | undefined, fallback: number) {

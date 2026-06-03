@@ -92,6 +92,11 @@ test("initializes orders, files, and slice_jobs tables with estimate, shipping, 
     "need_support",
     "filament_weight_g",
     "print_time_seconds",
+    "raw_filament_used_mm",
+    "raw_filament_used_cm3",
+    "raw_filament_used_g",
+    "filament_weight_source",
+    "material_density",
     "material_fee",
     "time_fee",
     "estimated_price",
@@ -137,6 +142,11 @@ test("saves and loads the latest successful PrusaSlicer quote result", () => {
   updateSliceJobSuccess(db, jobId, {
     filamentWeightG: 42.6,
     printTimeSeconds: 5025,
+    rawFilamentUsedMm: null,
+    rawFilamentUsedCm3: null,
+    rawFilamentUsedG: 42.6,
+    filamentWeightSource: "g",
+    materialDensity: 1.24,
     materialFee: 10.65,
     timeFee: 5,
     estimatedPrice: 18.65,
@@ -147,6 +157,11 @@ test("saves and loads the latest successful PrusaSlicer quote result", () => {
   assert.equal(latest?.status, "success");
   assert.equal(latest?.filamentWeightG, 42.6);
   assert.equal(latest?.printTimeSeconds, 5025);
+  assert.equal(latest?.rawFilamentUsedMm, null);
+  assert.equal(latest?.rawFilamentUsedCm3, null);
+  assert.equal(latest?.rawFilamentUsedG, 42.6);
+  assert.equal(latest?.filamentWeightSource, "g");
+  assert.equal(latest?.materialDensity, 1.24);
   assert.equal(latest?.materialFee, 10.65);
   assert.equal(latest?.timeFee, 5);
   assert.equal(latest?.estimatedPrice, 18.65);

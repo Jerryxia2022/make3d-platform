@@ -18,6 +18,58 @@ test("parses PrusaSlicer G-code printing time and filament weight from tail comm
 
   assert.equal(metadata.printTimeSeconds, 5025);
   assert.equal(metadata.filamentWeightG, 42.6);
+  assert.equal(metadata.rawFilamentUsedG, 42.6);
+  assert.equal(metadata.filamentWeightSource, "g");
+});
+
+test("converts PrusaSlicer filament length in mm to grams", () => {
+  const metadata = parseGcodeMetadata(
+    `
+; estimated printing time = 2h 0m 0s
+; filament used [mm] = 1000
+`,
+    "PLA",
+  );
+  const expectedVolumeMm3 = 1000 * Math.PI * (1.75 / 2) ** 2;
+  const expectedWeightG = (expectedVolumeMm3 / 1000) * 1.24;
+
+  assert.equal(metadata.printTimeSeconds, 7200);
+  assert.equal(Number(metadata.filamentWeightG?.toFixed(4)), Number(expectedWeightG.toFixed(4)));
+  assert.equal(metadata.rawFilamentUsedMm, 1000);
+  assert.equal(metadata.materialDensity, 1.24);
+  assert.equal(metadata.filamentWeightSource, "mm");
+});
+
+test("converts PrusaSlicer filament volume in cm3 to grams", () => {
+  const metadata = parseGcodeMetadata(
+    `
+; estimated printing time = 35m 0s
+; filament used [cm3] = 12.5
+`,
+    "PETG",
+  );
+
+  assert.equal(metadata.printTimeSeconds, 2100);
+  assert.equal(metadata.filamentWeightG, 15.875);
+  assert.equal(metadata.rawFilamentUsedCm3, 12.5);
+  assert.equal(metadata.materialDensity, 1.27);
+  assert.equal(metadata.filamentWeightSource, "cm3");
+});
+
+test("reads PrusaSlicer filament weight in grams directly", () => {
+  const metadata = parseGcodeMetadata(
+    `
+; estimated printing time = 10m 0s
+; filament used [g] = 8.25
+`,
+    "ABS",
+  );
+
+  assert.equal(metadata.printTimeSeconds, 600);
+  assert.equal(metadata.filamentWeightG, 8.25);
+  assert.equal(metadata.rawFilamentUsedG, 8.25);
+  assert.equal(metadata.materialDensity, 1.04);
+  assert.equal(metadata.filamentWeightSource, "g");
 });
 
 test("returns empty metadata when PrusaSlicer G-code lacks time and weight comments", () => {
@@ -29,6 +81,7 @@ G1 X0 Y0
 
   assert.equal(metadata.printTimeSeconds, null);
   assert.equal(metadata.filamentWeightG, null);
+  assert.equal(metadata.filamentWeightSource, null);
 });
 
 test("builds PrusaSlicer command as argument array without shell concatenation", () => {

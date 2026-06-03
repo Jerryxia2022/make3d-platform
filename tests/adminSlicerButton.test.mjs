@@ -38,6 +38,11 @@ test("admin order detail page wires slicer test button without breaking detail a
   assert.match(source, /最近一次切片记录/);
   assert.match(source, /formatSlicePrintTime/);
   assert.match(source, /formatSliceMoney/);
+  assert.match(source, /原始解析字段/);
+  assert.match(source, /rawFilamentUsedMm/);
+  assert.match(source, /rawFilamentUsedCm3/);
+  assert.match(source, /rawFilamentUsedG/);
+  assert.match(source, /filamentWeightSource/);
   assert.match(source, /AdminStatusForm orderId={order\.id} status={order\.status}/);
   assert.match(source, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
 });
@@ -51,6 +56,7 @@ test("admin slicer test API checks auth, disabled state, profile missing, and un
   assert.match(source, /自动切片报价尚未启用/);
   assert.match(source, /切片配置缺失，请先配置 profiles\/bambu-p1s\.ini/);
   assert.match(source, /切片完成，但未解析到重量\/时间，请检查 G-code 输出格式。/);
+  assert.match(source, /耗材重量解析失败，请检查 G-code 输出。/);
   assert.match(source, /runPrusaSlicer/);
   assert.match(source, /calculateAutoFilePrice/);
   assert.match(source, /createSliceJob/);
@@ -62,6 +68,11 @@ test("admin slicer test API checks auth, disabled state, profile missing, and un
   assert.match(source, /material_fee/);
   assert.match(source, /time_fee/);
   assert.match(source, /estimated_price/);
+  assert.match(source, /raw_filament_used_mm/);
+  assert.match(source, /raw_filament_used_cm3/);
+  assert.match(source, /raw_filament_used_g/);
+  assert.match(source, /filament_weight_source/);
+  assert.match(source, /material_density/);
   assert.match(source, /切片失败/);
   assert.match(source, /job:/);
 });

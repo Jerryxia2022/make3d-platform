@@ -143,6 +143,11 @@ export type SliceJobInput = {
 export type SliceJobSuccessInput = {
   filamentWeightG: number;
   printTimeSeconds: number;
+  rawFilamentUsedMm?: number | null;
+  rawFilamentUsedCm3?: number | null;
+  rawFilamentUsedG?: number | null;
+  filamentWeightSource?: string | null;
+  materialDensity?: number | null;
   materialFee: number;
   timeFee: number;
   estimatedPrice: number;
@@ -161,6 +166,11 @@ export type SliceJobRecord = {
   needSupport: boolean;
   filamentWeightG: number | null;
   printTimeSeconds: number | null;
+  rawFilamentUsedMm: number | null;
+  rawFilamentUsedCm3: number | null;
+  rawFilamentUsedG: number | null;
+  filamentWeightSource: string | null;
+  materialDensity: number | null;
   materialFee: number | null;
   timeFee: number | null;
   estimatedPrice: number | null;
@@ -249,6 +259,11 @@ export function initDatabase(dbPath = getDatabasePath()) {
       need_support INTEGER NOT NULL DEFAULT 0,
       filament_weight_g REAL,
       print_time_seconds INTEGER,
+      raw_filament_used_mm REAL,
+      raw_filament_used_cm3 REAL,
+      raw_filament_used_g REAL,
+      filament_weight_source TEXT,
+      material_density REAL,
       material_fee REAL,
       time_fee REAL,
       estimated_price REAL,
@@ -306,6 +321,11 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["need_support", "INTEGER NOT NULL DEFAULT 0"],
     ["filament_weight_g", "REAL"],
     ["print_time_seconds", "INTEGER"],
+    ["raw_filament_used_mm", "REAL"],
+    ["raw_filament_used_cm3", "REAL"],
+    ["raw_filament_used_g", "REAL"],
+    ["filament_weight_source", "TEXT"],
+    ["material_density", "REAL"],
     ["material_fee", "REAL"],
     ["time_fee", "REAL"],
     ["estimated_price", "REAL"],
@@ -593,6 +613,11 @@ export function updateSliceJobSuccess(
        SET status = 'success',
            filament_weight_g = ?,
            print_time_seconds = ?,
+           raw_filament_used_mm = ?,
+           raw_filament_used_cm3 = ?,
+           raw_filament_used_g = ?,
+           filament_weight_source = ?,
+           material_density = ?,
            material_fee = ?,
            time_fee = ?,
            estimated_price = ?,
@@ -603,6 +628,11 @@ export function updateSliceJobSuccess(
     .run(
       input.filamentWeightG,
       input.printTimeSeconds,
+      input.rawFilamentUsedMm ?? null,
+      input.rawFilamentUsedCm3 ?? null,
+      input.rawFilamentUsedG ?? null,
+      input.filamentWeightSource ?? null,
+      input.materialDensity ?? null,
       input.materialFee,
       input.timeFee,
       input.estimatedPrice,
@@ -681,6 +711,11 @@ function sliceJobSelectSql(suffix: string) {
     need_support AS needSupport,
     filament_weight_g AS filamentWeightG,
     print_time_seconds AS printTimeSeconds,
+    raw_filament_used_mm AS rawFilamentUsedMm,
+    raw_filament_used_cm3 AS rawFilamentUsedCm3,
+    raw_filament_used_g AS rawFilamentUsedG,
+    filament_weight_source AS filamentWeightSource,
+    material_density AS materialDensity,
     material_fee AS materialFee,
     time_fee AS timeFee,
     estimated_price AS estimatedPrice,

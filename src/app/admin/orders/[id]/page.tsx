@@ -199,6 +199,16 @@ function SliceJobResult({ job }: { job: SliceJobRecord | null }) {
         <Detail label="使用材料" value={job.material || "-"} />
         <Detail label="使用配置" value="0.4喷嘴 / 0.2层高 / 50%填充" />
       </dl>
+      <div className="mt-5 border-t border-ink/10 pt-4">
+        <h4 className="text-sm font-bold">原始解析字段</h4>
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          <Detail label="长度mm" value={formatOptionalNumber(job.rawFilamentUsedMm)} />
+          <Detail label="体积cm3" value={formatOptionalNumber(job.rawFilamentUsedCm3)} />
+          <Detail label="重量g" value={formatOptionalNumber(job.rawFilamentUsedG)} />
+          <Detail label="重量来源" value={job.filamentWeightSource || "-"} />
+          <Detail label="材料密度" value={formatOptionalNumber(job.materialDensity)} />
+        </dl>
+      </div>
     </div>
   );
 }
@@ -257,6 +267,10 @@ function formatWeight(value: number | null) {
 
 function formatSliceMoney(value: number | null) {
   return value == null ? "-" : `${value.toFixed(2)} 元`;
+}
+
+function formatOptionalNumber(value: number | null) {
+  return value == null ? "-" : String(value);
 }
 
 function formatSlicePrintTime(value: number | null) {

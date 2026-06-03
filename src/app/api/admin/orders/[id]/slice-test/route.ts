@@ -22,6 +22,11 @@ type SliceTestResponse = {
   result?: {
     filament_weight_g: number;
     print_time_seconds: number;
+    raw_filament_used_mm: number | null;
+    raw_filament_used_cm3: number | null;
+    raw_filament_used_g: number | null;
+    filament_weight_source: string | null;
+    material_density: number | null;
     material_fee: number;
     time_fee: number;
     estimated_price: number;
@@ -32,6 +37,7 @@ type SliceTestResponse = {
 const LAYER_HEIGHT = 0.2;
 const INFILL_DENSITY = 50;
 const PARSE_FAILURE_MESSAGE = "切片完成，但未解析到重量/时间，请检查 G-code 输出格式。";
+const WEIGHT_PARSE_FAILURE_MESSAGE = "耗材重量解析失败，请检查 G-code 输出。";
 
 export async function POST(
   _request: Request,
@@ -115,7 +121,28 @@ export async function POST(
       config: slicerConfig,
     });
 
-    if (metadata.filamentWeightG == null || metadata.printTimeSeconds == null) {
+    if (metadata.filamentWeightG == null) {
+      updateSliceJobFailure(db, jobId, WEIGHT_PARSE_FAILURE_MESSAGE);
+      return jsonResponse(
+        {
+          success: false,
+          message: WEIGHT_PARSE_FAILURE_MESSAGE,
+          job: {
+            id: jobId,
+            orderId: order.id,
+            fileId: firstFile.id,
+            status: "failed",
+            inputFilePath: firstFile.filepath,
+            gcodeFilePath,
+            material,
+          },
+          error: WEIGHT_PARSE_FAILURE_MESSAGE,
+        },
+        422,
+      );
+    }
+
+    if (metadata.printTimeSeconds == null) {
       updateSliceJobFailure(db, jobId, PARSE_FAILURE_MESSAGE);
       return jsonResponse(
         {
@@ -145,6 +172,11 @@ export async function POST(
     updateSliceJobSuccess(db, jobId, {
       filamentWeightG: metadata.filamentWeightG,
       printTimeSeconds: metadata.printTimeSeconds,
+      rawFilamentUsedMm: metadata.rawFilamentUsedMm,
+      rawFilamentUsedCm3: metadata.rawFilamentUsedCm3,
+      rawFilamentUsedG: metadata.rawFilamentUsedG,
+      filamentWeightSource: metadata.filamentWeightSource,
+      materialDensity: metadata.materialDensity,
       materialFee: price.materialFee,
       timeFee: price.laborFee,
       estimatedPrice: price.estimatedPrice,
@@ -166,6 +198,11 @@ export async function POST(
       result: {
         filament_weight_g: metadata.filamentWeightG,
         print_time_seconds: metadata.printTimeSeconds,
+        raw_filament_used_mm: metadata.rawFilamentUsedMm,
+        raw_filament_used_cm3: metadata.rawFilamentUsedCm3,
+        raw_filament_used_g: metadata.rawFilamentUsedG,
+        filament_weight_source: metadata.filamentWeightSource,
+        material_density: metadata.materialDensity,
         material_fee: price.materialFee,
         time_fee: price.laborFee,
         estimated_price: price.estimatedPrice,
