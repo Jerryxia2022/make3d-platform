@@ -713,10 +713,10 @@ function buildOrderSummary(
       ? roundMoney(Math.max(printFeeTotal + shippingAmount, 20))
       : null;
   const leadTimeLabel =
-    hasManualFile || isCalculating
-      ? "部分文件需人工确认，交货期以人工确认为准"
-      : successfulQuotes.length > 0
-        ? `约${calculateLeadTimeHours(successfulQuotes.map((quote) => quote.result.printTimeSeconds))}小时`
+    successfulQuotes.length > 0
+      ? `约${calculateLeadTimeHours(successfulQuotes.map((quote) => quote.result.printTimeSeconds))}小时`
+      : hasManualFile || isCalculating
+        ? "需人工确认"
         : `约${fallbackSummary.leadTimeMaxHours}小时`;
 
   return {
