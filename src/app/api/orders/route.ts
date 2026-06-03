@@ -13,6 +13,7 @@ import { estimateFileBySize, estimateOrderSummary, getShippingEstimate } from "@
 import { notifyAdminNewOrder } from "@/backend/email";
 import { consumeUploadRateLimit, getClientIp } from "@/backend/rateLimit";
 import { saveUploadFile } from "@/backend/uploads";
+import { isValidMainlandPhone, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,13 @@ export async function POST(request: Request) {
         { error: `缺少必填字段：${missingField}` },
         { status: 400 },
       );
+    }
+
+    const phone = getString(formData, "phone");
+    const recipientPhone = getString(formData, "recipientPhone");
+
+    if (!isValidMainlandPhone(phone) || !isValidMainlandPhone(recipientPhone)) {
+      return NextResponse.json({ error: mainlandPhoneErrorMessage }, { status: 400 });
     }
 
     const rawFiles = formData.getAll("modelFiles");
@@ -185,7 +193,7 @@ export async function POST(request: Request) {
       const orderInput = {
         customerId: customer.id,
         customerName: getString(formData, "customerName"),
-        phone: getString(formData, "phone"),
+        phone,
         wechat: getString(formData, "wechat"),
         email: getString(formData, "email"),
         company: "",
@@ -206,7 +214,7 @@ export async function POST(request: Request) {
         shippingMethod: getString(formData, "shippingMethod"),
         shippingFeeEstimate: shipping.label,
         recipientName: getString(formData, "recipientName"),
-        recipientPhone: getString(formData, "recipientPhone"),
+        recipientPhone,
         addressRegion: getString(formData, "addressRegion"),
         addressDetail: getString(formData, "addressDetail"),
         shippingRemark: getString(formData, "shippingRemark"),

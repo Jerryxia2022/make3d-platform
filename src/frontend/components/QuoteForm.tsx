@@ -16,6 +16,11 @@ import {
   type QuoteDimensions,
   type SelectedQuoteFile,
 } from "@/frontend/lib/quote-estimates";
+import {
+  isValidMainlandPhone,
+  mainlandPhoneErrorMessage,
+  mainlandPhoneHtmlPattern,
+} from "@/shared/phoneValidation";
 
 const materials = ["PLA", "PETG", "ABS"];
 const colors = ["黑", "白", "红", "蓝"];
@@ -408,10 +413,16 @@ export function QuoteForm({
       return;
     }
 
-    setIsSubmitting(true);
+    const formData = new FormData(event.currentTarget);
+    const phone = getRequiredFormValue(formData, "phone");
 
+    if (!isValidMainlandPhone(phone)) {
+      setError(mainlandPhoneErrorMessage);
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const formData = new FormData(event.currentTarget);
       formData.delete("modelFiles");
       formData.delete("fileMaterials");
       formData.delete("fileColors");
@@ -432,7 +443,8 @@ export function QuoteForm({
       formData.delete("fileUnitPrice");
       formData.delete("fileSubtotalPrice");
       formData.set("recipientName", getRequiredFormValue(formData, "customerName"));
-      formData.set("recipientPhone", getRequiredFormValue(formData, "phone"));
+      formData.set("phone", phone);
+      formData.set("recipientPhone", phone);
       formData.set("addressRegion", "-");
       formData.set("shippingRemark", "");
 
@@ -679,12 +691,13 @@ export function QuoteForm({
             autoComplete="tel"
             defaultValue={customer?.phone || ""}
             disabled={disabled}
-            inputMode="tel"
+            inputMode="numeric"
             label="手机号"
+            maxLength={11}
             name="phone"
-            pattern="1[3-9]\\d{9}"
+            pattern={mainlandPhoneHtmlPattern}
             required
-            title="必须填写11位中国大陆手机号"
+            title={mainlandPhoneErrorMessage}
             type="tel"
           />
         </div>
@@ -881,6 +894,7 @@ function TextField({
   helpText,
   inputMode,
   label,
+  maxLength,
   name,
   pattern,
   required,
@@ -893,6 +907,7 @@ function TextField({
   helpText?: string;
   inputMode?: "email" | "numeric" | "search" | "tel" | "text" | "url";
   label: string;
+  maxLength?: number;
   name: string;
   pattern?: string;
   required?: boolean;
@@ -908,6 +923,7 @@ function TextField({
         defaultValue={defaultValue}
         disabled={disabled}
         inputMode={inputMode}
+        maxLength={maxLength}
         name={name}
         pattern={pattern}
         required={required}

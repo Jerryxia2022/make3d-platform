@@ -114,8 +114,11 @@ test("quote form exposes merged contact and shipping fields with customer valida
   assert.match(formSource, /pattern={customerNamePattern}/);
   assert.match(formSource, /至少2个汉字，或至少4个英文字母/);
   assert.match(formSource, /name="phone"/);
-  assert.match(formSource, /pattern="1\[3-9\]\\\\d\{9\}"/);
-  assert.match(formSource, /必须填写11位中国大陆手机号/);
+  assert.match(formSource, /inputMode="numeric"/);
+  assert.match(formSource, /maxLength=\{11\}/);
+  assert.match(formSource, /pattern={mainlandPhoneHtmlPattern}/);
+  assert.match(formSource, /title={mainlandPhoneErrorMessage}/);
+  assert.match(formSource, /isValidMainlandPhone\(phone\)/);
   assert.match(formSource, /微信很重要，请填写常用微信，方便确认报价和生产细节。/);
   assert.match(formSource, /name="wechat"/);
   assert.match(formSource, /name="email"/);
@@ -123,7 +126,7 @@ test("quote form exposes merged contact and shipping fields with customer valida
   assert.match(formSource, /name="addressDetail"/);
   assert.match(formSource, /name="remark"/);
   assert.match(formSource, /formData\.set\("recipientName", getRequiredFormValue\(formData, "customerName"\)\)/);
-  assert.match(formSource, /formData\.set\("recipientPhone", getRequiredFormValue\(formData, "phone"\)\)/);
+  assert.match(formSource, /formData\.set\("recipientPhone", phone\)/);
   assert.match(formSource, /formData\.set\("addressRegion", "-"\)/);
   assert.doesNotMatch(formSource, /name="recipientName"/);
   assert.doesNotMatch(formSource, /name="recipientPhone"/);
@@ -323,11 +326,13 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /getNumberList\(formData, "fileDimensionZ"\)/);
   assert.match(apiSource, /estimateFileBySize/);
   assert.match(apiSource, /estimateOrderSummary/);
+  assert.match(apiSource, /isValidMainlandPhone\(phone\)/);
+  assert.match(apiSource, /mainlandPhoneErrorMessage/);
   assert.match(apiSource, /packagingFee: estimate\.packagingFee/);
   assert.match(apiSource, /shippingFee: shipping\.amount/);
   assert.match(apiSource, /shippingMethod: getString\(formData, "shippingMethod"\)/);
   assert.match(apiSource, /recipientName: getString\(formData, "recipientName"\)/);
-  assert.match(apiSource, /recipientPhone: getString\(formData, "recipientPhone"\)/);
+  assert.match(apiSource, /recipientPhone,/);
   assert.match(apiSource, /addressRegion: getString\(formData, "addressRegion"\)/);
   assert.match(apiSource, /addressDetail: getString\(formData, "addressDetail"\)/);
   assert.match(apiSource, /shippingRemark: getString\(formData, "shippingRemark"\)/);
