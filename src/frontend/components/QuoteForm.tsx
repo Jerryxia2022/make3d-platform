@@ -11,6 +11,7 @@ import {
   formatBytes,
   formatDimensions,
   formatOptionSummary,
+  getSafeQuantity,
   safeFileSize,
   type QuoteDimensions,
   type SelectedQuoteFile,
@@ -51,6 +52,7 @@ type SliceQuoteState = {
   phase: string;
   startedAt?: number;
   elapsedSeconds: number;
+  quantity: number;
   result?: SliceQuoteResult;
 };
 
@@ -147,7 +149,7 @@ export function QuoteForm() {
           if (!current || current.status !== "manual") {
             setSliceQuotes((quotes) => ({
               ...quotes,
-              [item.id]: createManualQuoteState(),
+              [item.id]: createManualQuoteState(item.quantity),
             }));
           }
           continue;
@@ -171,6 +173,7 @@ export function QuoteForm() {
             phase: "正在准备切片任务",
             startedAt: Date.now(),
             elapsedSeconds: 0,
+            quantity: item.quantity,
           },
         }));
 
@@ -178,7 +181,7 @@ export function QuoteForm() {
           setSliceQuotes((quotes) => ({
             ...quotes,
             [item.id]: {
-              ...(quotes[item.id] || createUploadedQuoteState(item.material)),
+              ...(quotes[item.id] || createUploadedQuoteState(item.material, item.quantity)),
               status: "calculating",
               material: item.material,
               message: "正在计算",
@@ -186,6 +189,7 @@ export function QuoteForm() {
               phase: "正在调用 PrusaSlicer",
               startedAt: quotes[item.id]?.startedAt || Date.now(),
               elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
+              quantity: item.quantity,
             },
           }));
 
@@ -214,12 +218,13 @@ export function QuoteForm() {
             setSliceQuotes((quotes) => ({
               ...quotes,
               [item.id]: {
-                ...(quotes[item.id] || createUploadedQuoteState(item.material)),
+                ...(quotes[item.id] || createUploadedQuoteState(item.material, item.quantity)),
                 status: "failed",
                 material: item.material,
                 message: getSliceFailureReason(result),
                 phase: "计算失败，需人工确认",
                 progress: 100,
+                quantity: item.quantity,
               },
             }));
             continue;
@@ -237,6 +242,7 @@ export function QuoteForm() {
               progress: 100,
               phase: "报价完成",
               elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
+              quantity: item.quantity,
               result: normalizeSliceQuoteResult(quoteResult),
             },
           }));
@@ -252,7 +258,7 @@ export function QuoteForm() {
           setSliceQuotes((quotes) => ({
             ...quotes,
             [item.id]: {
-              ...(quotes[item.id] || createUploadedQuoteState(item.material)),
+              ...(quotes[item.id] || createUploadedQuoteState(item.material, item.quantity)),
               status: "failed",
               material: item.material,
               message: getSliceFailureReason({
@@ -260,6 +266,7 @@ export function QuoteForm() {
               }),
               phase: "计算失败，需人工确认",
               progress: 100,
+              quantity: item.quantity,
             },
           }));
         }
@@ -294,6 +301,7 @@ export function QuoteForm() {
       file,
       material: "PLA",
       color: "黑",
+      quantity: 1,
     }));
 
     setFiles((currentFiles) => [
@@ -304,8 +312,8 @@ export function QuoteForm() {
       const nextQuotes = { ...quotes };
       for (const item of selectedFiles) {
         nextQuotes[item.id] = isStlFile(item.file.name)
-          ? createUploadedQuoteState(item.material)
-          : createManualQuoteState();
+          ? createUploadedQuoteState(item.material, item.quantity)
+          : createManualQuoteState(item.quantity);
       }
       return nextQuotes;
     });
@@ -328,6 +336,20 @@ export function QuoteForm() {
         return nextQuotes;
       });
     }
+  }
+
+  function updateFileQuantity(id: string, value: string) {
+    const quantity = Number(value);
+
+    if (!isValidQuantity(quantity)) {
+      setError("数量必须是 1-1000 的整数");
+      return;
+    }
+
+    setError("");
+    setFiles((currentFiles) =>
+      currentFiles.map((item) => (item.id === id ? { ...item, quantity } : item)),
+    );
   }
 
   function removeFile(id: string) {
@@ -353,6 +375,11 @@ export function QuoteForm() {
       return;
     }
 
+    if (!validateFileQuantities(files)) {
+      setError("数量必须是 1-1000 的整数");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -373,6 +400,9 @@ export function QuoteForm() {
       formData.delete("fileMaterialDensity");
       formData.delete("fileMaterialFee");
       formData.delete("fileTimeFee");
+      formData.delete("fileQuantities");
+      formData.delete("fileUnitPrice");
+      formData.delete("fileSubtotalPrice");
       formData.set("recipientName", getRequiredFormValue(formData, "customerName"));
       formData.set("recipientPhone", getRequiredFormValue(formData, "phone"));
       formData.set("addressRegion", "-");
@@ -380,6 +410,7 @@ export function QuoteForm() {
 
       for (const item of files) {
         const dimensions = estimateDisplayDimensions(item.file);
+        const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
 
         formData.append("modelFiles", item.file);
         formData.append("fileMaterials", item.material);
@@ -387,7 +418,10 @@ export function QuoteForm() {
         formData.append("fileDimensionX", formatDimensionFormValue(dimensions?.x));
         formData.append("fileDimensionY", formatDimensionFormValue(dimensions?.y));
         formData.append("fileDimensionZ", formatDimensionFormValue(dimensions?.z));
-        appendSliceQuoteFormData(formData, sliceQuotes[item.id]);
+        formData.append("fileQuantities", String(getSafeQuantity(item.quantity)));
+        formData.append("fileUnitPrice", formatNullableNumber(getFileDisplayPrice(quote, files.length)));
+        formData.append("fileSubtotalPrice", formatNullableNumber(getFileSubtotalPrice(quote, files.length, item.quantity)));
+        appendSliceQuoteFormData(formData, quote);
       }
 
       const response = await fetch("/api/orders", {
@@ -453,6 +487,7 @@ export function QuoteForm() {
           {fileEstimates.map(({ item, dimensions, estimate }) => {
             const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
             const filePrice = getFileDisplayPrice(quote, files.length);
+            const fileSubtotal = getFileSubtotalPrice(quote, files.length, item.quantity);
 
             return (
             <article className="border border-ink/10 bg-white/80 p-4" key={item.id}>
@@ -487,7 +522,12 @@ export function QuoteForm() {
                       <p className="mt-1 text-sm text-graphite">
                         {formatBytes(item.file.size)} · {getFileType(item.file.name)}
                       </p>
-                      <SliceQuoteDetails quote={quote} unitPrice={filePrice} />
+                      <SliceQuoteDetails
+                        quantity={item.quantity}
+                        quote={quote}
+                        subtotalPrice={fileSubtotal}
+                        unitPrice={filePrice}
+                      />
                       <p className="mt-1 text-sm text-graphite">
                         如需加急，请在备注中说明，加急可能产生额外费用。
                       </p>
@@ -544,6 +584,20 @@ export function QuoteForm() {
                           </option>
                         ))}
                       </select>
+                    </label>
+                    <label className="block text-sm font-semibold">
+                      数量
+                      <input
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        inputMode="numeric"
+                        max="1000"
+                        min="1"
+                        name="fileQuantities"
+                        onChange={(event) => updateFileQuantity(item.id, event.target.value)}
+                        step="1"
+                        type="number"
+                        value={item.quantity}
+                      />
                     </label>
                   </div>
                 </div>
@@ -677,10 +731,14 @@ export function QuoteForm() {
 }
 
 function SliceQuoteDetails({
+  quantity,
   quote,
+  subtotalPrice,
   unitPrice,
 }: {
+  quantity: number;
   quote: SliceQuoteState;
+  subtotalPrice: number | null;
   unitPrice: number | null;
 }) {
   const result = quote.result;
@@ -715,6 +773,12 @@ function SliceQuoteDetails({
           emphasis
           label="单件打印价"
           value={unitPrice == null ? "需人工确认" : formatMoney(unitPrice)}
+        />
+        <QuoteMetric label="数量" value={String(getSafeQuantity(quantity))} />
+        <QuoteMetric
+          emphasis
+          label="文件小计"
+          value={subtotalPrice == null ? "需人工确认" : formatMoney(subtotalPrice)}
         />
       </div>
     </div>
@@ -819,7 +883,7 @@ function getFileType(filename: string | null | undefined) {
   return filename?.split(".").pop()?.toUpperCase() || "UNKNOWN";
 }
 
-function createUploadedQuoteState(material: string): SliceQuoteState {
+function createUploadedQuoteState(material: string, quantity = 1): SliceQuoteState {
   return {
     status: "waiting",
     material,
@@ -827,32 +891,38 @@ function createUploadedQuoteState(material: string): SliceQuoteState {
     progress: 10,
     phase: "文件已上传",
     elapsedSeconds: 0,
+    quantity: getSafeQuantity(quantity),
   };
 }
 
-function createManualQuoteState(): SliceQuoteState {
+function createManualQuoteState(quantity = 1): SliceQuoteState {
   return {
     status: "manual",
     message: "文件格式不支持",
     progress: 100,
     phase: "需人工确认",
     elapsedSeconds: 0,
+    quantity: getSafeQuantity(quantity),
   };
 }
 
-function getVisibleSliceQuote(item: SelectedQuoteFile, quote: SliceQuoteState | undefined) {
+function getVisibleSliceQuote(
+  item: SelectedQuoteFile,
+  quote: SliceQuoteState | undefined,
+): SliceQuoteState {
   if (!isStlFile(item.file.name)) {
-    return createManualQuoteState();
+    return createManualQuoteState(item.quantity);
   }
 
   return (
-    quote || {
+    quote ? { ...quote, quantity: getSafeQuantity(item.quantity) } : {
       status: "waiting",
       material: item.material,
       message: "等待计算",
       progress: 0,
       phase: "等待上传完成",
       elapsedSeconds: 0,
+      quantity: getSafeQuantity(item.quantity),
     }
   );
 }
@@ -872,6 +942,28 @@ function getFileDisplayPrice(
   }
 
   return null;
+}
+
+function getFileSubtotalPrice(
+  quote: SliceQuoteState,
+  fileCount: number,
+  quantity: number,
+) {
+  const unitPrice = getFileDisplayPrice(quote, fileCount);
+
+  if (unitPrice == null) {
+    return null;
+  }
+
+  return roundMoney(unitPrice * getSafeQuantity(quantity));
+}
+
+function isValidQuantity(value: number) {
+  return Number.isInteger(value) && value >= 1 && value <= 1000;
+}
+
+function validateFileQuantities(files: SelectedModelFile[]) {
+  return files.every((file) => isValidQuantity(file.quantity));
 }
 
 function buildOrderSummary(
@@ -896,7 +988,7 @@ function buildOrderSummary(
   );
   const printFeeTotal = files.reduce((total, file, index) => {
     const quote = visibleQuotes[index];
-    const price = getFileDisplayPrice(quote, files.length);
+    const price = getFileSubtotalPrice(quote, files.length, file.quantity);
     return total + (price || 0);
   }, 0);
   const payable =
@@ -905,7 +997,7 @@ function buildOrderSummary(
       : null;
   const leadTimeLabel =
     successfulQuotes.length > 0
-      ? `约${calculateLeadTimeHours(successfulQuotes.map((quote) => quote.result.printTimeSeconds))}小时`
+      ? `约${calculateLeadTimeHours(successfulQuotes.map((quote) => quote.result.printTimeSeconds * quote.quantity))}小时`
       : hasManualFile || isCalculating
         ? "需人工确认"
         : `约${fallbackSummary.leadTimeMaxHours}小时`;

@@ -23,6 +23,7 @@ export type SelectedQuoteFile = {
   file: QuoteFileLike;
   material: string;
   color: string;
+  quantity: number;
 };
 
 export type FileEstimate = ReturnType<typeof estimateFileBySize>;
@@ -146,6 +147,12 @@ export function formatOptionSummary(files: SelectedQuoteFile[] | null | undefine
   }
 
   return files.map((item) => `${item.material || "PLA"}/${item.color || "黑"}`).join("，");
+}
+
+export function getSafeQuantity(value: number | null | undefined) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 1000
+    ? value
+    : 1;
 }
 
 export function formatPrice(value: number | null | undefined) {

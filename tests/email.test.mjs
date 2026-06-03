@@ -15,6 +15,9 @@ const order = {
   company: "Make3D",
   material: "PLA",
   quantity: 2,
+  estimatedPrice: 248.08,
+  estimatedLeadTimeMaxHours: 45,
+  estimatedLeadTimeHours: 45,
   remark: "尽快处理",
 };
 
@@ -32,6 +35,13 @@ test("builds new order notification email with admin detail link", () => {
   assert.match(email.text, /数量：2/);
   assert.match(email.text, /备注：尽快处理/);
   assert.match(email.text, /后台订单详情：https:\/\/make3d\.com\.cn\/admin\/orders\/7/);
+});
+
+test("builds new order notification email with total price and lead time", () => {
+  const email = buildNewOrderEmail(order, "https://make3d.com.cn");
+
+  assert.match(email.text, /248\.08/);
+  assert.match(email.text, /45/);
 });
 
 test("uses production app URL for default email order detail link", () => {

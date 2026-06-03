@@ -26,6 +26,9 @@ export type OrderInput = {
   addressRegion?: string;
   addressDetail?: string;
   shippingRemark?: string;
+  printFeeTotal?: number;
+  payablePrice?: number;
+  estimatedLeadTimeHours?: number;
   files: OrderFileInput[];
 };
 
@@ -47,6 +50,9 @@ export type OrderFileInput = {
   requiresManualConfirmation?: boolean;
   materialSalesRate?: number;
   materialCostRate?: number;
+  quantity?: number;
+  unitPrice?: number | null;
+  subtotalPrice?: number | null;
 };
 
 export type SingleFileOrderInput = Omit<OrderInput, "files"> & {
@@ -90,6 +96,9 @@ export type OrderFileRecord = {
   requiresManualConfirmation: boolean;
   materialSalesRate: number | null;
   materialCostRate: number | null;
+  quantity: number;
+  unitPrice: number | null;
+  subtotalPrice: number | null;
   createdAt: string;
 };
 
@@ -119,6 +128,9 @@ export type OrderRecord = {
   addressRegion: string | null;
   addressDetail: string | null;
   shippingRemark: string | null;
+  printFeeTotal: number | null;
+  payablePrice: number | null;
+  estimatedLeadTimeHours: number | null;
   status: OrderStatus;
   createdAt: string;
 };
@@ -215,6 +227,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
       address_region TEXT,
       address_detail TEXT,
       shipping_remark TEXT,
+      print_fee_total REAL,
+      payable_price REAL,
+      estimated_lead_time_hours INTEGER,
       status TEXT NOT NULL DEFAULT '待处理',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -242,6 +257,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
       requires_manual_confirmation INTEGER NOT NULL DEFAULT 0,
       material_sales_rate REAL,
       material_cost_rate REAL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      unit_price REAL,
+      subtotal_price REAL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
@@ -289,6 +307,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["address_region", "TEXT"],
     ["address_detail", "TEXT"],
     ["shipping_remark", "TEXT"],
+    ["print_fee_total", "REAL"],
+    ["payable_price", "REAL"],
+    ["estimated_lead_time_hours", "INTEGER"],
   ]);
   ensureColumns(db, "files", [
     ["bounding_box_x", "REAL"],
@@ -308,6 +329,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["requires_manual_confirmation", "INTEGER NOT NULL DEFAULT 0"],
     ["material_sales_rate", "REAL"],
     ["material_cost_rate", "REAL"],
+    ["quantity", "INTEGER NOT NULL DEFAULT 1"],
+    ["unit_price", "REAL"],
+    ["subtotal_price", "REAL"],
   ]);
   ensureColumns(db, "slice_jobs", [
     ["order_id", "INTEGER"],
@@ -378,8 +402,11 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           address_region,
           address_detail,
           shipping_remark,
+          print_fee_total,
+          payable_price,
+          estimated_lead_time_hours,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待处理')`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -406,6 +433,10 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.addressRegion || null,
         input.addressDetail || null,
         input.shippingRemark || null,
+        input.printFeeTotal ?? null,
+        input.payablePrice ?? null,
+        input.estimatedLeadTimeHours ?? null,
+        "待处理",
       );
 
     const orderId = Number(order.lastInsertRowid);
@@ -428,8 +459,11 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         risk_level,
         requires_manual_confirmation,
         material_sales_rate,
-        material_cost_rate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        material_cost_rate,
+        quantity,
+        unit_price,
+        subtotal_price
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     for (const file of input.files) {
@@ -452,6 +486,9 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         file.requiresManualConfirmation ? 1 : 0,
         file.materialSalesRate ?? null,
         file.materialCostRate ?? null,
+        file.quantity ?? 1,
+        file.unitPrice ?? null,
+        file.subtotalPrice ?? null,
       );
     }
 
@@ -473,6 +510,9 @@ export function createOrderWithFile(db: DatabaseSync, input: SingleFileOrderInpu
         ...input.file,
         material: input.material,
         color: input.color || "",
+        quantity: input.quantity,
+        unitPrice: input.estimatedPrice,
+        subtotalPrice: input.estimatedPrice,
       },
     ],
   });
@@ -514,6 +554,9 @@ export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
         requires_manual_confirmation AS requiresManualConfirmation,
         material_sales_rate AS materialSalesRate,
         material_cost_rate AS materialCostRate,
+        quantity,
+        unit_price AS unitPrice,
+        subtotal_price AS subtotalPrice,
         created_at AS createdAt
       FROM files
       WHERE order_id = ?
@@ -551,6 +594,9 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
         requires_manual_confirmation AS requiresManualConfirmation,
         material_sales_rate AS materialSalesRate,
         material_cost_rate AS materialCostRate,
+        quantity,
+        unit_price AS unitPrice,
+        subtotal_price AS subtotalPrice,
         created_at AS createdAt
       FROM files
       WHERE id = ?`,
@@ -698,6 +744,9 @@ function orderSelectSql(suffix: string) {
     address_region AS addressRegion,
     address_detail AS addressDetail,
     shipping_remark AS shippingRemark,
+    print_fee_total AS printFeeTotal,
+    payable_price AS payablePrice,
+    estimated_lead_time_hours AS estimatedLeadTimeHours,
     status,
     created_at AS createdAt
   FROM orders

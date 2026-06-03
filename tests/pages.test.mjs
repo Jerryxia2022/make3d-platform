@@ -61,6 +61,16 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /fileSliceStatus/);
   assert.match(formSource, /fileFilamentWeightG/);
   assert.match(formSource, /filePrintTimeSeconds/);
+  assert.match(formSource, /fileQuantities/);
+  assert.match(formSource, /fileUnitPrice/);
+  assert.match(formSource, /fileSubtotalPrice/);
+  assert.match(formSource, /updateFileQuantity/);
+  assert.match(formSource, /validateFileQuantities/);
+  assert.match(formSource, /数量必须是 1-1000 的整数/);
+  assert.match(formSource, /min="1"/);
+  assert.match(formSource, /max="1000"/);
+  assert.match(formSource, /step="1"/);
+  assert.match(formSource, /inputMode="numeric"/);
   assert.match(formSource, /progress/);
   assert.match(formSource, /phase/);
   assert.match(formSource, /startedAt/);
@@ -114,6 +124,9 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.doesNotMatch(formSource, /DimensionField/);
   assert.doesNotMatch(formSource, /label="包装费"/);
   assert.match(formSource, /PrusaSlicer/);
+  assert.match(formSource, /文件小计/);
+  assert.match(formSource, /getFileSubtotalPrice/);
+  assert.match(formSource, /quote\.result\.printTimeSeconds \* quote\.quantity/);
 });
 
 test("quote form handles failed auto quote API responses without staying calculating", async () => {
@@ -196,6 +209,12 @@ test("admin order detail page shows complete order fields and per-file V2 estima
   assert.match(detailSource, /file\.color/);
   assert.match(detailSource, /file\.boundingBoxX/);
   assert.match(detailSource, /file\.estimatedPriceMax/);
+  assert.match(detailSource, /file\.quantity/);
+  assert.match(detailSource, /file\.unitPrice/);
+  assert.match(detailSource, /file\.subtotalPrice/);
+  assert.match(detailSource, /order\.printFeeTotal/);
+  assert.match(detailSource, /order\.payablePrice/);
+  assert.match(detailSource, /order\.estimatedLeadTimeHours/);
   assert.match(detailSource, /file\.estimatedLeadTimeMaxHours/);
   assert.match(detailSource, /file\.riskNotice/);
   assert.match(detailSource, /file\.filesize/);
@@ -209,6 +228,12 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /formData\.getAll\("modelFiles"\)/);
   assert.match(apiSource, /formData\.getAll\("fileMaterials"\)/);
   assert.match(apiSource, /formData\.getAll\("fileColors"\)/);
+  assert.match(apiSource, /getQuantityList\(formData, "fileQuantities"\)/);
+  assert.match(apiSource, /fileUnitPrice/);
+  assert.match(apiSource, /fileSubtotalPrice/);
+  assert.match(apiSource, /printFeeTotal/);
+  assert.match(apiSource, /payablePrice/);
+  assert.match(apiSource, /estimatedLeadTimeHours/);
   assert.match(apiSource, /getNumberList\(formData, "fileDimensionX"\)/);
   assert.match(apiSource, /getNumberList\(formData, "fileDimensionY"\)/);
   assert.match(apiSource, /getNumberList\(formData, "fileDimensionZ"\)/);

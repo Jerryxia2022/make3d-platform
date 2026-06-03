@@ -55,6 +55,9 @@ export default async function AdminOrderDetailPage({
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
                 <Detail label="预估价格" value={formatPrice(order)} />
                 <Detail label="预估货期" value={formatLeadTime(order)} />
+                <Detail label="打印费合计" value={formatMoney(order.printFeeTotal)} />
+                <Detail label="应付总价" value={formatMoney(order.payablePrice)} />
+                <Detail label="预计交货期" value={formatOrderLeadTime(order)} />
                 <Detail label="包装费" value={formatMoney(order.packagingFee)} />
                 <Detail label="运费" value={formatMoney(order.shippingFee)} />
                 <Detail label="状态" value={order.status} />
@@ -134,6 +137,10 @@ export default async function AdminOrderDetailPage({
                     </p>
                     <p className="text-sm text-graphite">
                       材料：{file.material || "-"} · 颜色：{file.color || "-"}
+                    </p>
+                    <p className="text-sm text-graphite">
+                      数量：{file.quantity} · 单件价：{formatMoney(file.unitPrice)} · 小计：
+                      {formatMoney(file.subtotalPrice)}
                     </p>
                     <p className="text-sm text-graphite">尺寸：{formatDimensions(file)}</p>
                     <p className="text-sm text-graphite">
@@ -248,6 +255,12 @@ function formatLeadTime(order: OrderDetail) {
   }
 
   return `约${order.estimatedLeadTimeMaxHours}小时`;
+}
+
+function formatOrderLeadTime(order: OrderDetail) {
+  const hours = order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
+
+  return hours == null ? "-" : `约${hours}小时`;
 }
 
 function formatFilePrice(file: OrderFileRecord) {

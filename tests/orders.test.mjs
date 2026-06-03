@@ -56,6 +56,9 @@ test("initializes orders, files, and slice_jobs tables with estimate, shipping, 
     "requires_manual_confirmation",
     "material_sales_rate",
     "material_cost_rate",
+    "quantity",
+    "unit_price",
+    "subtotal_price",
   ]) {
     assert.equal(fileColumns.includes(column), true);
   }
@@ -75,6 +78,9 @@ test("initializes orders, files, and slice_jobs tables with estimate, shipping, 
     "address_region",
     "address_detail",
     "shipping_remark",
+    "print_fee_total",
+    "payable_price",
+    "estimated_lead_time_hours",
   ]) {
     assert.equal(orderColumns.includes(column), true);
   }
@@ -285,6 +291,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
     estimatedLeadTimeMaxHours: 16,
     packagingFee: 3,
     shippingFee: 18,
+    printFeeTotal: 278,
+    payablePrice: 296,
+    estimatedLeadTimeHours: 42,
     shippingMethod: "顺丰快递",
     shippingFeeEstimate: "18 元起",
     recipientName: "Jerry",
@@ -311,6 +320,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
         requiresManualConfirmation: false,
         materialSalesRate: 0.25,
         materialCostRate: 0.05,
+        quantity: 3,
+        unitPrice: 26,
+        subtotalPrice: 78,
       },
       {
         filename: "demo-b.step",
@@ -330,6 +342,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
         requiresManualConfirmation: true,
         materialSalesRate: 0.2,
         materialCostRate: 0.03,
+        quantity: 2,
+        unitPrice: 100,
+        subtotalPrice: 200,
       },
     ],
   });
@@ -347,6 +362,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
   assert.equal(detail.estimatedLeadTimeMaxHours, 16);
   assert.equal(detail.packagingFee, 3);
   assert.equal(detail.shippingFee, 18);
+  assert.equal(detail.printFeeTotal, 278);
+  assert.equal(detail.payablePrice, 296);
+  assert.equal(detail.estimatedLeadTimeHours, 42);
   assert.equal(detail.shippingMethod, "顺丰快递");
   assert.equal(detail.shippingFeeEstimate, "18 元起");
   assert.equal(detail.recipientName, "Jerry");
@@ -364,6 +382,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
       boundingBoxX: file.boundingBoxX,
       riskLevel: file.riskLevel,
       requiresManualConfirmation: file.requiresManualConfirmation,
+      quantity: file.quantity,
+      unitPrice: file.unitPrice,
+      subtotalPrice: file.subtotalPrice,
     })),
     [
       {
@@ -373,6 +394,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
         boundingBoxX: 9,
         riskLevel: "warning",
         requiresManualConfirmation: false,
+        quantity: 3,
+        unitPrice: 26,
+        subtotalPrice: 78,
       },
       {
         filename: "demo-b.step",
@@ -381,6 +405,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
         boundingBoxX: 260,
         riskLevel: "danger",
         requiresManualConfirmation: true,
+        quantity: 2,
+        unitPrice: 100,
+        subtotalPrice: 200,
       },
     ],
   );

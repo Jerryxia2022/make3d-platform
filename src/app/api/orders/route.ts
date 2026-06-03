@@ -67,6 +67,9 @@ export async function POST(request: Request) {
 
     const rawMaterials = formData.getAll("fileMaterials");
     const rawColors = formData.getAll("fileColors");
+    const quantities = getQuantityList(formData, "fileQuantities");
+    const fileUnitPrices = getNumberList(formData, "fileUnitPrice");
+    const fileSubtotalPrices = getNumberList(formData, "fileSubtotalPrice");
     const dimensionXs = getNumberList(formData, "fileDimensionX");
     const dimensionYs = getNumberList(formData, "fileDimensionY");
     const dimensionZs = getNumberList(formData, "fileDimensionZ");
@@ -77,9 +80,15 @@ export async function POST(request: Request) {
     const colors = rawColors
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter(Boolean);
+
+    if (quantities.length !== uploadedFiles.length || quantities.some((quantity) => !isValidQuantity(quantity))) {
+      return NextResponse.json({ error: "数量必须是 1-1000 的整数" }, { status: 400 });
+    }
+
     const savedFiles = await Promise.all(
       uploadedFiles.map(async (file, index) => {
         const material = materials[index] || "PLA";
+        const quantity = quantities[index];
         const dimensions = {
           x: dimensionXs[index],
           y: dimensionYs[index],
@@ -108,6 +117,9 @@ export async function POST(request: Request) {
           requiresManualConfirmation: estimate.requiresManualConfirmation,
           materialSalesRate: estimate.materialSalesRate,
           materialCostRate: estimate.materialCostRate,
+          quantity,
+          unitPrice: fileUnitPrices[index],
+          subtotalPrice: fileSubtotalPrices[index],
         };
       }),
     );
@@ -122,11 +134,15 @@ export async function POST(request: Request) {
         sliceQuote?.status === "success"
           ? roundMoney(sliceQuote.materialFee + sliceQuote.timeFee + packagingShare)
           : file.estimatedPriceMax;
+      const quantity = file.quantity || 1;
+      const subtotalPrice = roundMoney(filePrice * quantity);
 
       return {
         ...file,
-        estimatedPriceMin: filePrice,
-        estimatedPriceMax: filePrice,
+        unitPrice: filePrice,
+        subtotalPrice,
+        estimatedPriceMin: subtotalPrice,
+        estimatedPriceMax: subtotalPrice,
       };
     });
     const autoPrintPrice = savedFilesWithPackaging.reduce(
@@ -134,15 +150,21 @@ export async function POST(request: Request) {
       0,
     );
     const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
-    const successfulPrintTimes = sliceQuotes
-      .filter((quote) => quote?.status === "success")
-      .map((quote) => quote.printTimeSeconds);
+    const successfulPrintTimes = sliceQuotes.flatMap((quote, index) =>
+      quote?.status === "success"
+        ? [quote.printTimeSeconds * (savedFilesWithPackaging[index]?.quantity || 1)]
+        : [],
+    );
     const allFilesSliced =
       successfulPrintTimes.length === uploadedFiles.length && successfulPrintTimes.length > 0;
     const exactLeadTimeHours = allFilesSliced
       ? calculateAutoLeadTimeHours(successfulPrintTimes)
       : estimate.leadTimeMaxHours;
     const exactOrderPrice = roundMoney(Math.max(autoPrintPrice + shippingAmount, 20));
+    const totalQuantity = savedFilesWithPackaging.reduce(
+      (total, file) => total + (file.quantity || 1),
+      0,
+    );
     const db = openDatabase();
 
     try {
@@ -154,7 +176,7 @@ export async function POST(request: Request) {
         company: "",
         material: firstFile.material,
         color: firstFile.color,
-        quantity: savedFiles.length,
+        quantity: totalQuantity,
         remark: getString(formData, "remark"),
         estimatedPrice: exactOrderPrice,
         estimatedPriceMin: exactOrderPrice,
@@ -163,6 +185,9 @@ export async function POST(request: Request) {
         estimatedLeadTimeMaxHours: exactLeadTimeHours,
         packagingFee: estimate.packagingFee,
         shippingFee: shipping.amount,
+        printFeeTotal: autoPrintPrice,
+        payablePrice: exactOrderPrice,
+        estimatedLeadTimeHours: exactLeadTimeHours,
         shippingMethod: getString(formData, "shippingMethod"),
         shippingFeeEstimate: shipping.label,
         recipientName: getString(formData, "recipientName"),
@@ -230,6 +255,17 @@ function getNumberList(formData: FormData, key: string) {
     const parsed = typeof value === "string" ? Number(value) : NaN;
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   });
+}
+
+function getQuantityList(formData: FormData, key: string) {
+  return formData.getAll(key).map((value) => {
+    const parsed = typeof value === "string" ? Number(value) : NaN;
+    return isValidQuantity(parsed) ? parsed : NaN;
+  });
+}
+
+function isValidQuantity(value: number) {
+  return Number.isInteger(value) && value >= 1 && value <= 1000;
 }
 
 function getSliceQuoteList(formData: FormData) {

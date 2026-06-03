@@ -4,7 +4,16 @@ import type { CreatedOrder, OrderInput } from "./database";
 export type NewOrderEmailOrder = CreatedOrder &
   Pick<
     OrderInput,
-    "customerName" | "phone" | "wechat" | "company" | "material" | "quantity" | "remark"
+    | "customerName"
+    | "phone"
+    | "wechat"
+    | "company"
+    | "material"
+    | "quantity"
+    | "remark"
+    | "estimatedPrice"
+    | "estimatedLeadTimeMaxHours"
+    | "estimatedLeadTimeHours"
   >;
 
 export type MailMessage = {
@@ -35,11 +44,21 @@ export function buildNewOrderEmail(order: NewOrderEmailOrder, appUrl = getAppUrl
       `公司名称：${order.company || "-"}`,
       `材料：${order.material}`,
       `数量：${order.quantity}`,
+      `总价：${formatMoney(order.estimatedPrice)}`,
+      `预计交货期：${formatLeadTime(order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours)}`,
       `备注：${order.remark || "-"}`,
       "",
       `后台订单详情：${detailUrl}`,
     ].join("\n"),
   };
+}
+
+function formatMoney(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)} 元` : "-";
+}
+
+function formatLeadTime(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `约${value}小时` : "-";
 }
 
 export async function notifyAdminNewOrder(
