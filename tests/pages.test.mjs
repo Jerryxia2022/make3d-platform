@@ -61,6 +61,27 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /fileSliceStatus/);
   assert.match(formSource, /fileFilamentWeightG/);
   assert.match(formSource, /filePrintTimeSeconds/);
+  assert.match(formSource, /progress/);
+  assert.match(formSource, /phase/);
+  assert.match(formSource, /startedAt/);
+  assert.match(formSource, /elapsedSeconds/);
+  assert.match(formSource, /等待上传完成/);
+  assert.match(formSource, /文件已上传/);
+  assert.match(formSource, /正在准备切片任务/);
+  assert.match(formSource, /正在调用 PrusaSlicer/);
+  assert.match(formSource, /正在解析 G-code/);
+  assert.match(formSource, /正在计算价格/);
+  assert.match(formSource, /报价完成/);
+  assert.match(formSource, /已等待/);
+  assert.match(formSource, /模型较复杂，正在继续计算，请稍候/);
+  assert.match(formSource, /计算超时，需人工确认/);
+  assert.match(formSource, /切片超时/);
+  assert.match(formSource, /文件格式不支持/);
+  assert.match(formSource, /切片配置缺失/);
+  assert.match(formSource, /服务器繁忙/);
+  assert.match(formSource, /部分文件仍在计算，报价完成后将自动更新总价。/);
+  assert.match(formSource, /请等待报价完成后提交/);
+  assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes}/);
   assert.match(formSource, /等待计算/);
   assert.match(formSource, /正在计算/);
   assert.match(formSource, /已完成/);
@@ -92,7 +113,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /最终价格以人工确认为准/);
   assert.doesNotMatch(formSource, /DimensionField/);
   assert.doesNotMatch(formSource, /label="包装费"/);
-  assert.doesNotMatch(formSource, /PrusaSlicer/);
+  assert.match(formSource, /PrusaSlicer/);
 });
 
 test("admin pages display contact fields from the matching order properties", async () => {

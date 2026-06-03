@@ -47,6 +47,10 @@ type SliceQuoteState = {
   status: SliceQuoteStatus;
   message?: string;
   material?: string;
+  progress: number;
+  phase: string;
+  startedAt?: number;
+  elapsedSeconds: number;
   result?: SliceQuoteResult;
 };
 
@@ -63,10 +67,61 @@ export function QuoteForm() {
     () => buildOrderSummary(files, fileEstimates, sliceQuotes, shippingMethod),
     [files, fileEstimates, sliceQuotes, shippingMethod],
   );
+  const hasPendingQuotes = useMemo(
+    () =>
+      files.some((file) => {
+        const quote = getVisibleSliceQuote(file, sliceQuotes[file.id]);
+        return quote.status === "waiting" || quote.status === "calculating";
+      }),
+    [files, sliceQuotes],
+  );
   const sliceRequestKey = useMemo(
     () => files.map((file) => `${file.id}:${file.material}`).join("|"),
     [files],
   );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSliceQuotes((quotes) => {
+        let changed = false;
+        const nextQuotes = { ...quotes };
+
+        for (const [id, quote] of Object.entries(quotes)) {
+          if (quote.status !== "calculating" || !quote.startedAt) {
+            continue;
+          }
+
+          const elapsedSeconds = Math.floor((Date.now() - quote.startedAt) / 1000);
+
+          if (elapsedSeconds >= 120) {
+            nextQuotes[id] = {
+              ...quote,
+              status: "failed",
+              message: "切片超时",
+              phase: "计算超时，需人工确认",
+              progress: 100,
+              elapsedSeconds,
+            };
+            changed = true;
+            continue;
+          }
+
+          const progress = Math.min(70, Math.max(25, 45 + Math.floor((elapsedSeconds / 90) * 25)));
+          nextQuotes[id] = {
+            ...quote,
+            elapsedSeconds,
+            phase: getSliceProgressPhase(progress),
+            progress,
+          };
+          changed = true;
+        }
+
+        return changed ? nextQuotes : quotes;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +134,7 @@ export function QuoteForm() {
           if (!current || current.status !== "manual") {
             setSliceQuotes((quotes) => ({
               ...quotes,
-              [item.id]: { status: "manual", message: "需人工确认" },
+              [item.id]: createManualQuoteState(),
             }));
           }
           continue;
@@ -95,10 +150,32 @@ export function QuoteForm() {
 
         setSliceQuotes((quotes) => ({
           ...quotes,
-          [item.id]: { status: "calculating", material: item.material, message: "正在计算" },
+          [item.id]: {
+            status: "calculating",
+            material: item.material,
+            message: "正在计算",
+            progress: 25,
+            phase: "正在准备切片任务",
+            startedAt: Date.now(),
+            elapsedSeconds: 0,
+          },
         }));
 
         try {
+          setSliceQuotes((quotes) => ({
+            ...quotes,
+            [item.id]: {
+              ...(quotes[item.id] || createUploadedQuoteState(item.material)),
+              status: "calculating",
+              material: item.material,
+              message: "正在计算",
+              progress: 45,
+              phase: "正在调用 PrusaSlicer",
+              startedAt: quotes[item.id]?.startedAt || Date.now(),
+              elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
+            },
+          }));
+
           const formData = new FormData();
           formData.append("modelFile", item.file);
           formData.append("material", item.material);
@@ -117,9 +194,12 @@ export function QuoteForm() {
             setSliceQuotes((quotes) => ({
               ...quotes,
               [item.id]: {
+                ...(quotes[item.id] || createUploadedQuoteState(item.material)),
                 status: "failed",
                 material: item.material,
-                message: result.message || "计算失败，需人工确认",
+                message: getSliceFailureReason(result),
+                phase: "计算失败，需人工确认",
+                progress: 100,
               },
             }));
             continue;
@@ -127,10 +207,16 @@ export function QuoteForm() {
 
           setSliceQuotes((quotes) => ({
             ...quotes,
-            [item.id]: {
+            [item.id]:
+              quotes[item.id]?.status === "failed" && quotes[item.id]?.message === "切片超时"
+                ? quotes[item.id]
+                : {
               status: "success",
               material: item.material,
               message: "已完成",
+              progress: 100,
+              phase: "报价完成",
+              elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
               result: normalizeSliceQuoteResult(result.result),
             },
           }));
@@ -142,9 +228,12 @@ export function QuoteForm() {
           setSliceQuotes((quotes) => ({
             ...quotes,
             [item.id]: {
+              ...(quotes[item.id] || createUploadedQuoteState(item.material)),
               status: "failed",
               material: item.material,
-              message: "计算失败，需人工确认",
+              message: "需人工确认",
+              phase: "计算失败，需人工确认",
+              progress: 100,
             },
           }));
         }
@@ -174,15 +263,26 @@ export function QuoteForm() {
       return;
     }
 
+    const selectedFiles = incomingFiles.map((file) => ({
+      id: createQuoteFileId(file),
+      file,
+      material: "PLA",
+      color: "黑",
+    }));
+
     setFiles((currentFiles) => [
       ...currentFiles,
-      ...incomingFiles.map((file) => ({
-        id: createQuoteFileId(file),
-        file,
-        material: "PLA",
-        color: "黑",
-      })),
+      ...selectedFiles,
     ]);
+    setSliceQuotes((quotes) => {
+      const nextQuotes = { ...quotes };
+      for (const item of selectedFiles) {
+        nextQuotes[item.id] = isStlFile(item.file.name)
+          ? createUploadedQuoteState(item.material)
+          : createManualQuoteState();
+      }
+      return nextQuotes;
+    });
   }
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -219,6 +319,11 @@ export function QuoteForm() {
 
     if (files.length === 0) {
       setError("请先上传模型文件");
+      return;
+    }
+
+    if (hasPendingQuotes) {
+      setError("请等待报价完成后提交");
       return;
     }
 
@@ -496,6 +601,11 @@ export function QuoteForm() {
 
       <section className="border border-ink/10 bg-white/70 p-5">
         <h2 className="text-lg font-bold">订单汇总</h2>
+        {hasPendingQuotes ? (
+          <p className="mt-3 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+            部分文件仍在计算，报价完成后将自动更新总价。
+          </p>
+        ) : null}
         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           <SummaryItem label="文件数量" value={`${files.length} 个`} />
           <SummaryItem label="打印费合计" value={formatMoney(orderSummary.printFeeTotal)} />
@@ -526,10 +636,10 @@ export function QuoteForm() {
 
       <button
         className="w-full bg-ink px-5 py-3 font-semibold text-white transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/60"
-        disabled={isSubmitting}
+        disabled={isSubmitting || hasPendingQuotes}
         type="submit"
       >
-        {isSubmitting ? "提交中..." : "提交订单"}
+        {hasPendingQuotes ? "请等待报价完成后提交" : isSubmitting ? "提交中..." : "提交订单"}
       </button>
     </form>
   );
@@ -545,17 +655,37 @@ function SliceQuoteDetails({
   const result = quote.result;
 
   return (
-    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-      <QuoteMetric label="切片状态" value={formatSliceStatus(quote)} />
-      <QuoteMetric label="耗材重量" value={result ? `${result.filamentWeightG.toFixed(2)} g` : "-"} />
-      <QuoteMetric label="打印时间" value={result ? formatPrintTime(result.printTimeSeconds) : "-"} />
-      <QuoteMetric label="材料费" value={result ? formatMoney(result.materialFee) : "-"} />
-      <QuoteMetric label="工时费" value={result ? formatMoney(result.timeFee) : "-"} />
-      <QuoteMetric
-        emphasis
-        label="单件打印价"
-        value={unitPrice == null ? "需人工确认" : formatMoney(unitPrice)}
-      />
+    <div className="mt-3 space-y-3">
+      <div>
+        <div className="flex items-center justify-between text-xs font-semibold text-graphite">
+          <span>{quote.phase || formatSliceStatus(quote)}</span>
+          <span>{quote.progress}%</span>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden bg-ash">
+          <div
+            className="h-full bg-coral transition-all"
+            style={{ width: `${Math.min(Math.max(quote.progress, 0), 100)}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-graphite">已等待 {quote.elapsedSeconds} 秒</p>
+        {quote.elapsedSeconds > 30 && quote.elapsedSeconds < 120 && quote.status === "calculating" ? (
+          <p className="mt-1 text-xs font-semibold text-coral">
+            模型较复杂，正在继续计算，请稍候
+          </p>
+        ) : null}
+      </div>
+      <div className="grid gap-2 text-sm sm:grid-cols-2">
+        <QuoteMetric label="切片状态" value={formatSliceStatus(quote)} />
+        <QuoteMetric label="耗材重量" value={result ? `${result.filamentWeightG.toFixed(2)} g` : "-"} />
+        <QuoteMetric label="打印时间" value={result ? formatPrintTime(result.printTimeSeconds) : "-"} />
+        <QuoteMetric label="材料费" value={result ? formatMoney(result.materialFee) : "-"} />
+        <QuoteMetric label="工时费" value={result ? formatMoney(result.timeFee) : "-"} />
+        <QuoteMetric
+          emphasis
+          label="单件打印价"
+          value={unitPrice == null ? "需人工确认" : formatMoney(unitPrice)}
+        />
+      </div>
     </div>
   );
 }
@@ -658,12 +788,42 @@ function getFileType(filename: string | null | undefined) {
   return filename?.split(".").pop()?.toUpperCase() || "UNKNOWN";
 }
 
+function createUploadedQuoteState(material: string): SliceQuoteState {
+  return {
+    status: "waiting",
+    material,
+    message: "等待计算",
+    progress: 10,
+    phase: "文件已上传",
+    elapsedSeconds: 0,
+  };
+}
+
+function createManualQuoteState(): SliceQuoteState {
+  return {
+    status: "manual",
+    message: "文件格式不支持",
+    progress: 100,
+    phase: "需人工确认",
+    elapsedSeconds: 0,
+  };
+}
+
 function getVisibleSliceQuote(item: SelectedQuoteFile, quote: SliceQuoteState | undefined) {
   if (!isStlFile(item.file.name)) {
-    return { status: "manual", message: "需人工确认" } satisfies SliceQuoteState;
+    return createManualQuoteState();
   }
 
-  return quote || { status: "waiting", material: item.material, message: "等待计算" };
+  return (
+    quote || {
+      status: "waiting",
+      material: item.material,
+      message: "等待计算",
+      progress: 0,
+      phase: "等待上传完成",
+      elapsedSeconds: 0,
+    }
+  );
 }
 
 function getFileDisplayPrice(
@@ -771,6 +931,56 @@ function formatSliceStatus(quote: SliceQuoteState) {
     default:
       return "等待计算";
   }
+}
+
+function getSliceProgressPhase(progress: number) {
+  if (progress <= 0) {
+    return "等待上传完成";
+  }
+
+  if (progress <= 10) {
+    return "文件已上传";
+  }
+
+  if (progress <= 25) {
+    return "正在准备切片任务";
+  }
+
+  if (progress < 70) {
+    return "正在调用 PrusaSlicer";
+  }
+
+  if (progress < 90) {
+    return "正在解析 G-code";
+  }
+
+  if (progress < 100) {
+    return "正在计算价格";
+  }
+
+  return "报价完成";
+}
+
+function getSliceFailureReason(result: { message?: string; error?: string }) {
+  const text = `${result.message || ""} ${result.error || ""}`;
+
+  if (/timeout|timed out|超时/i.test(text)) {
+    return "切片超时";
+  }
+
+  if (/Only STL|format|格式|unsupported/i.test(text)) {
+    return "文件格式不支持";
+  }
+
+  if (/profile|配置/i.test(text)) {
+    return "切片配置缺失";
+  }
+
+  if (/busy|繁忙|queue/i.test(text)) {
+    return "服务器繁忙";
+  }
+
+  return result.message || "需人工确认";
 }
 
 function formatPrintTime(seconds: number) {
