@@ -15,7 +15,9 @@ type SlicerQuoteResult = {
   print_time_seconds: number;
   material_fee: number;
   time_fee: number;
+  packaging_fee: number;
   estimated_price: number;
+  estimated_lead_time_hours: number;
 };
 
 export function AdminSlicerTestButton({
@@ -112,6 +114,8 @@ function SlicerQuoteResultView({
       <ResultLine label="自动计算价格" value={formatMoney(result.estimated_price)} />
       <ResultLine label="材料费" value={formatMoney(result.material_fee)} />
       <ResultLine label="工时费" value={formatMoney(result.time_fee)} />
+      <ResultLine label="包装费" value={formatMoney(result.packaging_fee)} />
+      <ResultLine label="预计交货期" value={formatLeadTime(result.estimated_lead_time_hours)} />
       <ResultLine label="使用材料" value={material} />
       <ResultLine label="使用配置" value="0.4喷嘴 / 0.2层高 / 50%填充" />
     </dl>
@@ -137,4 +141,9 @@ function formatPrintTime(seconds: number) {
 
 function formatMoney(value: number) {
   return `${value.toFixed(2)} 元`;
+}
+
+function formatLeadTime(hours: number) {
+  const safeHours = Number.isFinite(hours) && hours > 0 ? Math.ceil(hours) : 0;
+  return safeHours > 0 ? `约${safeHours}小时` : "-";
 }

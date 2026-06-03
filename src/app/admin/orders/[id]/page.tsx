@@ -53,8 +53,8 @@ export default async function AdminOrderDetailPage({
                 <Detail label="订单编号" value={order.orderNo} />
                 <Detail label="订单ID" value={String(order.id)} />
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
-                <Detail label="预估价格" value={formatPriceRange(order)} />
-                <Detail label="预估货期" value={formatLeadTimeRange(order)} />
+                <Detail label="预估价格" value={formatPrice(order)} />
+                <Detail label="预估货期" value={formatLeadTime(order)} />
                 <Detail label="包装费" value={formatMoney(order.packagingFee)} />
                 <Detail label="运费" value={formatMoney(order.shippingFee)} />
                 <Detail label="状态" value={order.status} />
@@ -137,8 +137,8 @@ export default async function AdminOrderDetailPage({
                     </p>
                     <p className="text-sm text-graphite">尺寸：{formatDimensions(file)}</p>
                     <p className="text-sm text-graphite">
-                      文件估价：{formatFilePriceRange(file)} · 文件工期：
-                      {formatFileLeadTimeRange(file)}
+                      文件估价：{formatFilePrice(file)} · 文件工期：
+                      {formatFileLeadTime(file)}
                     </p>
                     {file.riskNotice ? (
                       <p className="text-sm font-semibold text-coral">{file.riskNotice}</p>
@@ -196,6 +196,8 @@ function SliceJobResult({ job }: { job: SliceJobRecord | null }) {
         <Detail label="自动计算价格" value={formatSliceMoney(job.estimatedPrice)} />
         <Detail label="材料费" value={formatSliceMoney(job.materialFee)} />
         <Detail label="工时费" value={formatSliceMoney(job.timeFee)} />
+        <Detail label="包装费" value={formatSliceMoney(getSlicePackagingFee(job))} />
+        <Detail label="预计交货期" value={formatSliceLeadTime(job.printTimeSeconds)} />
         <Detail label="使用材料" value={job.material || "-"} />
         <Detail label="使用配置" value="0.4喷嘴 / 0.2层高 / 50%填充" />
       </dl>
@@ -221,36 +223,33 @@ function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
 }
 
-function formatPriceRange(order: OrderDetail) {
-  if (order.estimatedPriceMin == null || order.estimatedPriceMax == null) {
-    return order.estimatedPrice ? `¥${order.estimatedPrice.toFixed(2)}` : "-";
-  }
-
-  return `¥${order.estimatedPriceMin.toFixed(2)} - ¥${order.estimatedPriceMax.toFixed(2)}`;
+function formatPrice(order: OrderDetail) {
+  const price = order.estimatedPrice || order.estimatedPriceMax;
+  return price ? `¥${price.toFixed(2)}` : "-";
 }
 
-function formatLeadTimeRange(order: OrderDetail) {
-  if (order.estimatedLeadTimeMinHours == null || order.estimatedLeadTimeMaxHours == null) {
+function formatLeadTime(order: OrderDetail) {
+  if (order.estimatedLeadTimeMaxHours == null) {
     return "-";
   }
 
-  return `${order.estimatedLeadTimeMinHours}-${order.estimatedLeadTimeMaxHours} 小时`;
+  return `约${order.estimatedLeadTimeMaxHours}小时`;
 }
 
-function formatFilePriceRange(file: OrderFileRecord) {
-  if (file.estimatedPriceMin == null || file.estimatedPriceMax == null) {
+function formatFilePrice(file: OrderFileRecord) {
+  if (file.estimatedPriceMax == null) {
     return "-";
   }
 
-  return `¥${file.estimatedPriceMin.toFixed(2)} - ¥${file.estimatedPriceMax.toFixed(2)}`;
+  return `¥${file.estimatedPriceMax.toFixed(2)}`;
 }
 
-function formatFileLeadTimeRange(file: OrderFileRecord) {
-  if (file.estimatedLeadTimeMinHours == null || file.estimatedLeadTimeMaxHours == null) {
+function formatFileLeadTime(file: OrderFileRecord) {
+  if (file.estimatedLeadTimeMaxHours == null) {
     return "-";
   }
 
-  return `${file.estimatedLeadTimeMinHours}-${file.estimatedLeadTimeMaxHours} 小时`;
+  return `约${file.estimatedLeadTimeMaxHours}小时`;
 }
 
 function formatDimensions(file: OrderFileRecord) {
@@ -279,6 +278,22 @@ function formatOptionalNumber(value: number | null) {
 
 function isVolumeDerivedWeight(job: SliceJobRecord) {
   return job.filamentWeightSource === "cm3" && job.rawFilamentUsedCm3 != null;
+}
+
+function getSlicePackagingFee(job: SliceJobRecord) {
+  if (job.estimatedPrice == null || job.materialFee == null || job.timeFee == null) {
+    return null;
+  }
+
+  return Math.round((job.estimatedPrice - job.materialFee - job.timeFee) * 100) / 100;
+}
+
+function formatSliceLeadTime(value: number | null) {
+  if (value == null) {
+    return "-";
+  }
+
+  return `约${Math.ceil(value / 3600 + 24)}小时`;
 }
 
 function formatSlicePrintTime(value: number | null) {

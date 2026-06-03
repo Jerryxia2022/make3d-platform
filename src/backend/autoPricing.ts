@@ -4,6 +4,7 @@ export type AutoFilePriceInput = {
   material: AutoPricingMaterial;
   filamentWeightG: number;
   printTimeSeconds: number;
+  packagingFee?: number;
   packagingShare?: number;
 };
 
@@ -21,6 +22,8 @@ const MATERIAL_RATES: Record<string, number> = {
 const LABOR_RATE_PER_HOUR = 1.5;
 const MIN_LABOR_FEE = 5;
 const ORDER_MIN_PRICE = 20;
+const DEFAULT_DEVICE_COUNT = 6;
+const DELIVERY_BUFFER_HOURS = 24;
 
 export function calculateAutoFilePrice(input: AutoFilePriceInput) {
   const materialFee = roundMoney(
@@ -28,15 +31,39 @@ export function calculateAutoFilePrice(input: AutoFilePriceInput) {
   );
   const printHours = safePositiveNumber(input.printTimeSeconds) / 3600;
   const laborFee = roundMoney(Math.max(printHours * LABOR_RATE_PER_HOUR, MIN_LABOR_FEE));
-  const packagingShare = roundMoney(safePositiveNumber(input.packagingShare));
-  const estimatedPrice = roundMoney(materialFee + laborFee + packagingShare);
+  const packagingFee = roundMoney(
+    safePositiveNumber(input.packagingFee ?? input.packagingShare),
+  );
+  const estimatedPrice = roundMoney(materialFee + laborFee + packagingFee);
 
   return {
     materialFee,
     laborFee,
-    packagingShare,
+    packagingFee,
+    packagingShare: packagingFee,
     estimatedPrice,
   };
+}
+
+export function calculateAutoLeadTimeHours(
+  printTimeSecondsList: Array<number | null | undefined>,
+  deviceCount = DEFAULT_DEVICE_COUNT,
+) {
+  const usablePrintTimes = printTimeSecondsList.filter(
+    (seconds): seconds is number =>
+      typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0,
+  );
+  const safeDeviceCount =
+    usablePrintTimes.length > 1 && Number.isFinite(deviceCount) && deviceCount > 0
+      ? deviceCount
+      : 1;
+  const totalPrintHours =
+    usablePrintTimes.reduce(
+      (total, seconds) => total + safePositiveNumber(seconds),
+      0,
+    ) / 3600;
+
+  return Math.ceil(totalPrintHours / safeDeviceCount + DELIVERY_BUFFER_HOURS);
 }
 
 export function calculateAutoOrderPrice(input: AutoOrderPriceInput) {

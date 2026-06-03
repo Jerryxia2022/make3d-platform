@@ -148,15 +148,9 @@ export function formatOptionSummary(files: SelectedQuoteFile[] | null | undefine
   return files.map((item) => `${item.material || "PLA"}/${item.color || "黑"}`).join("，");
 }
 
-export function formatPriceRange(min: number | null | undefined, max: number | null | undefined) {
-  const safeMin = Math.ceil(safePositiveNumber(min));
-  const safeMax = Math.ceil(safePositiveNumber(max));
-
-  if (safeMin === 0 && safeMax === 0) {
-    return "-";
-  }
-
-  return safeMin === safeMax ? `${safeMin} 元` : `${safeMin}-${safeMax} 元`;
+export function formatPrice(value: number | null | undefined) {
+  const safeValue = Math.ceil(safePositiveNumber(value));
+  return safeValue > 0 ? `${safeValue} 元` : "-";
 }
 
 export function formatLeadTimeRange(

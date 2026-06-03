@@ -2,7 +2,7 @@ import { access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { NextResponse } from "next/server";
-import { calculateAutoFilePrice } from "@/backend/autoPricing";
+import { calculateAutoFilePrice, calculateAutoLeadTimeHours } from "@/backend/autoPricing";
 import {
   createSliceJob,
   getOrderById,
@@ -29,7 +29,9 @@ type SliceTestResponse = {
     material_density: number | null;
     material_fee: number;
     time_fee: number;
+    packaging_fee: number;
     estimated_price: number;
+    estimated_lead_time_hours: number;
   };
   error?: string;
 };
@@ -167,8 +169,9 @@ export async function POST(
       material,
       filamentWeightG: metadata.filamentWeightG,
       printTimeSeconds: metadata.printTimeSeconds,
-      packagingShare: (order.packagingFee ?? 3) / Math.max(order.files.length, 1),
+      packagingFee: order.packagingFee ?? 3,
     });
+    const estimatedLeadTimeHours = calculateAutoLeadTimeHours([metadata.printTimeSeconds]);
     updateSliceJobSuccess(db, jobId, {
       filamentWeightG: metadata.filamentWeightG,
       printTimeSeconds: metadata.printTimeSeconds,
@@ -205,7 +208,9 @@ export async function POST(
         material_density: metadata.materialDensity,
         material_fee: price.materialFee,
         time_fee: price.laborFee,
+        packaging_fee: price.packagingFee,
         estimated_price: price.estimatedPrice,
+        estimated_lead_time_hours: estimatedLeadTimeHours,
       },
     });
   } catch (error) {

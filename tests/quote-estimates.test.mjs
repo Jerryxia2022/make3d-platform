@@ -9,7 +9,7 @@ import {
   formatBytes,
   formatDimensions,
   formatLeadTimeRange,
-  formatPriceRange,
+  formatPrice,
 } from "../src/frontend/lib/quote-estimates.ts";
 
 test("keeps quote estimates safe when uploaded STL dimensions are unavailable", () => {
@@ -33,7 +33,7 @@ test("keeps quote estimates safe when uploaded STL dimensions are unavailable", 
   assert.equal(formatDimensions(dimensions), "尺寸暂未识别，最终以人工确认为准。");
   assert.equal(estimates.length, 1);
   assert.equal(estimates[0].estimate.riskNotice, "");
-  assert.equal(formatPriceRange(estimates[0].estimate.priceMin, estimates[0].estimate.priceMax), "26-58 元");
+  assert.equal(formatPrice(estimates[0].estimate.priceMax), "58 元");
   assert.equal(formatLeadTimeRange(summary.leadTimeMinHours, summary.leadTimeMaxHours), "预计 48-72 小时");
 });
 
@@ -41,7 +41,7 @@ test("formats invalid numeric inputs without throwing", () => {
   assert.equal(formatBytes(null), "0 B");
   assert.equal(formatBytes(undefined), "0 B");
   assert.equal(formatBytes(Number.NaN), "0 B");
-  assert.equal(formatPriceRange(null, undefined), "-");
+  assert.equal(formatPrice(null), "-");
   assert.equal(formatLeadTimeRange(null, undefined), "-");
 
   const summary = estimateOrderSummary([{ estimate: null }, { estimate: {} }], "西安本地跑腿");

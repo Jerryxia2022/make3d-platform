@@ -12,7 +12,7 @@ import {
   formatDimensions,
   formatLeadTimeRange,
   formatOptionSummary,
-  formatPriceRange,
+  formatPrice,
   safeFileSize,
   type QuoteDimensions,
   type SelectedQuoteFile,
@@ -214,7 +214,7 @@ export function QuoteForm() {
                         {formatBytes(item.file.size)} · {getFileType(item.file.name)}
                       </p>
                       <p className="mt-2 text-sm font-semibold text-ink">
-                        预估价格区间：{formatPriceRange(estimate.priceMin, estimate.priceMax)}
+                        预估价格：{formatPrice(estimate.priceMax)}
                       </p>
                       <p className="mt-1 text-sm text-graphite">
                         预估工期：
@@ -366,7 +366,7 @@ export function QuoteForm() {
           <SummaryItem label="运费" value={orderSummary.shippingFeeEstimate} />
           <SummaryItem
             label="预估总价"
-            value={formatPriceRange(orderSummary.priceMin, orderSummary.priceMax)}
+            value={formatPrice(orderSummary.priceMax)}
           />
           <SummaryItem
             label="预估总货期"

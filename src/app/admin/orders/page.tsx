@@ -68,8 +68,8 @@ export default async function AdminOrdersPage() {
                   <td className="px-4 py-3">{order.wechat}</td>
                   <td className="px-4 py-3">{order.material}</td>
                   <td className="px-4 py-3">{order.quantity}</td>
-                  <td className="px-4 py-3">{formatPriceRange(order)}</td>
-                  <td className="px-4 py-3">{formatLeadTimeRange(order)}</td>
+                  <td className="px-4 py-3">{formatPrice(order)}</td>
+                  <td className="px-4 py-3">{formatLeadTime(order)}</td>
                   <td className="px-4 py-3">{order.shippingMethod || "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
                 </tr>
@@ -93,18 +93,15 @@ function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
 }
 
-function formatPriceRange(order: OrderRecord) {
-  if (order.estimatedPriceMin == null || order.estimatedPriceMax == null) {
-    return order.estimatedPrice ? `¥${order.estimatedPrice.toFixed(2)}` : "-";
-  }
-
-  return `¥${order.estimatedPriceMin.toFixed(2)} - ¥${order.estimatedPriceMax.toFixed(2)}`;
+function formatPrice(order: OrderRecord) {
+  const price = order.estimatedPrice || order.estimatedPriceMax;
+  return price ? `¥${price.toFixed(2)}` : "-";
 }
 
-function formatLeadTimeRange(order: OrderRecord) {
-  if (order.estimatedLeadTimeMinHours == null || order.estimatedLeadTimeMaxHours == null) {
+function formatLeadTime(order: OrderRecord) {
+  if (order.estimatedLeadTimeMaxHours == null) {
     return "-";
   }
 
-  return `${order.estimatedLeadTimeMinHours}-${order.estimatedLeadTimeMaxHours} 小时`;
+  return `约${order.estimatedLeadTimeMaxHours}小时`;
 }

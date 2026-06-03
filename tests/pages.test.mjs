@@ -70,7 +70,8 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /{formatDimensions\(dimensions\)}/);
   assert.match(estimateSource, /模型最大外形尺寸约：/);
   assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准。/);
-  assert.match(formSource, /预估价格区间/);
+  assert.match(formSource, /预估价格/);
+  assert.doesNotMatch(formSource, /预估价格区间/);
   assert.match(formSource, /预估工期/);
   assert.match(formSource, /如需加急，请在备注中说明，加急可能产生额外费用。/);
   assert.match(formSource, /预估总价/);
@@ -99,12 +100,11 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   const listSource = await readSource("src/app/admin/orders/page.tsx");
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
 
-  assert.match(listSource, /formatPriceRange\(order\)/);
-  assert.match(listSource, /formatLeadTimeRange\(order\)/);
+  assert.match(listSource, /formatPrice\(order\)/);
+  assert.match(listSource, /formatLeadTime\(order\)/);
   assert.match(listSource, /order\.shippingMethod/);
-  assert.match(detailSource, /estimatedPriceMin/);
   assert.match(detailSource, /estimatedPriceMax/);
-  assert.match(detailSource, /estimatedLeadTimeMinHours/);
+  assert.match(detailSource, /estimatedPriceMax/);
   assert.match(detailSource, /estimatedLeadTimeMaxHours/);
   assert.match(detailSource, /packagingFee/);
   assert.match(detailSource, /shippingFee/);
@@ -139,8 +139,8 @@ test("admin order detail page shows complete order fields and per-file V2 estima
   assert.match(detailSource, /file\.material/);
   assert.match(detailSource, /file\.color/);
   assert.match(detailSource, /file\.boundingBoxX/);
-  assert.match(detailSource, /file\.estimatedPriceMin/);
-  assert.match(detailSource, /file\.estimatedLeadTimeMinHours/);
+  assert.match(detailSource, /file\.estimatedPriceMax/);
+  assert.match(detailSource, /file\.estimatedLeadTimeMaxHours/);
   assert.match(detailSource, /file\.riskNotice/);
   assert.match(detailSource, /file\.filesize/);
   assert.match(detailSource, /\/api\/admin\/files\/\$\{file\.id\}\/download/);

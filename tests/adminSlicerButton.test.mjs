@@ -22,6 +22,9 @@ test("admin slicer test button triggers API and renders all result states", asyn
   assert.match(source, /自动计算价格/);
   assert.match(source, /材料费/);
   assert.match(source, /工时费/);
+  assert.match(source, /包装费/);
+  assert.match(source, /预计交货期/);
+  assert.match(source, /estimated_lead_time_hours/);
   assert.match(source, /使用材料/);
   assert.match(source, /0\.4喷嘴 \/ 0\.2层高 \/ 50%填充/);
   assert.match(source, /disabled={!enabled \|\| isRunning}/);
@@ -38,6 +41,8 @@ test("admin order detail page wires slicer test button without breaking detail a
   assert.match(source, /最近一次切片记录/);
   assert.match(source, /formatSlicePrintTime/);
   assert.match(source, /formatSliceMoney/);
+  assert.match(source, /formatSliceLeadTime/);
+  assert.match(source, /getSlicePackagingFee/);
   assert.match(source, /原始解析字段/);
   assert.match(source, /rawFilamentUsedMm/);
   assert.match(source, /rawFilamentUsedCm3/);
@@ -71,7 +76,9 @@ test("admin slicer test API checks auth, disabled state, profile missing, and un
   assert.match(source, /print_time_seconds/);
   assert.match(source, /material_fee/);
   assert.match(source, /time_fee/);
+  assert.match(source, /packaging_fee/);
   assert.match(source, /estimated_price/);
+  assert.match(source, /estimated_lead_time_hours/);
   assert.match(source, /raw_filament_used_mm/);
   assert.match(source, /raw_filament_used_cm3/);
   assert.match(source, /raw_filament_used_g/);
