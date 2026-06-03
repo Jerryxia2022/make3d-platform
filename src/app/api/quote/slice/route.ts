@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { NextResponse } from "next/server";
 import { calculateAutoFilePrice } from "@/backend/autoPricing";
+import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
 import { getPrusaSlicerConfig, runPrusaSlicer } from "@/backend/slicer";
 import { saveUploadFile } from "@/backend/uploads";
 
@@ -34,6 +35,10 @@ type QuoteSliceResponse = {
 
 export async function POST(request: Request) {
   try {
+    if (!getCustomerFromRequestCookie(request)) {
+      return jsonResponse({ success: false, message: "请先登录后使用在线报价功能。", error: "Unauthorized" }, 401);
+    }
+
     const formData = await request.formData();
     const file = formData.get("modelFile");
     const material = getString(formData, "material") || "PLA";

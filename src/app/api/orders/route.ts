@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import {
   createOrderWithFiles,
   createSliceJob,
+  getCustomerById,
   getOrderById,
   openDatabase,
   updateSliceJobSuccess,
 } from "@/backend/database";
+import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
 import { calculateAutoLeadTimeHours } from "@/backend/autoPricing";
 import { estimateFileBySize, estimateOrderSummary, getShippingEstimate } from "@/backend/estimates";
 import { notifyAdminNewOrder } from "@/backend/email";
@@ -28,6 +30,12 @@ const requiredFields = [
 
 export async function POST(request: Request) {
   try {
+    const customer = getCustomerFromRequest(request);
+
+    if (!customer) {
+      return NextResponse.json({ error: "请先登录后提交订单" }, { status: 401 });
+    }
+
     const rateLimit = consumeUploadRateLimit(getClientIp(request));
 
     if (!rateLimit.allowed) {
@@ -168,7 +176,14 @@ export async function POST(request: Request) {
     const db = openDatabase();
 
     try {
+      const persistedCustomer = getCustomerById(db, customer.id);
+
+      if (!persistedCustomer) {
+        return NextResponse.json({ error: "请先登录后提交订单" }, { status: 401 });
+      }
+
       const orderInput = {
+        customerId: customer.id,
         customerName: getString(formData, "customerName"),
         phone: getString(formData, "phone"),
         wechat: getString(formData, "wechat"),
@@ -248,6 +263,11 @@ export async function POST(request: Request) {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getCustomerFromRequest(request: Request) {
+  const session = getCustomerFromRequestCookie(request);
+  return session ? { id: session.customerId } : null;
 }
 
 function getNumberList(formData: FormData, key: string) {

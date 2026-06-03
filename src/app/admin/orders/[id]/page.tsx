@@ -52,6 +52,8 @@ export default async function AdminOrderDetailPage({
               <dl className="mt-5 grid gap-4 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
                 <Detail label="订单ID" value={String(order.id)} />
+                <Detail label="会员订单" value={order.customerId ? "是" : "否"} />
+                <Detail label="客户历史订单数" value={String(order.customerOrderCount)} />
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
                 <Detail label="预估价格" value={formatPrice(order)} />
                 <Detail label="预估货期" value={formatLeadTime(order)} />

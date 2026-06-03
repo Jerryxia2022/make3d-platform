@@ -14,14 +14,49 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
   assert.match(source, /ContactSection/);
 });
 
+test("customer MVP pages and logout route exist", async () => {
+  const accountSource = await readSource("src/app/account/page.tsx");
+  const logoutSource = await readSource("src/app/account/logout/route.ts");
+  const forgotSource = await readSource("src/app/account/forgot-password/page.tsx");
+
+  assert.match(accountSource, /getCurrentCustomer/);
+  assert.match(accountSource, /\/account\/logout/);
+  assert.match(logoutSource, /CUSTOMER_SESSION_COOKIE/);
+  assert.match(logoutSource, /Max-Age=0/);
+  assert.match(forgotSource, /name="email"/);
+  assert.match(forgotSource, /IfAccountExistsMessage/);
+});
+
 test("quote page shows FDM guidance instead of pricing explanation", async () => {
   const source = await readSource("src/app/quote/page.tsx");
+
+  assert.match(source, /getCurrentCustomer/);
+  assert.match(source, /href="\/account\/login"/);
+  assert.match(source, /href="\/account\/register"/);
+  assert.match(source, /QuoteLoginPrompt/);
 
   assert.match(source, /FDM 是通过热熔材料逐层堆叠成型的3D打印工艺/);
   assert.match(source, /默认按 0\.4mm 喷嘴、0\.2mm 层高、50% 填充进行预估/);
   assert.match(source, /如需特殊层高、强度、表面效果、支撑方式、分件打印等/);
   assert.doesNotMatch(source, /价格和计费说明/);
   assert.doesNotMatch(source, /材料费/);
+});
+
+test("account pages expose registration, login, forgot password, and reset password forms", async () => {
+  const registerSource = await readSource("src/app/account/register/page.tsx");
+  const loginSource = await readSource("src/app/account/login/page.tsx");
+  const forgotSource = await readSource("src/app/account/forgot-password/page.tsx");
+
+  assert.match(registerSource, /name="phone"/);
+  assert.match(registerSource, /name="password"/);
+  assert.match(registerSource, /minLength=\{8\}/);
+  assert.match(registerSource, /name="name"/);
+  assert.match(registerSource, /name="wechat"/);
+  assert.match(registerSource, /name="email"/);
+  assert.doesNotMatch(registerSource, /name="defaultAddress"/);
+  assert.match(registerSource, /微信很重要/);
+  assert.match(loginSource, /\/api\/account\/login/);
+  assert.match(forgotSource, /\/api\/account\/forgot-password/);
 });
 
 test("quote form exposes merged contact and shipping fields with customer validation", async () => {
@@ -225,6 +260,9 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   const apiSource = await readSource("src/app/api/orders/route.ts");
 
   assert.match(apiSource, /MAX_FILE_COUNT = 5/);
+  assert.match(apiSource, /getCustomerFromRequest/);
+  assert.match(apiSource, /请先登录后提交订单/);
+  assert.match(apiSource, /customerId: customer\.id/);
   assert.match(apiSource, /formData\.getAll\("modelFiles"\)/);
   assert.match(apiSource, /formData\.getAll\("fileMaterials"\)/);
   assert.match(apiSource, /formData\.getAll\("fileColors"\)/);
@@ -253,6 +291,16 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /updateSliceJobSuccess/);
   assert.match(apiSource, /calculateAutoLeadTimeHours/);
   assert.doesNotMatch(apiSource, /company: getString\(formData, "company"\)/);
+});
+
+test("customer APIs require login before quote slicing and order submission", async () => {
+  const sliceSource = await readSource("src/app/api/quote/slice/route.ts");
+  const orderSource = await readSource("src/app/api/orders/route.ts");
+
+  assert.match(sliceSource, /getCustomerFromRequestCookie/);
+  assert.match(sliceSource, /status\), 401\)|}, 401\)/);
+  assert.match(orderSource, /getCustomerFromRequest/);
+  assert.match(orderSource, /status: 401/);
 });
 
 test("success page and contact information section remain available", async () => {

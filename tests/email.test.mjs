@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildPasswordResetEmail,
   buildNewOrderEmail,
   notifyAdminNewOrder,
 } from "../src/backend/email.ts";
@@ -42,6 +43,17 @@ test("builds new order notification email with total price and lead time", () =>
 
   assert.match(email.text, /248\.08/);
   assert.match(email.text, /45/);
+});
+
+test("builds password reset email with 30 minute reset link", () => {
+  const email = buildPasswordResetEmail("jerry@example.com", "https://make3d.com.cn/account/reset-password?token=abc");
+
+  assert.equal(email.subject, "Make3D 密码重置");
+  assert.equal(email.to, "jerry@example.com");
+  assert.match(email.text, /您正在重置 Make3D 账号密码。/);
+  assert.match(email.text, /请在30分钟内点击链接完成重置。/);
+  assert.match(email.text, /如果不是本人操作，请忽略此邮件。/);
+  assert.match(email.text, /token=abc/);
 });
 
 test("uses production app URL for default email order detail link", () => {

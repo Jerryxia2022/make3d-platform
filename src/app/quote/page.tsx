@@ -1,9 +1,13 @@
 import { QuoteForm } from "@/frontend/components/QuoteForm";
 import { ContactSection } from "@/frontend/components/ContactSection";
+import { getCurrentCustomer } from "@/backend/nextCustomer";
+import Link from "next/link";
 
 const supportedFormats = ["STL", "3MF", "STEP", "STP"];
 
-export default function QuotePage() {
+export default async function QuotePage() {
+  const customer = await getCurrentCustomer();
+
   return (
     <main className="min-h-screen px-6 py-8 text-ink">
       <section className="mx-auto grid w-full max-w-6xl gap-8 py-8 lg:grid-cols-[0.9fr_1.1fr]">
@@ -39,9 +43,28 @@ export default function QuotePage() {
           </div>
         </div>
 
-        <QuoteForm />
+        {customer ? <QuoteForm /> : <QuoteLoginPrompt />}
       </section>
       <ContactSection />
     </main>
+  );
+}
+
+function QuoteLoginPrompt() {
+  return (
+    <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+      <h2 className="text-2xl font-bold">请先登录后使用在线报价功能。</h2>
+      <p className="mt-3 text-graphite">
+        登录后可以上传模型、自动切片报价并提交订单。
+      </p>
+      <div className="mt-6 flex gap-3">
+        <Link className="bg-ink px-5 py-3 font-semibold text-white" href="/account/login">
+          登录
+        </Link>
+        <Link className="border border-ink/20 px-5 py-3 font-semibold text-ink" href="/account/register">
+          注册
+        </Link>
+      </div>
+    </section>
   );
 }

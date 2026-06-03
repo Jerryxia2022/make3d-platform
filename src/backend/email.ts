@@ -53,6 +53,38 @@ export function buildNewOrderEmail(order: NewOrderEmailOrder, appUrl = getAppUrl
   };
 }
 
+export function buildPasswordResetEmail(to: string, resetUrl: string): MailMessage {
+  return {
+    from: process.env.SMTP_USER || "",
+    to,
+    subject: "Make3D 密码重置",
+    text: [
+      "您正在重置 Make3D 账号密码。",
+      "请在30分钟内点击链接完成重置。",
+      resetUrl,
+      "如果不是本人操作，请忽略此邮件。",
+    ].join("\n"),
+  };
+}
+
+export async function sendPasswordResetEmail(
+  to: string,
+  resetUrl: string,
+  transport = createSmtpTransport(),
+) {
+  if (!hasSmtpConfig()) {
+    return { sent: false, skipped: true };
+  }
+
+  try {
+    await transport.sendMail(buildPasswordResetEmail(to, resetUrl));
+    return { sent: true };
+  } catch (error) {
+    const normalizedError = error instanceof Error ? error : new Error("邮件发送失败");
+    return { sent: false, error: normalizedError };
+  }
+}
+
 function formatMoney(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)} 元` : "-";
 }

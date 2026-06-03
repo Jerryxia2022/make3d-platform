@@ -1,8 +1,10 @@
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 export type OrderInput = {
+  customerId?: number | null;
   customerName: string;
   phone: string;
   wechat: string;
@@ -69,6 +71,26 @@ export type CreatedOrder = {
   orderNo: string;
 };
 
+export type CustomerAccountInput = {
+  phone: string;
+  password: string;
+  name: string;
+  wechat: string;
+  email?: string;
+  defaultAddress?: string;
+};
+
+export type CustomerRecord = {
+  id: number;
+  phone: string;
+  passwordHash: string;
+  name: string;
+  wechat: string;
+  email: string | null;
+  defaultAddress: string | null;
+  createdAt: string;
+};
+
 export const ORDER_STATUSES = ["待处理", "已报价", "生产中", "已完成", "已取消"] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -105,6 +127,7 @@ export type OrderFileRecord = {
 export type OrderRecord = {
   id: number;
   orderNo: string;
+  customerId: number | null;
   customerName: string;
   phone: string;
   wechat: string;
@@ -137,6 +160,7 @@ export type OrderRecord = {
 
 export type OrderDetail = OrderRecord & {
   files: OrderFileRecord[];
+  customerOrderCount: number;
 };
 
 export type SliceJobStatus = "queued" | "processing" | "success" | "failed";
@@ -204,6 +228,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_no TEXT NOT NULL UNIQUE,
+      customer_id INTEGER,
       customer_name TEXT NOT NULL,
       phone TEXT NOT NULL,
       wechat TEXT NOT NULL,
@@ -231,7 +256,29 @@ export function initDatabase(dbPath = getDatabasePath()) {
       payable_price REAL,
       estimated_lead_time_hours INTEGER,
       status TEXT NOT NULL DEFAULT '待处理',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      name TEXT NOT NULL,
+      wechat TEXT NOT NULL,
+      email TEXT,
+      default_address TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS files (
@@ -294,6 +341,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     );
   `);
   ensureColumns(db, "orders", [
+    ["customer_id", "INTEGER"],
     ["estimated_price_min", "REAL"],
     ["estimated_price_max", "REAL"],
     ["estimated_lead_time_min_hours", "INTEGER"],
@@ -379,6 +427,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
       .prepare(
         `INSERT INTO orders (
           order_no,
+          customer_id,
           customer_name,
           phone,
           wechat,
@@ -406,10 +455,11 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           payable_price,
           estimated_lead_time_hours,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
+        input.customerId ?? null,
         input.customerName,
         input.phone,
         input.wechat,
@@ -564,8 +614,15 @@ export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
     )
     .all(id)
     .map(normalizeFileRecord) as OrderFileRecord[];
+  const customerOrderCount = order.customerId
+    ? Number(
+        (db
+          .prepare("SELECT COUNT(*) AS count FROM orders WHERE customer_id = ?")
+          .get(order.customerId) as { count: number }).count,
+      )
+    : 0;
 
-  return { ...order, files };
+  return { ...order, files, customerOrderCount };
 }
 
 export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
@@ -617,6 +674,146 @@ export function updateOrderStatus(db: DatabaseSync, id: number, status: string) 
 
   const result = db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
   return result.changes > 0;
+}
+
+export function createCustomerAccount(db: DatabaseSync, input: CustomerAccountInput) {
+  if (!/^1[3-9]\d{9}$/.test(input.phone)) {
+    throw new Error("手机号格式不正确");
+  }
+
+  if (input.password.length < 8) {
+    throw new Error("密码至少8位");
+  }
+
+  const result = db
+    .prepare(
+      `INSERT INTO customers (
+        phone,
+        password_hash,
+        name,
+        wechat,
+        email,
+        default_address
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.phone,
+      hashPassword(input.password),
+      input.name,
+      input.wechat,
+      input.email || null,
+      input.defaultAddress || null,
+    );
+
+  return { id: Number(result.lastInsertRowid), phone: input.phone };
+}
+
+export function findCustomerByLogin(db: DatabaseSync, login: string) {
+  const normalized = login.trim();
+  const customer = db
+    .prepare(customerSelectSql("WHERE phone = ? OR email = ? LIMIT 1"))
+    .get(normalized, normalized);
+
+  return customer ? normalizeCustomer(customer) : null;
+}
+
+export function getCustomerById(db: DatabaseSync, id: number) {
+  const customer = db.prepare(customerSelectSql("WHERE id = ? LIMIT 1")).get(id);
+  return customer ? normalizeCustomer(customer) : null;
+}
+
+export function getCustomerBySessionToken(db: DatabaseSync, token?: string) {
+  const session = verifyCustomerSessionTokenForDatabase(token);
+  return session ? getCustomerById(db, session.customerId) : null;
+}
+
+export function createPasswordResetToken(db: DatabaseSync, customerId: number, now = Date.now()) {
+  const recentCount = Number(
+    (db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM password_reset_tokens
+         WHERE customer_id = ? AND created_at >= ?`,
+      )
+      .get(customerId, now - 10 * 60 * 1000) as { count: number }).count,
+  );
+
+  if (recentCount >= 3) {
+    throw new Error("10分钟内最多请求3次重置邮件");
+  }
+
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashResetToken(token);
+  db.prepare(
+    `INSERT INTO password_reset_tokens (
+      customer_id,
+      token_hash,
+      expires_at,
+      created_at
+    ) VALUES (?, ?, ?, ?)`,
+  ).run(customerId, tokenHash, now + 30 * 60 * 1000, now);
+
+  return { token, tokenHash };
+}
+
+export function verifyPasswordResetToken(db: DatabaseSync, token: string, now = Date.now()) {
+  const record = db
+    .prepare(
+      `SELECT id, customer_id AS customerId
+       FROM password_reset_tokens
+       WHERE token_hash = ? AND used_at IS NULL AND expires_at >= ?
+       LIMIT 1`,
+    )
+    .get(hashResetToken(token), now) as { id: number; customerId: number } | undefined;
+
+  return record || null;
+}
+
+export function consumePasswordResetToken(
+  db: DatabaseSync,
+  token: string,
+  newPassword: string,
+  now = Date.now(),
+) {
+  if (newPassword.length < 8) {
+    throw new Error("密码至少8位");
+  }
+
+  const record = verifyPasswordResetToken(db, token, now);
+
+  if (!record) {
+    return false;
+  }
+
+  const passwordHash = hashPassword(newPassword);
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE customers SET password_hash = ? WHERE id = ?").run(passwordHash, record.customerId);
+    db.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE customer_id = ?").run(now, record.customerId);
+    db.exec("COMMIT");
+    return true;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("base64url");
+  return `scrypt.${salt}.${hash}`;
+}
+
+export function verifyPassword(password: string, passwordHash: string) {
+  const [, salt, hash] = passwordHash.split(".");
+
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const expected = Buffer.from(hash);
+  const actual = Buffer.from(scryptSync(password, salt, 64).toString("base64url"));
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 export function createSliceJob(db: DatabaseSync, input: SliceJobInput) {
@@ -721,6 +918,7 @@ function orderSelectSql(suffix: string) {
   return `SELECT
     id,
     order_no AS orderNo,
+    customer_id AS customerId,
     customer_name AS customerName,
     phone,
     wechat,
@@ -780,6 +978,65 @@ function sliceJobSelectSql(suffix: string) {
     updated_at AS updatedAt
   FROM slice_jobs
   ${suffix}`;
+}
+
+function customerSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    phone,
+    password_hash AS passwordHash,
+    name,
+    wechat,
+    email,
+    default_address AS defaultAddress,
+    created_at AS createdAt
+  FROM customers
+  ${suffix}`;
+}
+
+function normalizeCustomer(customer: unknown) {
+  return customer as CustomerRecord;
+}
+
+function hashResetToken(token: string) {
+  return createHash("sha256").update(token).digest("base64url");
+}
+
+function verifyCustomerSessionTokenForDatabase(token?: string, now = Date.now()) {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split(".");
+
+  if (parts.length !== 4) {
+    return null;
+  }
+
+  const [customerIdText, expiresAtText, nonce, signature] = parts;
+  const customerId = Number(customerIdText);
+  const expiresAt = Number(expiresAtText);
+
+  if (!Number.isInteger(customerId) || customerId <= 0 || !Number.isFinite(expiresAt) || expiresAt < now || !nonce || !signature) {
+    return null;
+  }
+
+  const secret = process.env.SESSION_SECRET;
+
+  if (!secret) {
+    return null;
+  }
+
+  const payload = `${customerIdText}.${expiresAtText}.${nonce}`;
+  const expectedSignature = createHmac("sha256", secret).update(payload).digest("base64url");
+  return safeStringEqual(signature, expectedSignature) ? { customerId } : null;
+}
+
+function safeStringEqual(a: string, b: string) {
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+
+  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
 function normalizeFileRecord(file: unknown) {
