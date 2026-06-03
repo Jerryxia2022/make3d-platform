@@ -116,6 +116,26 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /PrusaSlicer/);
 });
 
+test("quote form handles failed auto quote API responses without staying calculating", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+
+  assert.match(formSource, /sliceQuotesRef/);
+  assert.match(formSource, /sliceQuotesRef\.current = sliceQuotes/);
+  assert.match(formSource, /\}, \[files, sliceRequestKey\]\)/);
+  assert.doesNotMatch(formSource, /\}, \[files, sliceQuotes, sliceRequestKey\]\)/);
+  assert.match(formSource, /const quoteResult = result\.result/);
+  assert.match(formSource, /if \(!response\.ok \|\| !result\.success \|\| !quoteResult\)/);
+  assert.match(formSource, /console\.error\("Auto quote API failed"/);
+  assert.match(formSource, /status: "failed"/);
+  assert.match(formSource, /phase: "计算失败，需人工确认"/);
+  assert.match(formSource, /message: getSliceFailureReason\(result\)/);
+  assert.match(formSource, /PrusaSlicer未启用/);
+  assert.match(formSource, /本地未安装PrusaSlicer/);
+  assert.match(formSource, /文件未保存成功/);
+  assert.match(formSource, /文件格式暂不支持/);
+  assert.match(formSource, /部分文件需人工确认/);
+});
+
 test("admin pages display contact fields from the matching order properties", async () => {
   const listSource = await readSource("src/app/admin/orders/page.tsx");
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");

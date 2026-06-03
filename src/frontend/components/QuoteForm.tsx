@@ -59,6 +59,7 @@ export function QuoteForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<SelectedModelFile[]>([]);
   const [sliceQuotes, setSliceQuotes] = useState<Record<string, SliceQuoteState>>({});
+  const sliceQuotesRef = useRef<Record<string, SliceQuoteState>>({});
   const [shippingMethod, setShippingMethod] = useState("普通快递");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,10 +76,22 @@ export function QuoteForm() {
       }),
     [files, sliceQuotes],
   );
+  const hasManualQuotes = useMemo(
+    () =>
+      files.some((file) => {
+        const quote = getVisibleSliceQuote(file, sliceQuotes[file.id]);
+        return quote.status === "manual" || quote.status === "failed";
+      }),
+    [files, sliceQuotes],
+  );
   const sliceRequestKey = useMemo(
     () => files.map((file) => `${file.id}:${file.material}`).join("|"),
     [files],
   );
+
+  useEffect(() => {
+    sliceQuotesRef.current = sliceQuotes;
+  }, [sliceQuotes]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -128,7 +141,7 @@ export function QuoteForm() {
 
     async function runPendingSlices() {
       for (const item of files) {
-        const current = sliceQuotes[item.id];
+        const current = sliceQuotesRef.current[item.id];
 
         if (!isStlFile(item.file.name)) {
           if (!current || current.status !== "manual") {
@@ -184,13 +197,20 @@ export function QuoteForm() {
             method: "POST",
             body: formData,
           });
-          const result = await response.json();
+          const result = await readSliceQuoteResponse(response);
 
           if (cancelled) {
             return;
           }
 
-          if (!response.ok || !result.success || !result.result) {
+          const quoteResult = result.result;
+
+          if (!response.ok || !result.success || !quoteResult) {
+            console.error("Auto quote API failed", {
+              file: item.file.name,
+              status: response.status,
+              result,
+            });
             setSliceQuotes((quotes) => ({
               ...quotes,
               [item.id]: {
@@ -217,21 +237,27 @@ export function QuoteForm() {
               progress: 100,
               phase: "报价完成",
               elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
-              result: normalizeSliceQuoteResult(result.result),
+              result: normalizeSliceQuoteResult(quoteResult),
             },
           }));
-        } catch {
+        } catch (error) {
           if (cancelled) {
             return;
           }
 
+          console.error("Auto quote API failed", {
+            file: item.file.name,
+            error,
+          });
           setSliceQuotes((quotes) => ({
             ...quotes,
             [item.id]: {
               ...(quotes[item.id] || createUploadedQuoteState(item.material)),
               status: "failed",
               material: item.material,
-              message: "需人工确认",
+              message: getSliceFailureReason({
+                error: error instanceof Error ? error.message : "Unknown auto quote error",
+              }),
               phase: "计算失败，需人工确认",
               progress: 100,
             },
@@ -245,7 +271,7 @@ export function QuoteForm() {
     return () => {
       cancelled = true;
     };
-  }, [files, sliceQuotes, sliceRequestKey]);
+  }, [files, sliceRequestKey]);
 
   function addFiles(nextFiles: FileList | File[]) {
     setError("");
@@ -606,6 +632,11 @@ export function QuoteForm() {
             部分文件仍在计算，报价完成后将自动更新总价。
           </p>
         ) : null}
+        {!hasPendingQuotes && hasManualQuotes ? (
+          <p className="mt-3 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+            部分文件需人工确认
+          </p>
+        ) : null}
         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           <SummaryItem label="文件数量" value={`${files.length} 个`} />
           <SummaryItem label="打印费合计" value={formatMoney(orderSummary.printFeeTotal)} />
@@ -901,6 +932,19 @@ function appendSliceQuoteFormData(formData: FormData, quote: SliceQuoteState | u
   formData.append("fileTimeFee", formatNullableNumber(result?.timeFee));
 }
 
+async function readSliceQuoteResponse(response: Response) {
+  try {
+    return await response.json() as { success?: boolean; message?: string; error?: string; result?: Record<string, unknown> };
+  } catch (error) {
+    console.error("Auto quote API response JSON parse failed", error);
+    return {
+      success: false,
+      message: "计算失败，需人工确认",
+      error: `HTTP ${response.status}`,
+    };
+  }
+}
+
 function normalizeSliceQuoteResult(value: Record<string, unknown>): SliceQuoteResult {
   return {
     filamentWeightG: readNumber(value.filament_weight_g),
@@ -968,19 +1012,35 @@ function getSliceFailureReason(result: { message?: string; error?: string }) {
     return "切片超时";
   }
 
-  if (/Only STL|format|格式|unsupported/i.test(text)) {
-    return "文件格式不支持";
+  if (/disabled|未启用/i.test(text)) {
+    return "PrusaSlicer未启用";
+  }
+
+  if (/not found|not installed|ENOENT|spawn|command not found|未安装/i.test(text)) {
+    return "本地未安装PrusaSlicer";
   }
 
   if (/profile|配置/i.test(text)) {
     return "切片配置缺失";
   }
 
+  if (/save|upload|write|保存/i.test(text)) {
+    return "文件未保存成功";
+  }
+
+  if (/Only STL|format|格式|unsupported|support automatic slicing/i.test(text)) {
+    return "文件格式暂不支持";
+  }
+
   if (/busy|繁忙|queue/i.test(text)) {
     return "服务器繁忙";
   }
 
-  return result.message || "需人工确认";
+  if (result.message && result.message !== "计算失败，需人工确认") {
+    return result.message;
+  }
+
+  return "需人工确认";
 }
 
 function formatPrintTime(seconds: number) {
