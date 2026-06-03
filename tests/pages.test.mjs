@@ -67,6 +67,7 @@ test("quote page shows FDM guidance instead of pricing explanation", async () =>
 test("account pages expose registration, login, forgot password, and reset password forms", async () => {
   const registerSource = await readSource("src/app/account/register/page.tsx");
   const loginSource = await readSource("src/app/account/login/page.tsx");
+  const loginFormSource = await readSource("src/frontend/components/CustomerLoginForm.tsx");
   const forgotSource = await readSource("src/app/account/forgot-password/page.tsx");
 
   assert.match(registerSource, /name="phone"/);
@@ -77,7 +78,8 @@ test("account pages expose registration, login, forgot password, and reset passw
   assert.match(registerSource, /name="email"/);
   assert.doesNotMatch(registerSource, /name="defaultAddress"/);
   assert.match(registerSource, /微信很重要/);
-  assert.match(loginSource, /\/api\/account\/login/);
+  assert.match(loginSource, /CustomerLoginForm/);
+  assert.match(loginFormSource, /\/api\/account\/login/);
   assert.match(forgotSource, /\/api\/account\/forgot-password/);
 });
 

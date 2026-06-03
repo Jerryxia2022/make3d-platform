@@ -281,6 +281,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS auth_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      identifier_type TEXT NOT NULL,
+      identifier TEXT NOT NULL,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      block_stage INTEGER NOT NULL DEFAULT 0,
+      blocked_until INTEGER,
+      permanently_blocked INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(identifier_type, identifier),
+      CHECK (identifier_type IN ('phone', 'ip'))
+    );
+
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
