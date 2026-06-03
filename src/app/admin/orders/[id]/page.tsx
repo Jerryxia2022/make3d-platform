@@ -201,12 +201,16 @@ function SliceJobResult({ job }: { job: SliceJobRecord | null }) {
       </dl>
       <div className="mt-5 border-t border-ink/10 pt-4">
         <h4 className="text-sm font-bold">原始解析字段</h4>
+        {isVolumeDerivedWeight(job) ? (
+          <p className="mt-3 text-sm font-semibold text-coral">克重由体积和材料密度换算</p>
+        ) : null}
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <Detail label="长度mm" value={formatOptionalNumber(job.rawFilamentUsedMm)} />
-          <Detail label="体积cm3" value={formatOptionalNumber(job.rawFilamentUsedCm3)} />
+          <Detail label="原始cm3" value={formatOptionalNumber(job.rawFilamentUsedCm3)} />
           <Detail label="重量g" value={formatOptionalNumber(job.rawFilamentUsedG)} />
           <Detail label="重量来源" value={job.filamentWeightSource || "-"} />
-          <Detail label="材料密度" value={formatOptionalNumber(job.materialDensity)} />
+          <Detail label="使用密度" value={formatOptionalNumber(job.materialDensity)} />
+          <Detail label="换算重量" value={formatWeight(job.filamentWeightG)} />
         </dl>
       </div>
     </div>
@@ -271,6 +275,10 @@ function formatSliceMoney(value: number | null) {
 
 function formatOptionalNumber(value: number | null) {
   return value == null ? "-" : String(value);
+}
+
+function isVolumeDerivedWeight(job: SliceJobRecord) {
+  return job.filamentWeightSource === "cm3" && job.rawFilamentUsedCm3 != null;
 }
 
 function formatSlicePrintTime(value: number | null) {
