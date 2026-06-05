@@ -1,6 +1,7 @@
 import type { InputHTMLAttributes } from "react";
 import Link from "next/link";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
+import { mainlandPhoneErrorMessage, mainlandPhoneHtmlPattern } from "@/shared/phoneValidation";
 
 export default function RegisterPage() {
   return (
@@ -12,10 +13,13 @@ export default function RegisterPage() {
         <form action="/api/account/register" className="mt-6 space-y-4" method="post">
           <Field
             helpText="请输入 11 位中国大陆手机号。"
+            inputMode="numeric"
             label="手机号"
+            maxLength={11}
             name="phone"
-            pattern="1[3-9]\d{9}"
+            pattern={mainlandPhoneHtmlPattern}
             required
+            title={mainlandPhoneErrorMessage}
             type="tel"
           />
           <Field helpText="至少 8 位。" label="密码" minLength={8} name="password" required type="password" />

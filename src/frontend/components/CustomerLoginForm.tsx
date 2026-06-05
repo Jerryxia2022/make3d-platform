@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  isValidMainlandPhone,
+  mainlandPhoneErrorMessage,
+  mainlandPhoneHtmlPattern,
+} from "@/shared/phoneValidation";
+
 type LoginResponse = {
   success?: boolean;
   redirect?: string;
@@ -46,13 +52,21 @@ export function CustomerLoginForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trimmedPhone = phone.trim();
+
+    if (!isValidMainlandPhone(trimmedPhone)) {
+      setMessage(mainlandPhoneErrorMessage);
+      setPassword("");
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage("");
     setPermanentlyBlocked(false);
 
     try {
       const formData = new FormData();
-      formData.set("phone", phone);
+      formData.set("phone", trimmedPhone);
       formData.set("password", password);
 
       const response = await fetch("/api/account/login", {
@@ -93,7 +107,11 @@ export function CustomerLoginForm() {
           className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
           name="phone"
           onChange={(event) => setPhone(event.target.value)}
+          inputMode="numeric"
+          maxLength={11}
+          pattern={mainlandPhoneHtmlPattern}
           required
+          title={mainlandPhoneErrorMessage}
           type="tel"
           value={phone}
         />

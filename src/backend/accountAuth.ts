@@ -58,6 +58,18 @@ export function createCustomerLoginRedirectResponse(sessionToken: string) {
   return response;
 }
 
+export function createCustomerLogoutResponse(status = 200, location?: string) {
+  const headers = new Headers({
+    "Set-Cookie": `${CUSTOMER_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=lax`,
+  });
+
+  if (location) {
+    headers.set("Location", location);
+  }
+
+  return new Response(null, { status, headers });
+}
+
 export function getCustomerFromRequestCookie(request: Request) {
   const cookieHeader = request.headers.get("Cookie") || "";
   const token = cookieHeader

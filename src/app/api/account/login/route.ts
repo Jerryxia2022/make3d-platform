@@ -6,6 +6,7 @@ import {
   recordCustomerLoginFailure,
 } from "@/backend/customerLoginThrottle";
 import { findCustomerByLogin, openDatabase, verifyPassword } from "@/backend/database";
+import { isValidMainlandPhone, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,17 @@ export async function POST(request: Request) {
   const db = openDatabase();
 
   try {
+    if (!isValidMainlandPhone(phone)) {
+      return Response.json(
+        {
+          success: false,
+          error: mainlandPhoneErrorMessage,
+          message: mainlandPhoneErrorMessage,
+        },
+        { status: 400 },
+      );
+    }
+
     const phoneBlock = getCustomerLoginBlock(db, "phone", phone);
     const ipBlock = getCustomerLoginBlock(db, "ip", ip);
     const block = phoneBlock || ipBlock;

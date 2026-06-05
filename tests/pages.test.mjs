@@ -1,9 +1,13 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 async function readSource(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+async function assertFileExists(path) {
+  await access(new URL(`../${path}`, import.meta.url));
 }
 
 test("home page contains Make3D service entry, quote CTA, and contact section", async () => {
@@ -43,8 +47,8 @@ test("customer MVP pages and logout route exist", async () => {
 
   assert.match(accountSource, /getCurrentCustomer/);
   assert.match(accountSource, /\/account\/logout/);
-  assert.match(logoutSource, /CUSTOMER_SESSION_COOKIE/);
-  assert.match(logoutSource, /Max-Age=0/);
+  assert.match(logoutSource, /createCustomerLogoutResponse/);
+  assert.match(logoutSource, /303/);
   assert.match(forgotSource, /name="email"/);
   assert.match(forgotSource, /IfAccountExistsMessage/);
 });
@@ -71,6 +75,10 @@ test("account pages expose registration, login, forgot password, and reset passw
   const forgotSource = await readSource("src/app/account/forgot-password/page.tsx");
 
   assert.match(registerSource, /name="phone"/);
+  assert.match(registerSource, /inputMode="numeric"/);
+  assert.match(registerSource, /maxLength=\{11\}/);
+  assert.match(registerSource, /pattern={mainlandPhoneHtmlPattern}/);
+  assert.match(registerSource, /title={mainlandPhoneErrorMessage}/);
   assert.match(registerSource, /name="password"/);
   assert.match(registerSource, /minLength=\{8\}/);
   assert.match(registerSource, /name="name"/);
@@ -80,7 +88,25 @@ test("account pages expose registration, login, forgot password, and reset passw
   assert.match(registerSource, /微信很重要/);
   assert.match(loginSource, /CustomerLoginForm/);
   assert.match(loginFormSource, /\/api\/account\/login/);
+  assert.match(loginFormSource, /inputMode="numeric"/);
+  assert.match(loginFormSource, /maxLength=\{11\}/);
+  assert.match(loginFormSource, /pattern={mainlandPhoneHtmlPattern}/);
+  assert.match(loginFormSource, /title={mainlandPhoneErrorMessage}/);
   assert.match(forgotSource, /\/api\/account\/forgot-password/);
+});
+
+test("customer account page routes and APIs exist", async () => {
+  await Promise.all([
+    assertFileExists("src/app/account/register/page.tsx"),
+    assertFileExists("src/app/account/login/page.tsx"),
+    assertFileExists("src/app/account/forgot-password/page.tsx"),
+    assertFileExists("src/app/account/page.tsx"),
+    assertFileExists("src/app/api/account/register/route.ts"),
+    assertFileExists("src/app/api/account/login/route.ts"),
+    assertFileExists("src/app/api/account/logout/route.ts"),
+    assertFileExists("src/app/api/account/me/route.ts"),
+    assertFileExists("src/app/api/account/forgot-password/route.ts"),
+  ]);
 });
 
 test("quote form supports disabled guest mode and customer prefill", async () => {
@@ -226,8 +252,11 @@ test("quote form handles failed auto quote API responses without staying calcula
   assert.match(formSource, /status: "failed"/);
   assert.match(formSource, /phase: "计算失败，需人工确认"/);
   assert.match(formSource, /message: getSliceFailureReason\(result\)/);
-  assert.match(formSource, /PrusaSlicer未启用/);
-  assert.match(formSource, /本地未安装PrusaSlicer/);
+  assert.match(formSource, /请先登录后使用自动报价/);
+  assert.match(formSource, /本地未启用切片，需人工确认/);
+  assert.doesNotMatch(formSource, /PrusaSlicer未启用/);
+  assert.doesNotMatch(formSource, /本地未安装PrusaSlicer/);
+  assert.match(formSource, /计算失败，需人工确认/);
   assert.match(formSource, /文件未保存成功/);
   assert.match(formSource, /文件格式暂不支持/);
   assert.match(formSource, /部分文件需人工确认/);

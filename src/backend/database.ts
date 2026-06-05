@@ -691,7 +691,7 @@ export function updateOrderStatus(db: DatabaseSync, id: number, status: string) 
 }
 
 export function createCustomerAccount(db: DatabaseSync, input: CustomerAccountInput) {
-  if (!/^1[3-9]\d{9}$/.test(input.phone.trim())) {
+  if (!/^1[3-9][0-9]{9}$/.test(input.phone.trim())) {
     throw new Error("请填写正确的11位中国大陆手机号");
   }
 

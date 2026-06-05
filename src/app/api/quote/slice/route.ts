@@ -36,7 +36,7 @@ type QuoteSliceResponse = {
 export async function POST(request: Request) {
   try {
     if (!getCustomerFromRequestCookie(request)) {
-      return jsonResponse({ success: false, message: "请先登录后使用在线报价功能。", error: "Unauthorized" }, 401);
+      return jsonResponse({ success: false, message: "请先登录后使用自动报价", error: "Unauthorized" }, 401);
     }
 
     const formData = await request.formData();
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     if (!slicerConfig.enabled) {
       return jsonResponse({
         success: false,
-        message: "计算失败，需人工确认",
+        message: "本地未启用切片，需人工确认",
         error: "PrusaSlicer disabled",
       }, 400);
     }

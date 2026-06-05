@@ -1196,12 +1196,16 @@ function getSliceFailureReason(result: { message?: string; error?: string }) {
     return "切片超时";
   }
 
+  if (/Unauthorized|请先登录|401/i.test(text)) {
+    return "请先登录后使用自动报价";
+  }
+
   if (/disabled|未启用/i.test(text)) {
-    return "PrusaSlicer未启用";
+    return "本地未启用切片，需人工确认";
   }
 
   if (/not found|not installed|ENOENT|spawn|command not found|未安装/i.test(text)) {
-    return "本地未安装PrusaSlicer";
+    return "计算失败，需人工确认";
   }
 
   if (/profile|配置/i.test(text)) {
