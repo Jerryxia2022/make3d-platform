@@ -60,6 +60,7 @@ test("customer MVP pages and logout route exist", async () => {
 test("customer account center shows profile, order history, quote history, and owned order detail", async () => {
   const accountSource = await readSource("src/app/account/page.tsx");
   const detailSource = await readSource("src/app/account/orders/[id]/page.tsx");
+  const confirmSource = await readSource("src/app/account/orders/[id]/confirm/page.tsx");
 
   assert.match(accountSource, /listOrdersByCustomerId/);
   assert.match(accountSource, /用户资料/);
@@ -69,6 +70,7 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(accountSource, /formatFileCount/);
   assert.match(accountSource, /formatMoney\(order\.payablePrice/);
   assert.match(accountSource, /formatLeadTime\(order\.estimatedLeadTimeHours/);
+  assert.match(accountSource, /请联系工作人员完成付款/);
 
   assert.match(detailSource, /getOrderByIdForCustomer/);
   assert.match(detailSource, /redirect\("\/account\/login"\)/);
@@ -82,6 +84,16 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(detailSource, /formatMoney\(file\.unitPrice/);
   assert.match(detailSource, /formatMoney\(file\.subtotalPrice/);
   assert.match(detailSource, /href="\/quote"/);
+  assert.match(detailSource, /请联系工作人员完成付款/);
+
+  assert.match(confirmSource, /getOrderByIdForCustomer/);
+  assert.match(confirmSource, /redirect\("\/account\/login"\)/);
+  assert.match(confirmSource, /订单确认/);
+  assert.match(confirmSource, /订单已提交，请等待人工确认最终价格。确认后我们会通知您付款。/);
+  assert.match(confirmSource, /order\.files\.map/);
+  assert.match(confirmSource, /formatMoney\(file\.unitPrice/);
+  assert.match(confirmSource, /formatMoney\(file\.subtotalPrice/);
+  assert.match(confirmSource, /formatAddress\(order\)/);
 });
 
 test("quote page shows FDM guidance instead of pricing explanation", async () => {
@@ -160,6 +172,7 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(formSource, /defaultValue={customer\?\.wechat \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.email \|\| ""}/);
   assert.match(formSource, /文件卡片区域/);
+  assert.match(formSource, /router\.push\(`\/account\/orders\/\$\{result\.id\}\/confirm`\)/);
 });
 
 test("quote form exposes merged contact and shipping fields with customer validation", async () => {

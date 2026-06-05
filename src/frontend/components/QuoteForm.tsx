@@ -474,7 +474,7 @@ export function QuoteForm({
         throw new Error(result.error || "提交失败，请稍后再试");
       }
 
-      router.push("/success");
+      router.push(`/account/orders/${result.id}/confirm`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "提交失败，请稍后再试");
     } finally {
