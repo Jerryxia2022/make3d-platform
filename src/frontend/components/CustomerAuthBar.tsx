@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 
-export async function CustomerAuthBar() {
+export async function CustomerAuthBar({ returnTo = "/" }: { returnTo?: string } = {}) {
   const customer = await getCurrentCustomer();
 
   return (
@@ -12,7 +12,7 @@ export async function CustomerAuthBar() {
           <Link className="border border-ink/20 bg-white/70 px-3 py-2" href="/account">
             我的账户
           </Link>
-          <Link className="bg-ink px-3 py-2 text-white" href="/account/logout">
+          <Link className="bg-ink px-3 py-2 text-white" href={`/account/logout?next=${encodeURIComponent(returnTo)}`}>
             退出登录
           </Link>
         </>

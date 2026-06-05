@@ -19,7 +19,7 @@ export default async function QuotePage() {
 
   return (
     <main className="min-h-screen px-6 py-8 text-ink">
-      <CustomerAuthBar />
+      <CustomerAuthBar returnTo="/quote" />
       <section className="mx-auto grid w-full max-w-6xl gap-8 py-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">

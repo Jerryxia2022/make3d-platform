@@ -12,7 +12,7 @@ export default async function AccountPage() {
 
   return (
     <main className="min-h-screen px-6 py-10 text-ink">
-      <CustomerAuthBar />
+      <CustomerAuthBar returnTo="/" />
       <section className="mx-auto max-w-3xl border border-ink/10 bg-white/80 p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

@@ -31,11 +31,13 @@ test("front pages show customer auth state while admin pages stay independent", 
   assert.match(navSource, /href="\/account\/login"/);
   assert.match(navSource, /href="\/account\/register"/);
   assert.match(navSource, /href="\/account"/);
-  assert.match(navSource, /href="\/account\/logout"/);
+  assert.match(navSource, /returnTo = "\/"/);
+  assert.match(navSource, /encodeURIComponent\(returnTo\)/);
+  assert.match(navSource, /href={`\/account\/logout\?next=\$\{encodeURIComponent\(returnTo\)\}`}/);
   assert.match(navSource, /customer\.name \|\| customer\.phone/);
   assert.match(homeSource, /CustomerAuthBar/);
-  assert.match(quoteSource, /CustomerAuthBar/);
-  assert.match(accountSource, /CustomerAuthBar/);
+  assert.match(quoteSource, /<CustomerAuthBar returnTo="\/quote" \/>/);
+  assert.match(accountSource, /<CustomerAuthBar returnTo="\/" \/>/);
   assert.doesNotMatch(adminLoginSource, /CustomerAuthBar/);
   assert.doesNotMatch(adminOrdersSource, /CustomerAuthBar/);
 });
@@ -48,6 +50,8 @@ test("customer MVP pages and logout route exist", async () => {
   assert.match(accountSource, /getCurrentCustomer/);
   assert.match(accountSource, /\/account\/logout/);
   assert.match(logoutSource, /createCustomerLogoutResponse/);
+  assert.match(logoutSource, /searchParams\.get\("next"\)/);
+  assert.match(logoutSource, /getSafeLogoutRedirect/);
   assert.match(logoutSource, /303/);
   assert.match(forgotSource, /name="email"/);
   assert.match(forgotSource, /IfAccountExistsMessage/);
