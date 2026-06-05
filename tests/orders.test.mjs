@@ -6,13 +6,16 @@ import assert from "node:assert/strict";
 
 import {
   createOrderWithFile,
+  createCustomerAccount,
   createOrderWithFiles,
   createSliceJob,
   getOrderById,
+  getOrderByIdForCustomer,
   getLatestSliceJobByOrderId,
   getSliceJobsByOrderId,
   initDatabase,
   listOrders,
+  listOrdersByCustomerId,
   updateSliceJobFailure,
   updateSliceJobSuccess,
 } from "../src/backend/database.ts";
@@ -411,6 +414,91 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
       },
     ],
   );
+
+  db.close();
+});
+
+test("lists and loads only orders owned by the current customer", () => {
+  const db = initDatabase(":memory:");
+  const firstCustomer = createCustomerAccount(db, {
+    phone: "13800000000",
+    password: "password123",
+    name: "Jerry",
+    wechat: "make3d",
+    email: "jerry@example.com",
+  });
+  const secondCustomer = createCustomerAccount(db, {
+    phone: "13900000000",
+    password: "password123",
+    name: "Other",
+    wechat: "other",
+    email: "other@example.com",
+  });
+  const firstOrder = createOrderWithFiles(db, {
+    customerId: firstCustomer.id,
+    customerName: "Jerry",
+    phone: "13800000000",
+    wechat: "make3d",
+    email: "jerry@example.com",
+    quantity: 2,
+    estimatedPrice: 88,
+    payablePrice: 88,
+    estimatedLeadTimeHours: 36,
+    shippingMethod: "普通快递",
+    recipientName: "Jerry",
+    recipientPhone: "13800000000",
+    addressRegion: "-",
+    addressDetail: "Xi'an",
+    files: [
+      {
+        filename: "owned.stl",
+        filepath: "/uploads/owned.stl",
+        filesize: 128,
+        material: "PLA",
+        color: "黑",
+        quantity: 2,
+        unitPrice: 39,
+        subtotalPrice: 78,
+      },
+    ],
+  });
+  createOrderWithFiles(db, {
+    customerId: secondCustomer.id,
+    customerName: "Other",
+    phone: "13900000000",
+    wechat: "other",
+    email: "other@example.com",
+    quantity: 1,
+    estimatedPrice: 66,
+    payablePrice: 66,
+    estimatedLeadTimeHours: 24,
+    shippingMethod: "顺丰快递",
+    recipientName: "Other",
+    recipientPhone: "13900000000",
+    addressRegion: "-",
+    addressDetail: "Xi'an",
+    files: [
+      {
+        filename: "other.stl",
+        filepath: "/uploads/other.stl",
+        filesize: 256,
+        material: "PETG",
+        color: "白",
+        quantity: 1,
+        unitPrice: 48,
+        subtotalPrice: 48,
+      },
+    ],
+  });
+
+  const orders = listOrdersByCustomerId(db, firstCustomer.id);
+  const detail = getOrderByIdForCustomer(db, firstOrder.id, firstCustomer.id);
+
+  assert.equal(orders.length, 1);
+  assert.equal(orders[0].id, firstOrder.id);
+  assert.equal(detail.files.length, 1);
+  assert.equal(detail.files[0].filename, "owned.stl");
+  assert.throws(() => getOrderByIdForCustomer(db, firstOrder.id, secondCustomer.id), /订单不存在/);
 
   db.close();
 });

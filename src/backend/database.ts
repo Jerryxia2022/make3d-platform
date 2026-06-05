@@ -154,6 +154,7 @@ export type OrderRecord = {
   printFeeTotal: number | null;
   payablePrice: number | null;
   estimatedLeadTimeHours: number | null;
+  fileCount: number;
   status: OrderStatus;
   createdAt: string;
 };
@@ -586,6 +587,12 @@ export function listOrders(db: DatabaseSync): OrderRecord[] {
   return db.prepare(orderSelectSql("ORDER BY created_at DESC")).all() as OrderRecord[];
 }
 
+export function listOrdersByCustomerId(db: DatabaseSync, customerId: number): OrderRecord[] {
+  return db
+    .prepare(orderSelectSql("WHERE customer_id = ? ORDER BY created_at DESC"))
+    .all(customerId) as OrderRecord[];
+}
+
 export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
   const order = db.prepare(orderSelectSql("WHERE id = ?")).get(id) as OrderRecord | undefined;
 
@@ -593,6 +600,22 @@ export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
     throw new Error("订单不存在");
   }
 
+  return loadOrderDetail(db, order);
+}
+
+export function getOrderByIdForCustomer(db: DatabaseSync, id: number, customerId: number): OrderDetail {
+  const order = db
+    .prepare(orderSelectSql("WHERE id = ? AND customer_id = ?"))
+    .get(id, customerId) as OrderRecord | undefined;
+
+  if (!order) {
+    throw new Error("订单不存在");
+  }
+
+  return loadOrderDetail(db, order);
+}
+
+function loadOrderDetail(db: DatabaseSync, order: OrderRecord): OrderDetail {
   const files = db
     .prepare(
       `SELECT
@@ -626,7 +649,7 @@ export function getOrderById(db: DatabaseSync, id: number): OrderDetail {
       WHERE order_id = ?
       ORDER BY created_at ASC`,
     )
-    .all(id)
+    .all(order.id)
     .map(normalizeFileRecord) as OrderFileRecord[];
   const customerOrderCount = order.customerId
     ? Number(
@@ -959,6 +982,7 @@ function orderSelectSql(suffix: string) {
     print_fee_total AS printFeeTotal,
     payable_price AS payablePrice,
     estimated_lead_time_hours AS estimatedLeadTimeHours,
+    (SELECT COUNT(*) FROM files WHERE files.order_id = orders.id) AS fileCount,
     status,
     created_at AS createdAt
   FROM orders

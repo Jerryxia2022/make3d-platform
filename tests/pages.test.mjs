@@ -57,6 +57,33 @@ test("customer MVP pages and logout route exist", async () => {
   assert.match(forgotSource, /IfAccountExistsMessage/);
 });
 
+test("customer account center shows profile, order history, quote history, and owned order detail", async () => {
+  const accountSource = await readSource("src/app/account/page.tsx");
+  const detailSource = await readSource("src/app/account/orders/[id]/page.tsx");
+
+  assert.match(accountSource, /listOrdersByCustomerId/);
+  assert.match(accountSource, /用户资料/);
+  assert.match(accountSource, /我的订单/);
+  assert.match(accountSource, /我的历史报价/);
+  assert.match(accountSource, /\/account\/orders\/\$\{order\.id\}/);
+  assert.match(accountSource, /formatFileCount/);
+  assert.match(accountSource, /formatMoney\(order\.payablePrice/);
+  assert.match(accountSource, /formatLeadTime\(order\.estimatedLeadTimeHours/);
+
+  assert.match(detailSource, /getOrderByIdForCustomer/);
+  assert.match(detailSource, /redirect\("\/account\/login"\)/);
+  assert.match(detailSource, /notFound\(\)/);
+  assert.match(detailSource, /联系与收货信息/);
+  assert.match(detailSource, /order\.files\.map/);
+  assert.match(detailSource, /file\.filename/);
+  assert.match(detailSource, /file\.material/);
+  assert.match(detailSource, /file\.color/);
+  assert.match(detailSource, /file\.quantity/);
+  assert.match(detailSource, /formatMoney\(file\.unitPrice/);
+  assert.match(detailSource, /formatMoney\(file\.subtotalPrice/);
+  assert.match(detailSource, /href="\/quote"/);
+});
+
 test("quote page shows FDM guidance instead of pricing explanation", async () => {
   const source = await readSource("src/app/quote/page.tsx");
 
