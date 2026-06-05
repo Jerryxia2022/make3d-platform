@@ -71,6 +71,7 @@ export function CustomerLoginForm() {
 
       const response = await fetch("/api/account/login", {
         body: formData,
+        credentials: "same-origin",
         headers: { Accept: "application/json" },
         method: "POST",
       });

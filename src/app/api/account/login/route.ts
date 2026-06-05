@@ -1,4 +1,8 @@
-import { createCustomerLoginRedirectResponse, createCustomerSessionToken } from "@/backend/accountAuth";
+import {
+  createCustomerLoginRedirectResponse,
+  createCustomerSessionToken,
+  setCustomerSessionCookie,
+} from "@/backend/accountAuth";
 import {
   clearSuccessfulCustomerLoginFailures,
   getClientIp,
@@ -51,11 +55,7 @@ export async function POST(request: Request) {
 
     if (wantsJson(request)) {
       const response = Response.json({ success: true, redirect: "/quote" });
-      response.headers.append(
-        "Set-Cookie",
-        createCustomerLoginRedirectResponse(createCustomerSessionToken(customer.id)).headers.get("Set-Cookie") || "",
-      );
-      return response;
+      return setCustomerSessionCookie(response, createCustomerSessionToken(customer.id));
     }
 
     return createCustomerLoginRedirectResponse(createCustomerSessionToken(customer.id));

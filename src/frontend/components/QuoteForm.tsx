@@ -465,6 +465,7 @@ export function QuoteForm({
       }
 
       const response = await fetch("/api/orders", {
+        credentials: "same-origin",
         method: "POST",
         body: formData,
       });

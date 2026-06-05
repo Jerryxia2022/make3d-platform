@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const CUSTOMER_SESSION_COOKIE = "make3d_customer";
+export const CUSTOMER_SESSION_COOKIE = "customer_session";
 export const CUSTOMER_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 export function createCustomerSessionToken(customerId: number, now = Date.now()) {
@@ -50,6 +50,12 @@ export function createCustomerLoginRedirectResponse(sessionToken: string) {
     status: 303,
     headers: { Location: "/quote" },
   });
+  setCustomerSessionCookie(response, sessionToken);
+
+  return response;
+}
+
+export function setCustomerSessionCookie(response: Response, sessionToken: string) {
   response.headers.append(
     "Set-Cookie",
     serializeCookie(CUSTOMER_SESSION_COOKIE, sessionToken, getCustomerCookieOptions()),

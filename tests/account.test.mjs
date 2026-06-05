@@ -34,7 +34,7 @@ test("creates customer accounts with hashed passwords and signed sessions", () =
     const passwordHash = hashPassword("password123");
     const token = createCustomerSessionToken(customer.id);
 
-    assert.equal(CUSTOMER_SESSION_COOKIE, "make3d_customer");
+    assert.equal(CUSTOMER_SESSION_COOKIE, "customer_session");
     assert.notEqual(found?.passwordHash, "password123");
     assert.equal(verifyPassword("password123", found?.passwordHash || ""), true);
     assert.equal(verifyPassword("wrong-password", found?.passwordHash || ""), false);
