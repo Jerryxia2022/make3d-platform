@@ -31,6 +31,9 @@ export type OrderInput = {
   printFeeTotal?: number;
   payablePrice?: number;
   estimatedLeadTimeHours?: number;
+  shippingCompany?: string | null;
+  trackingNumber?: string | null;
+  adminRemark?: string | null;
   files: OrderFileInput[];
 };
 
@@ -91,7 +94,17 @@ export type CustomerRecord = {
   createdAt: string;
 };
 
-export const ORDER_STATUSES = ["待处理", "已报价", "生产中", "已完成", "已取消"] as const;
+export const ORDER_STATUSES = [
+  "待确认",
+  "待付款",
+  "已付款",
+  "排产中",
+  "打印中",
+  "后处理",
+  "已发货",
+  "已完成",
+  "已取消",
+] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
@@ -154,6 +167,9 @@ export type OrderRecord = {
   printFeeTotal: number | null;
   payablePrice: number | null;
   estimatedLeadTimeHours: number | null;
+  shippingCompany: string | null;
+  trackingNumber: string | null;
+  adminRemark: string | null;
   fileCount: number;
   status: OrderStatus;
   createdAt: string;
@@ -165,6 +181,15 @@ export type OrderDetail = OrderRecord & {
 };
 
 export type SliceJobStatus = "queued" | "processing" | "success" | "failed";
+
+export type OrderStatusLogRecord = {
+  id: number;
+  orderId: number;
+  fromStatus: string | null;
+  toStatus: string;
+  operator: string;
+  createdAt: string;
+};
 
 export type SliceJobInput = {
   orderId: number;
@@ -256,7 +281,10 @@ export function initDatabase(dbPath = getDatabasePath()) {
       print_fee_total REAL,
       payable_price REAL,
       estimated_lead_time_hours INTEGER,
-      status TEXT NOT NULL DEFAULT '待处理',
+      shipping_company TEXT,
+      tracking_number TEXT,
+      admin_remark TEXT,
+      status TEXT NOT NULL DEFAULT '待确认',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
     );
@@ -294,6 +322,16 @@ export function initDatabase(dbPath = getDatabasePath()) {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(identifier_type, identifier),
       CHECK (identifier_type IN ('phone', 'ip'))
+    );
+
+    CREATE TABLE IF NOT EXISTS order_status_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      operator TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS files (
@@ -373,6 +411,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["print_fee_total", "REAL"],
     ["payable_price", "REAL"],
     ["estimated_lead_time_hours", "INTEGER"],
+    ["shipping_company", "TEXT"],
+    ["tracking_number", "TEXT"],
+    ["admin_remark", "TEXT"],
   ]);
   ensureColumns(db, "files", [
     ["bounding_box_x", "REAL"],
@@ -420,6 +461,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["created_at", "DATETIME"],
     ["updated_at", "DATETIME"],
   ]);
+  migrateLegacyOrderStatuses(db);
 
   return db;
 }
@@ -469,8 +511,11 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           print_fee_total,
           payable_price,
           estimated_lead_time_hours,
+          shipping_company,
+          tracking_number,
+          admin_remark,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -501,7 +546,10 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.printFeeTotal ?? null,
         input.payablePrice ?? null,
         input.estimatedLeadTimeHours ?? null,
-        "待处理",
+        input.shippingCompany ?? null,
+        input.trackingNumber ?? null,
+        input.adminRemark ?? null,
+        "待确认",
       );
 
     const orderId = Number(order.lastInsertRowid);
@@ -704,13 +752,84 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
   return normalizeFileRecord(file) as OrderFileRecord;
 }
 
-export function updateOrderStatus(db: DatabaseSync, id: number, status: string) {
+export type OrderStatusUpdateInput = {
+  status: string;
+  operator?: string;
+  shippingCompany?: string | null;
+  trackingNumber?: string | null;
+  adminRemark?: string | null;
+};
+
+export function updateOrderStatus(
+  db: DatabaseSync,
+  id: number,
+  input: string | OrderStatusUpdateInput,
+) {
+  const status = typeof input === "string" ? input : input.status;
+
   if (!isOrderStatus(status)) {
     throw new Error("无效订单状态");
   }
 
-  const result = db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+  const current = db.prepare("SELECT status FROM orders WHERE id = ?").get(id) as
+    | { status: string }
+    | undefined;
+
+  if (!current) {
+    return false;
+  }
+
+  const shippingCompany =
+    typeof input === "string" ? null : normalizeOptionalText(input.shippingCompany);
+  const trackingNumber =
+    typeof input === "string" ? null : normalizeOptionalText(input.trackingNumber);
+  const adminRemark =
+    typeof input === "string" ? null : normalizeOptionalText(input.adminRemark);
+  const operator = typeof input === "string" ? "admin" : input.operator || "admin";
+
+  const result = db
+    .prepare(
+      `UPDATE orders
+       SET status = ?,
+           shipping_company = COALESCE(?, shipping_company),
+           tracking_number = COALESCE(?, tracking_number),
+           admin_remark = COALESCE(?, admin_remark)
+       WHERE id = ?`,
+    )
+    .run(status, shippingCompany, trackingNumber, adminRemark, id);
+
+  if (result.changes > 0 && current.status !== status) {
+    db.prepare(
+      `INSERT INTO order_status_logs (
+        order_id,
+        from_status,
+        to_status,
+        operator
+      ) VALUES (?, ?, ?, ?)`,
+    ).run(id, current.status, status, operator);
+  }
+
   return result.changes > 0;
+}
+
+export function getOrderStatusLogsByOrderId(
+  db: DatabaseSync,
+  orderId: number,
+): OrderStatusLogRecord[] {
+  return db
+    .prepare(
+      `SELECT
+        id,
+        order_id AS orderId,
+        from_status AS fromStatus,
+        to_status AS toStatus,
+        operator,
+        created_at AS createdAt
+      FROM order_status_logs
+      WHERE order_id = ?
+      ORDER BY created_at DESC, id DESC`,
+    )
+    .all(orderId) as OrderStatusLogRecord[];
 }
 
 export function createCustomerAccount(db: DatabaseSync, input: CustomerAccountInput) {
@@ -982,6 +1101,9 @@ function orderSelectSql(suffix: string) {
     print_fee_total AS printFeeTotal,
     payable_price AS payablePrice,
     estimated_lead_time_hours AS estimatedLeadTimeHours,
+    shipping_company AS shippingCompany,
+    tracking_number AS trackingNumber,
+    admin_remark AS adminRemark,
     (SELECT COUNT(*) FROM files WHERE files.order_id = orders.id) AS fileCount,
     status,
     created_at AS createdAt
@@ -1110,6 +1232,27 @@ function createOrderNo() {
 
 function isOrderStatus(status: string): status is OrderStatus {
   return ORDER_STATUSES.includes(status as OrderStatus);
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function migrateLegacyOrderStatuses(db: DatabaseSync) {
+  const legacyStatusMap = [
+    ["待处理", "待确认"],
+    ["已报价", "待付款"],
+    ["生产中", "打印中"],
+  ] as const;
+
+  for (const [legacyStatus, nextStatus] of legacyStatusMap) {
+    db.prepare("UPDATE orders SET status = ? WHERE status = ?").run(nextStatus, legacyStatus);
+  }
 }
 
 function ensureColumns(

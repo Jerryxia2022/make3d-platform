@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   getOrderById,
+  getOrderStatusLogsByOrderId,
   getSliceJobsByOrderId,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
+  type OrderStatusLogRecord,
   type SliceJobRecord,
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
@@ -29,6 +31,7 @@ export default async function AdminOrderDetailPage({
   try {
     const order = getOrderById(db, Number(id));
     const sliceJobs = getSliceJobsByOrderId(db, order.id);
+    const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
 
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
@@ -43,7 +46,7 @@ export default async function AdminOrderDetailPage({
               </p>
               <h1 className="mt-3 text-4xl font-bold">订单详情</h1>
             </div>
-            <AdminStatusForm orderId={order.id} status={order.status} />
+            <AdminStatusForm orderId={order.id} status={order.status} shippingCompany={order.shippingCompany} trackingNumber={order.trackingNumber} adminRemark={order.adminRemark} />
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -97,12 +100,21 @@ export default async function AdminOrderDetailPage({
               <Detail label="省市区" value={order.addressRegion || "-"} />
               <Detail label="详细地址" value={order.addressDetail || "-"} />
               <Detail label="配送备注" value={order.shippingRemark || "-"} />
+              <Detail label="快递公司" value={order.shippingCompany || "-"} />
+              <Detail label="快递单号" value={order.trackingNumber || "-"} />
             </dl>
           </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-graphite">{order.remark || "无备注"}</p>
+            <h3 className="mt-6 text-base font-bold">管理员备注</h3>
+            <p className="mt-3 whitespace-pre-wrap text-graphite">{order.adminRemark || "无备注"}</p>
+          </section>
+
+          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">状态历史</h2>
+            <StatusHistory logs={statusLogs} />
           </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
@@ -178,6 +190,37 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div className="grid grid-cols-[5rem_1fr] gap-3">
       <dt className="font-semibold text-graphite">{label}</dt>
       <dd>{value}</dd>
+    </div>
+  );
+}
+
+function StatusHistory({ logs }: { logs: OrderStatusLogRecord[] }) {
+  if (logs.length === 0) {
+    return <p className="mt-4 text-sm text-graphite">暂无状态变更记录</p>;
+  }
+
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+        <thead className="border-b border-ink/10 text-graphite">
+          <tr>
+            <th className="py-2 pr-4 font-semibold">修改时间</th>
+            <th className="py-2 pr-4 font-semibold">原状态</th>
+            <th className="py-2 pr-4 font-semibold">新状态</th>
+            <th className="py-2 pr-4 font-semibold">操作人</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((log) => (
+            <tr className="border-b border-ink/5" key={log.id}>
+              <td className="py-3 pr-4">{formatDate(log.createdAt)}</td>
+              <td className="py-3 pr-4">{log.fromStatus || "-"}</td>
+              <td className="py-3 pr-4 font-semibold">{log.toStatus}</td>
+              <td className="py-3 pr-4">{log.operator}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { openDatabase, updateOrderStatus } from "@/backend/database";
+import { getOrderById, openDatabase, updateOrderStatus } from "@/backend/database";
+import { notifyCustomerOrderStatus } from "@/backend/email";
 import { requireAdminSession } from "@/backend/nextAdmin";
 
 export const runtime = "nodejs";
@@ -18,11 +19,21 @@ export async function POST(
     const db = openDatabase();
 
     try {
-      const updated = updateOrderStatus(db, Number(id), String(body.status || ""));
+      const orderId = Number(id);
+      const updated = updateOrderStatus(db, orderId, {
+        status: String(body.status || ""),
+        operator: "admin",
+        shippingCompany: getOptionalString(body.shippingCompany),
+        trackingNumber: getOptionalString(body.trackingNumber),
+        adminRemark: getOptionalString(body.adminRemark),
+      });
 
       if (!updated) {
         return NextResponse.json({ error: "订单不存在" }, { status: 404 });
       }
+
+      const order = getOrderById(db, orderId);
+      await notifyCustomerOrderStatus(order);
 
       return NextResponse.json({ ok: true });
     } finally {
@@ -32,4 +43,8 @@ export async function POST(
     const message = error instanceof Error ? error.message : "状态更新失败";
     return NextResponse.json({ error: message }, { status: 400 });
   }
+}
+
+function getOptionalString(value: unknown) {
+  return typeof value === "string" ? value : null;
 }

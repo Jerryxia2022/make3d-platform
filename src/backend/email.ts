@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import type { CreatedOrder, OrderInput } from "./database";
+import type { CreatedOrder, OrderInput, OrderRecord } from "./database";
 
 export type NewOrderEmailOrder = CreatedOrder &
   Pick<
@@ -26,6 +26,13 @@ export type MailMessage = {
 export type MailTransport = {
   sendMail: (message: MailMessage) => Promise<unknown>;
 };
+
+export type OrderStatusEmailOrder = Pick<
+  OrderRecord,
+  "id" | "orderNo" | "email" | "status" | "shippingCompany" | "trackingNumber"
+>;
+
+const CUSTOMER_STATUS_EMAIL_STATUSES = new Set(["待付款", "打印中", "已发货", "已完成"]);
 
 export function buildNewOrderEmail(order: NewOrderEmailOrder, appUrl = getAppUrl()): MailMessage {
   const detailUrl = `${appUrl.replace(/\/$/, "")}/admin/orders/${order.id}`;
@@ -67,6 +74,32 @@ export function buildPasswordResetEmail(to: string, resetUrl: string): MailMessa
   };
 }
 
+export function buildOrderStatusEmail(
+  order: OrderStatusEmailOrder,
+  appUrl = getAppUrl(),
+): MailMessage {
+  const detailUrl = `${appUrl.replace(/\/$/, "")}/account/orders/${order.id}`;
+  const lines = [
+    "您的 Make3D 订单状态已更新。",
+    "",
+    `订单编号：${order.orderNo}`,
+    `当前状态：${order.status}`,
+    `订单详情：${detailUrl}`,
+  ];
+
+  if (order.status === "已发货") {
+    lines.push(`快递公司：${order.shippingCompany || "-"}`);
+    lines.push(`快递单号：${order.trackingNumber || "待填写"}`);
+  }
+
+  return {
+    from: process.env.SMTP_USER || "",
+    to: order.email || "",
+    subject: `Make3D 订单状态更新 - ${order.orderNo}`,
+    text: lines.join("\n"),
+  };
+}
+
 export async function sendPasswordResetEmail(
   to: string,
   resetUrl: string,
@@ -103,6 +136,27 @@ export async function notifyAdminNewOrder(
 
   try {
     await transport.sendMail(buildNewOrderEmail(order));
+    return { sent: true };
+  } catch (error) {
+    const normalizedError = error instanceof Error ? error : new Error("邮件发送失败");
+    return { sent: false, error: normalizedError };
+  }
+}
+
+export async function notifyCustomerOrderStatus(
+  order: OrderStatusEmailOrder,
+  transport = createSmtpTransport(),
+) {
+  if (!CUSTOMER_STATUS_EMAIL_STATUSES.has(order.status) || !order.email) {
+    return { sent: false, skipped: true };
+  }
+
+  if (!hasSmtpConfig()) {
+    return { sent: false, skipped: true };
+  }
+
+  try {
+    await transport.sendMail(buildOrderStatusEmail(order));
     return { sent: true };
   } catch (error) {
     const normalizedError = error instanceof Error ? error : new Error("邮件发送失败");

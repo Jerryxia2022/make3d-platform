@@ -342,6 +342,11 @@ test("admin order detail page shows complete order fields and per-file V2 estima
   assert.match(detailSource, /requireAdminSession/);
   assert.match(detailSource, /redirect\("\/admin\/login"\)/);
   assert.match(detailSource, /AdminStatusForm orderId={order\.id} status={order\.status}/);
+  assert.match(detailSource, /getOrderStatusLogsByOrderId/);
+  assert.match(detailSource, /状态历史/);
+  assert.match(detailSource, /shippingCompany/);
+  assert.match(detailSource, /trackingNumber/);
+  assert.match(detailSource, /adminRemark/);
   assert.match(detailSource, /value={order\.orderNo}/);
   assert.match(detailSource, /value={String\(order\.id\)}/);
   assert.match(detailSource, /value={String\(order\.quantity\)}/);
@@ -412,6 +417,17 @@ test("customer APIs require login before quote slicing and order submission", as
   assert.match(sliceSource, /status\), 401\)|}, 401\)/);
   assert.match(orderSource, /getCustomerFromRequest/);
   assert.match(orderSource, /status: 401/);
+});
+
+test("admin order status API records admin workflow and notifies customers", async () => {
+  const source = await readSource("src/app/api/admin/orders/[id]/status/route.ts");
+
+  assert.match(source, /updateOrderStatus/);
+  assert.match(source, /operator: "admin"/);
+  assert.match(source, /shippingCompany/);
+  assert.match(source, /trackingNumber/);
+  assert.match(source, /adminRemark/);
+  assert.match(source, /notifyCustomerOrderStatus/);
 });
 
 test("success page and contact information section remain available", async () => {

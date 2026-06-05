@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildOrderStatusEmail,
   buildPasswordResetEmail,
   buildNewOrderEmail,
+  notifyCustomerOrderStatus,
   notifyAdminNewOrder,
 } from "../src/backend/email.ts";
 
@@ -54,6 +56,51 @@ test("builds password reset email with 30 minute reset link", () => {
   assert.match(email.text, /请在30分钟内点击链接完成重置。/);
   assert.match(email.text, /如果不是本人操作，请忽略此邮件。/);
   assert.match(email.text, /token=abc/);
+});
+
+test("builds customer order status email with customer detail link and tracking placeholder", () => {
+  const email = buildOrderStatusEmail(
+    {
+      id: 7,
+      orderNo: "M3D202606010001234",
+      email: "jerry@example.com",
+      status: "已发货",
+      shippingCompany: "顺丰快递",
+      trackingNumber: "SF123456789",
+    },
+    "https://make3d.com.cn",
+  );
+
+  assert.equal(email.subject, "Make3D 订单状态更新 - M3D202606010001234");
+  assert.equal(email.to, "jerry@example.com");
+  assert.match(email.text, /订单编号：M3D202606010001234/);
+  assert.match(email.text, /当前状态：已发货/);
+  assert.match(email.text, /订单详情：https:\/\/make3d\.com\.cn\/account\/orders\/7/);
+  assert.match(email.text, /快递公司：顺丰快递/);
+  assert.match(email.text, /快递单号：SF123456789/);
+});
+
+test("sends customer status notifications only for configured statuses", async () => {
+  const previous = snapshotEnv();
+  const sent = [];
+
+  try {
+    setSmtpEnv();
+    const payable = await notifyCustomerOrderStatus(
+      { id: 7, orderNo: "M3D202606010001234", email: "jerry@example.com", status: "待付款" },
+      { sendMail: async (message) => sent.push(message) },
+    );
+    const scheduled = await notifyCustomerOrderStatus(
+      { id: 7, orderNo: "M3D202606010001234", email: "jerry@example.com", status: "排产中" },
+      { sendMail: async (message) => sent.push(message) },
+    );
+
+    assert.equal(payable.sent, true);
+    assert.equal(scheduled.skipped, true);
+    assert.equal(sent.length, 1);
+  } finally {
+    restoreEnv(previous);
+  }
 });
 
 test("uses production app URL for default email order detail link", () => {

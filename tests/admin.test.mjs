@@ -5,6 +5,7 @@ import {
   createOrderWithFile,
   getFileById,
   getOrderById,
+  getOrderStatusLogsByOrderId,
   initDatabase,
   ORDER_STATUSES,
   updateOrderStatus,
@@ -121,10 +122,49 @@ test("updates order status only to allowed values", () => {
   const db = initDatabase(":memory:");
   const order = createFixtureOrder(db);
 
-  assert.deepEqual(ORDER_STATUSES, ["待处理", "已报价", "生产中", "已完成", "已取消"]);
-  assert.equal(updateOrderStatus(db, order.id, "生产中"), true);
-  assert.equal(getOrderById(db, order.id).status, "生产中");
-  assert.throws(() => updateOrderStatus(db, order.id, "未知状态"), /无效订单状态/);
+  assert.deepEqual(ORDER_STATUSES, [
+    "待确认",
+    "待付款",
+    "已付款",
+    "排产中",
+    "打印中",
+    "后处理",
+    "已发货",
+    "已完成",
+    "已取消",
+  ]);
+  assert.equal(updateOrderStatus(db, order.id, { status: "打印中", operator: "admin" }), true);
+  assert.equal(getOrderById(db, order.id).status, "打印中");
+  assert.throws(() => updateOrderStatus(db, order.id, { status: "未知状态", operator: "admin" }), /无效订单状态/);
+
+  db.close();
+});
+
+test("records order status workflow logs and admin fulfillment fields", () => {
+  const db = initDatabase(":memory:");
+  const order = createFixtureOrder(db);
+
+  assert.equal(
+    updateOrderStatus(db, order.id, {
+      status: "已发货",
+      operator: "admin",
+      shippingCompany: "顺丰快递",
+      trackingNumber: "SF123456789",
+      adminRemark: "已通知客户",
+    }),
+    true,
+  );
+  const detail = getOrderById(db, order.id);
+  const logs = getOrderStatusLogsByOrderId(db, order.id);
+
+  assert.equal(detail.status, "已发货");
+  assert.equal(detail.shippingCompany, "顺丰快递");
+  assert.equal(detail.trackingNumber, "SF123456789");
+  assert.equal(detail.adminRemark, "已通知客户");
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].fromStatus, "待确认");
+  assert.equal(logs[0].toStatus, "已发货");
+  assert.equal(logs[0].operator, "admin");
 
   db.close();
 });
