@@ -3,6 +3,7 @@ import { getCurrentCustomer } from "@/backend/nextCustomer";
 
 export async function CustomerAuthBar({ returnTo = "/" }: { returnTo?: string } = {}) {
   const customer = await getCurrentCustomer();
+  const logoutAction = `/api/account/logout?next=${encodeURIComponent(returnTo)}`;
 
   return (
     <nav className="mx-auto flex w-full max-w-6xl items-center justify-end gap-3 px-6 py-4 text-sm font-semibold text-ink">
@@ -12,9 +13,11 @@ export async function CustomerAuthBar({ returnTo = "/" }: { returnTo?: string } 
           <Link className="border border-ink/20 bg-white/70 px-3 py-2" href="/account">
             我的账户
           </Link>
-          <Link className="bg-ink px-3 py-2 text-white" href={`/account/logout?next=${encodeURIComponent(returnTo)}`}>
-            退出登录
-          </Link>
+          <form action={logoutAction} method="post">
+            <button className="bg-ink px-3 py-2 text-white" type="submit">
+              退出登录
+            </button>
+          </form>
         </>
       ) : (
         <>

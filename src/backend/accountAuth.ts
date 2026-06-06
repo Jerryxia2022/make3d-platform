@@ -43,8 +43,9 @@ export function setCustomerSessionCookie(response: Response, sessionToken: strin
 }
 
 export function createCustomerLogoutResponse(status = 200, location?: string) {
+  const secure = process.env.COOKIE_SECURE === "true" ? "; Secure" : "";
   const headers = new Headers({
-    "Set-Cookie": `${CUSTOMER_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=lax`,
+    "Set-Cookie": `${CUSTOMER_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly${secure}; SameSite=lax`,
   });
 
   if (location) {

@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 import {
   CUSTOMER_SESSION_COOKIE,
+  createCustomerLogoutResponse,
   createCustomerSessionToken,
   getCustomerCookieOptions,
   getCustomerFromRequestCookie,
@@ -96,6 +97,27 @@ test("customer session can be read from NextRequest cookies object", () => {
     assert.equal(parsed?.customerId, 123);
   } finally {
     process.env.SESSION_SECRET = previousSecret;
+  }
+});
+
+test("customer logout response clears secure customer session consistently", () => {
+  const previousSecure = process.env.COOKIE_SECURE;
+
+  try {
+    process.env.COOKIE_SECURE = "true";
+    const response = createCustomerLogoutResponse(303, "/quote");
+    const setCookie = response.headers.get("Set-Cookie") || "";
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("Location"), "/quote");
+    assert.match(setCookie, /customer_session=;/);
+    assert.match(setCookie, /Path=\//);
+    assert.match(setCookie, /Max-Age=0/);
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /Secure/);
+    assert.match(setCookie, /SameSite=lax/);
+  } finally {
+    process.env.COOKIE_SECURE = previousSecure;
   }
 });
 
