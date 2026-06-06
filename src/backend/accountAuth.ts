@@ -57,6 +57,10 @@ export function createCustomerLogoutResponse(status = 200, location?: string) {
 export function getCustomerFromRequestCookie(request: Request) {
   const token = getCustomerSessionTokenFromRequest(request);
 
+  return getCustomerSessionFromToken(token);
+}
+
+export function getCustomerSessionFromToken(token?: string | null) {
   if (!token) {
     return null;
   }
@@ -91,13 +95,39 @@ export function logCustomerSessionDiagnostics(label: string, request: Request) {
   console.warn(label, getCustomerSessionDiagnostics(request));
 }
 
-function getCustomerSessionTokenFromRequest(request: Request) {
+export function getCustomerSessionTokenFromRequest(request: Request) {
+  const nextRequestCookie = getNextRequestCookieValue(request);
+
+  if (nextRequestCookie) {
+    return nextRequestCookie;
+  }
+
   const cookieHeader = request.headers.get("Cookie") || "";
   return cookieHeader
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${CUSTOMER_SESSION_COOKIE}=`))
     ?.slice(CUSTOMER_SESSION_COOKIE.length + 1);
+}
+
+function getNextRequestCookieValue(request: Request) {
+  const cookieGetter = (request as Request & {
+    cookies?: {
+      get?: (name: string) => { value?: string } | string | undefined;
+    };
+  }).cookies?.get;
+
+  if (!cookieGetter) {
+    return undefined;
+  }
+
+  const cookie = cookieGetter.call((request as { cookies?: unknown }).cookies, CUSTOMER_SESSION_COOKIE);
+
+  if (typeof cookie === "string") {
+    return cookie;
+  }
+
+  return cookie?.value;
 }
 
 function decodeCookieValue(value: string) {

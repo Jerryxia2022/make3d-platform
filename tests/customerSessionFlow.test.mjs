@@ -58,18 +58,45 @@ test("account login, me, and order submit routes share customer session logic", 
   const loginSource = await readSource("src/app/api/account/login/route.ts");
   const meSource = await readSource("src/app/api/account/me/route.ts");
   const ordersSource = await readSource("src/app/api/orders/route.ts");
+  const nextCustomerSource = await readSource("src/backend/nextCustomer.ts");
   const databaseSource = await readSource("src/backend/database.ts");
 
   assert.match(loginSource, /setCustomerSessionCookie\(response, createCustomerSessionToken\(customer\.id\)\)/);
   assert.doesNotMatch(loginSource, /headers\.get\("Set-Cookie"\)/);
   assert.match(meSource, /getCustomerFromRequestCookie\(request\)/);
   assert.match(ordersSource, /getCustomerFromRequestCookie\(request\)/);
+  assert.match(nextCustomerSource, /getCustomerSessionFromToken\(token\)/);
+  assert.doesNotMatch(nextCustomerSource, /getCustomerBySessionToken/);
   assert.match(databaseSource, /import \{ verifyCustomerSessionToken \} from "\.\/customerSessionCore\.js"/);
   assert.match(databaseSource, /const session = verifyCustomerSessionToken\(token\)/);
   assert.doesNotMatch(databaseSource, /verifyCustomerSessionTokenForDatabase/);
   assert.match(ordersSource, /请先登录后提交订单/);
   assert.doesNotMatch(meSource, /ADMIN_SESSION_COOKIE/);
   assert.doesNotMatch(ordersSource, /ADMIN_SESSION_COOKIE/);
+});
+
+test("customer session can be read from NextRequest cookies object", () => {
+  const previousSecret = process.env.SESSION_SECRET;
+
+  try {
+    process.env.SESSION_SECRET = "test-session-secret-with-enough-length";
+    const token = createCustomerSessionToken(123);
+    const request = new Request("https://make3d.com.cn/api/account/me");
+
+    Object.defineProperty(request, "cookies", {
+      value: {
+        get(name) {
+          return name === CUSTOMER_SESSION_COOKIE ? { value: token } : undefined;
+        },
+      },
+    });
+
+    const parsed = getCustomerFromRequestCookie(request);
+
+    assert.equal(parsed?.customerId, 123);
+  } finally {
+    process.env.SESSION_SECRET = previousSecret;
+  }
 });
 
 test("customer session verify failures log safe diagnostics without secrets", () => {
