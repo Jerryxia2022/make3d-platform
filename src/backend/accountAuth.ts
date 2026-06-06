@@ -1,39 +1,17 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  CUSTOMER_SESSION_MAX_AGE_SECONDS,
+  createCustomerSessionToken,
+  verifyCustomerSessionToken,
+  verifyCustomerSessionTokenDetailed,
+} from "./customerSessionCore.js";
 
 export const CUSTOMER_SESSION_COOKIE = "customer_session";
-export const CUSTOMER_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-
-export function createCustomerSessionToken(customerId: number, now = Date.now()) {
-  const expiresAt = now + CUSTOMER_SESSION_MAX_AGE_SECONDS * 1000;
-  const nonce = randomBytes(16).toString("hex");
-  const payload = `${customerId}.${expiresAt}.${nonce}`;
-  const signature = signPayload(payload);
-
-  return `${payload}.${signature}`;
-}
-
-export function verifyCustomerSessionToken(token?: string, now = Date.now()) {
-  if (!token) {
-    return null;
-  }
-
-  const parts = token.split(".");
-
-  if (parts.length !== 4) {
-    return null;
-  }
-
-  const [customerIdText, expiresAtText, nonce, signature] = parts;
-  const customerId = Number(customerIdText);
-  const expiresAt = Number(expiresAtText);
-
-  if (!Number.isInteger(customerId) || customerId <= 0 || !Number.isFinite(expiresAt) || expiresAt < now || !nonce || !signature) {
-    return null;
-  }
-
-  const expectedSignature = signPayload(`${customerIdText}.${expiresAtText}.${nonce}`);
-  return safeEqual(signature, expectedSignature) ? { customerId } : null;
-}
+export {
+  CUSTOMER_SESSION_MAX_AGE_SECONDS,
+  createCustomerSessionToken,
+  verifyCustomerSessionToken,
+  verifyCustomerSessionTokenDetailed,
+};
 
 export function getCustomerCookieOptions() {
   return {
@@ -84,7 +62,35 @@ export function getCustomerFromRequestCookie(request: Request) {
     .find((part) => part.startsWith(`${CUSTOMER_SESSION_COOKIE}=`))
     ?.slice(CUSTOMER_SESSION_COOKIE.length + 1);
 
-  return verifyCustomerSessionToken(token);
+  if (!token) {
+    return null;
+  }
+
+  const decodedToken = decodeCookieValue(token);
+  const result = verifyCustomerSessionTokenDetailed(decodedToken);
+
+  if (!result.session) {
+    logCustomerSessionVerifyFailure(decodedToken, result.error || "unknown verify error");
+  }
+
+  return result.session;
+}
+
+function decodeCookieValue(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function logCustomerSessionVerifyFailure(token: string, error: string) {
+  console.warn("[make3d] customer session verify failed", {
+    customerSessionExists: true,
+    tokenPrefix: token.slice(0, 12),
+    verifyErrorMessage: error,
+    sessionSecretExists: Boolean(process.env.SESSION_SECRET),
+  });
 }
 
 function serializeCookie(
@@ -104,21 +110,4 @@ function serializeCookie(
 
   parts.push(`SameSite=${options.sameSite}`);
   return parts.join("; ");
-}
-
-function signPayload(payload: string) {
-  const secret = process.env.SESSION_SECRET;
-
-  if (!secret) {
-    throw new Error("SESSION_SECRET 未配置");
-  }
-
-  return createHmac("sha256", secret).update(payload).digest("base64url");
-}
-
-function safeEqual(a: string, b: string) {
-  const aBuffer = Buffer.from(a);
-  const bBuffer = Buffer.from(b);
-
-  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }

@@ -8,6 +8,7 @@ import {
   getCustomerCookieOptions,
   getCustomerFromRequestCookie,
   setCustomerSessionCookie,
+  verifyCustomerSessionTokenDetailed,
 } from "../src/backend/accountAuth.ts";
 
 async function readSource(path) {
@@ -55,12 +56,52 @@ test("account login, me, and order submit routes share customer session logic", 
   const loginSource = await readSource("src/app/api/account/login/route.ts");
   const meSource = await readSource("src/app/api/account/me/route.ts");
   const ordersSource = await readSource("src/app/api/orders/route.ts");
+  const databaseSource = await readSource("src/backend/database.ts");
 
   assert.match(loginSource, /setCustomerSessionCookie\(response, createCustomerSessionToken\(customer\.id\)\)/);
   assert.doesNotMatch(loginSource, /headers\.get\("Set-Cookie"\)/);
   assert.match(meSource, /getCustomerFromRequestCookie\(request\)/);
   assert.match(ordersSource, /getCustomerFromRequestCookie\(request\)/);
+  assert.match(databaseSource, /import \{ verifyCustomerSessionToken \} from "\.\/customerSessionCore\.js"/);
+  assert.match(databaseSource, /const session = verifyCustomerSessionToken\(token\)/);
+  assert.doesNotMatch(databaseSource, /verifyCustomerSessionTokenForDatabase/);
   assert.match(ordersSource, /请先登录后提交订单/);
   assert.doesNotMatch(meSource, /ADMIN_SESSION_COOKIE/);
   assert.doesNotMatch(ordersSource, /ADMIN_SESSION_COOKIE/);
+});
+
+test("customer session verify failures log safe diagnostics without secrets", () => {
+  const previousSecret = process.env.SESSION_SECRET;
+  const logs = [];
+  const previousWarn = console.warn;
+
+  try {
+    process.env.SESSION_SECRET = "test-session-secret-with-enough-length";
+    const token = createCustomerSessionToken(7);
+    const badToken = `${token.slice(0, -2)}xx`;
+    console.warn = (...args) => logs.push(args);
+
+    const result = getCustomerFromRequestCookie(
+      new Request("https://make3d.com.cn/api/account/me", {
+        headers: { Cookie: `${CUSTOMER_SESSION_COOKIE}=${badToken}` },
+      }),
+    );
+    const details = verifyCustomerSessionTokenDetailed(badToken);
+
+    assert.equal(result, null);
+    assert.equal(details.error, "signature mismatch");
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0][0], "[make3d] customer session verify failed");
+    assert.deepEqual(logs[0][1], {
+      customerSessionExists: true,
+      tokenPrefix: badToken.slice(0, 12),
+      verifyErrorMessage: "signature mismatch",
+      sessionSecretExists: true,
+    });
+    assert.doesNotMatch(JSON.stringify(logs[0]), new RegExp(token));
+    assert.doesNotMatch(JSON.stringify(logs[0]), /test-session-secret-with-enough-length/);
+  } finally {
+    console.warn = previousWarn;
+    process.env.SESSION_SECRET = previousSecret;
+  }
 });

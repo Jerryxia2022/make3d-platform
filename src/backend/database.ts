@@ -1,7 +1,8 @@
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { verifyCustomerSessionToken } from "./customerSessionCore.js";
 
 export type OrderInput = {
   customerId?: number | null;
@@ -879,7 +880,7 @@ export function getCustomerById(db: DatabaseSync, id: number) {
 }
 
 export function getCustomerBySessionToken(db: DatabaseSync, token?: string) {
-  const session = verifyCustomerSessionTokenForDatabase(token);
+  const session = verifyCustomerSessionToken(token);
   return session ? getCustomerById(db, session.customerId) : null;
 }
 
@@ -1160,43 +1161,6 @@ function normalizeCustomer(customer: unknown) {
 
 function hashResetToken(token: string) {
   return createHash("sha256").update(token).digest("base64url");
-}
-
-function verifyCustomerSessionTokenForDatabase(token?: string, now = Date.now()) {
-  if (!token) {
-    return null;
-  }
-
-  const parts = token.split(".");
-
-  if (parts.length !== 4) {
-    return null;
-  }
-
-  const [customerIdText, expiresAtText, nonce, signature] = parts;
-  const customerId = Number(customerIdText);
-  const expiresAt = Number(expiresAtText);
-
-  if (!Number.isInteger(customerId) || customerId <= 0 || !Number.isFinite(expiresAt) || expiresAt < now || !nonce || !signature) {
-    return null;
-  }
-
-  const secret = process.env.SESSION_SECRET;
-
-  if (!secret) {
-    return null;
-  }
-
-  const payload = `${customerIdText}.${expiresAtText}.${nonce}`;
-  const expectedSignature = createHmac("sha256", secret).update(payload).digest("base64url");
-  return safeStringEqual(signature, expectedSignature) ? { customerId } : null;
-}
-
-function safeStringEqual(a: string, b: string) {
-  const aBuffer = Buffer.from(a);
-  const bBuffer = Buffer.from(b);
-
-  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
 function normalizeFileRecord(file: unknown) {
