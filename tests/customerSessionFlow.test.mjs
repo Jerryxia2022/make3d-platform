@@ -7,6 +7,8 @@ import {
   createCustomerSessionToken,
   getCustomerCookieOptions,
   getCustomerFromRequestCookie,
+  getCustomerSessionDiagnostics,
+  logCustomerSessionDiagnostics,
   setCustomerSessionCookie,
   verifyCustomerSessionTokenDetailed,
 } from "../src/backend/accountAuth.ts";
@@ -103,5 +105,55 @@ test("customer session verify failures log safe diagnostics without secrets", ()
   } finally {
     console.warn = previousWarn;
     process.env.SESSION_SECRET = previousSecret;
+  }
+});
+
+test("customer session diagnostics include safe deploy context", () => {
+  const previousEnv = {
+    APP_URL: process.env.APP_URL,
+    COOKIE_SECURE: process.env.COOKIE_SECURE,
+    NODE_ENV: process.env.NODE_ENV,
+    SESSION_SECRET: process.env.SESSION_SECRET,
+  };
+  const logs = [];
+  const previousWarn = console.warn;
+
+  try {
+    process.env.APP_URL = "https://make3d.com.cn";
+    process.env.COOKIE_SECURE = "true";
+    process.env.NODE_ENV = "production";
+    process.env.SESSION_SECRET = "test-session-secret-with-enough-length";
+
+    const token = createCustomerSessionToken(9);
+    const badToken = `${token.slice(0, -2)}xx`;
+    const request = new Request("https://make3d.com.cn/api/account/me", {
+      headers: { Cookie: `${CUSTOMER_SESSION_COOKIE}=${badToken}` },
+    });
+    const diagnostics = getCustomerSessionDiagnostics(request);
+    console.warn = (...args) => logs.push(args);
+    logCustomerSessionDiagnostics("[make3d] /api/account/me customer session failed", request);
+
+    assert.deepEqual(diagnostics, {
+      customerSessionExists: true,
+      tokenPrefix: badToken.slice(0, 20),
+      verifyErrorMessage: "signature mismatch",
+      sessionSecretExists: true,
+      nodeEnv: "production",
+      appUrl: "https://make3d.com.cn",
+      cookieSecure: "true",
+    });
+    assert.equal(logs[0][0], "[make3d] /api/account/me customer session failed");
+    assert.deepEqual(logs[0][1], diagnostics);
+    assert.doesNotMatch(JSON.stringify(logs[0]), new RegExp(token));
+    assert.doesNotMatch(JSON.stringify(logs[0]), /test-session-secret-with-enough-length/);
+  } finally {
+    console.warn = previousWarn;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }
 });

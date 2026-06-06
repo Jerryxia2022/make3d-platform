@@ -55,12 +55,7 @@ export function createCustomerLogoutResponse(status = 200, location?: string) {
 }
 
 export function getCustomerFromRequestCookie(request: Request) {
-  const cookieHeader = request.headers.get("Cookie") || "";
-  const token = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${CUSTOMER_SESSION_COOKIE}=`))
-    ?.slice(CUSTOMER_SESSION_COOKIE.length + 1);
+  const token = getCustomerSessionTokenFromRequest(request);
 
   if (!token) {
     return null;
@@ -74,6 +69,35 @@ export function getCustomerFromRequestCookie(request: Request) {
   }
 
   return result.session;
+}
+
+export function getCustomerSessionDiagnostics(request: Request) {
+  const token = getCustomerSessionTokenFromRequest(request);
+  const decodedToken = token ? decodeCookieValue(token) : "";
+  const result = verifyCustomerSessionTokenDetailed(decodedToken || undefined);
+
+  return {
+    customerSessionExists: Boolean(token),
+    tokenPrefix: decodedToken ? decodedToken.slice(0, 20) : "",
+    verifyErrorMessage: result.session ? null : result.error || "unknown verify error",
+    sessionSecretExists: Boolean(process.env.SESSION_SECRET),
+    nodeEnv: process.env.NODE_ENV || "",
+    appUrl: process.env.APP_URL || "",
+    cookieSecure: process.env.COOKIE_SECURE || "",
+  };
+}
+
+export function logCustomerSessionDiagnostics(label: string, request: Request) {
+  console.warn(label, getCustomerSessionDiagnostics(request));
+}
+
+function getCustomerSessionTokenFromRequest(request: Request) {
+  const cookieHeader = request.headers.get("Cookie") || "";
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${CUSTOMER_SESSION_COOKIE}=`))
+    ?.slice(CUSTOMER_SESSION_COOKIE.length + 1);
 }
 
 function decodeCookieValue(value: string) {

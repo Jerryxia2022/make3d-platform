@@ -1,4 +1,7 @@
-import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
+import {
+  getCustomerFromRequestCookie,
+  logCustomerSessionDiagnostics,
+} from "@/backend/accountAuth";
 import { getCustomerById, openDatabase } from "@/backend/database";
 
 export const runtime = "nodejs";
@@ -7,6 +10,7 @@ export function GET(request: Request) {
   const session = getCustomerFromRequestCookie(request);
 
   if (!session) {
+    logCustomerSessionDiagnostics("[make3d] /api/account/me customer session failed", request);
     return Response.json({ authenticated: false }, { status: 401 });
   }
 

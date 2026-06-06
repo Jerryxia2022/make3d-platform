@@ -7,7 +7,10 @@ import {
   openDatabase,
   updateSliceJobSuccess,
 } from "@/backend/database";
-import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
+import {
+  getCustomerFromRequestCookie,
+  logCustomerSessionDiagnostics,
+} from "@/backend/accountAuth";
 import { calculateAutoLeadTimeHours } from "@/backend/autoPricing";
 import { estimateFileBySize, estimateOrderSummary, getShippingEstimate } from "@/backend/estimates";
 import { notifyAdminNewOrder } from "@/backend/email";
@@ -275,6 +278,9 @@ function getString(formData: FormData, key: string) {
 
 function getCustomerFromRequest(request: Request) {
   const session = getCustomerFromRequestCookie(request);
+  if (!session) {
+    logCustomerSessionDiagnostics("[make3d] /api/orders customer session failed", request);
+  }
   return session ? { id: session.customerId } : null;
 }
 
