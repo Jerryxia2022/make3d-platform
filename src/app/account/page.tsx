@@ -114,18 +114,18 @@ function OrderTable({ orders, compact = false }: { orders: OrderRecord[]; compac
               </td>
               <td className="py-3 pr-4">{formatDate(order.createdAt)}</td>
               <td className="py-3 pr-4">{formatFileCount(order)}</td>
-              <td className="py-3 pr-4">{formatMoney(order.payablePrice ?? order.estimatedPrice)}</td>
-              <td className="py-3 pr-4">{formatLeadTime(order.estimatedLeadTimeHours)}</td>
+              <td className="py-3 pr-4">{formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)}</td>
+              <td className="py-3 pr-4">{formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)}</td>
               <td className="py-3 pr-4">
                 <p className="font-semibold">{order.status}</p>
                 {order.status === "待付款" ? (
-                  <p className="mt-1 text-xs font-semibold text-coral">请联系工作人员完成付款</p>
+                  <p className="mt-1 text-xs font-semibold text-coral">请按最终报价付款</p>
                 ) : null}
               </td>
               {!compact ? (
                 <td className="py-3 pr-4">
                   <Link className="font-semibold text-coral" href={`/account/orders/${order.id}`}>
-                    查看详情
+                    {order.status === "待付款" ? "查看付款方式" : "查看详情"}
                   </Link>
                 </td>
               ) : null}

@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  getPaymentSettings,
   getOrderByIdForCustomer,
   openDatabase,
   type OrderDetail,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
+import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
 
 export default async function CustomerOrderConfirmPage({
   params,
@@ -24,6 +26,7 @@ export default async function CustomerOrderConfirmPage({
 
   try {
     const order = getOrderByIdForCustomer(db, Number(id), customer.id);
+    const paymentSettings = getPaymentSettings(db);
 
     return (
       <main className="min-h-screen px-6 py-10 text-ink">
@@ -48,7 +51,7 @@ export default async function CustomerOrderConfirmPage({
               <dl className="mt-5 grid gap-4 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
                 <Detail label="订单状态" value={order.status} />
-                <Detail label="预计交货期" value={formatLeadTime(order.estimatedLeadTimeHours)} />
+                <Detail label="预计交货期" value={formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)} />
               </dl>
             </div>
 
@@ -64,11 +67,28 @@ export default async function CustomerOrderConfirmPage({
             <div className="border border-ink/10 bg-white/80 p-6 shadow-sm">
               <h2 className="text-xl font-bold">应付总价</h2>
               <p className="mt-5 text-3xl font-bold text-coral">
-                {formatMoney(order.payablePrice ?? order.estimatedPrice)}
+                {formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)}
               </p>
               <p className="mt-3 text-sm text-graphite">最终价格以人工确认为准。</p>
             </div>
           </section>
+
+          {order.status === "待付款" ? (
+            <section className="mt-8 border border-coral/30 bg-coral/5 p-6 shadow-sm">
+              <h2 className="text-xl font-bold">付款说明</h2>
+              <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+                <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+                <Detail label="预计交货期" value={formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)} />
+              </dl>
+              <p className="mt-5 text-sm font-semibold text-coral">
+                请按最终报价付款，付款时请备注订单编号或注册手机号，便于我们核对。
+              </p>
+              <CustomerPaymentOptions settings={paymentSettings} />
+              <p className="mt-5 text-sm font-semibold text-graphite">
+                付款完成后，工作人员核对到账后会更新订单状态。
+              </p>
+            </section>
+          ) : null}
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">文件列表</h2>

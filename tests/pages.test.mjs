@@ -86,9 +86,9 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(accountSource, /ChangePasswordForm/);
   assert.match(accountSource, /\/account\/orders\/\$\{order\.id\}/);
   assert.match(accountSource, /formatFileCount/);
-  assert.match(accountSource, /formatMoney\(order\.payablePrice/);
-  assert.match(accountSource, /formatLeadTime\(order\.estimatedLeadTimeHours/);
-  assert.match(accountSource, /请联系工作人员完成付款/);
+  assert.match(accountSource, /formatMoney\(order\.finalPrice \?\? order\.payablePrice/);
+  assert.match(accountSource, /formatLeadTime\(order\.finalLeadTimeHours \?\? order\.estimatedLeadTimeHours/);
+  assert.match(accountSource, /查看付款方式/);
 
   assert.match(detailSource, /getOrderByIdForCustomer/);
   assert.match(detailSource, /redirect\("\/account\/login"\)/);
@@ -475,7 +475,9 @@ test("admin order status API records admin workflow and notifies customers", asy
 });
 
 test("manual payment confirmation workflow pages avoid customer proof upload", async () => {
+  const accountSource = await readSource("src/app/account/page.tsx");
   const customerDetailSource = await readSource("src/app/account/orders/[id]/page.tsx");
+  const customerConfirmSource = await readSource("src/app/account/orders/[id]/confirm/page.tsx");
   const customerPaymentSource = await readSource("src/frontend/components/CustomerPaymentOptions.tsx");
   const adminDetailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
   const adminFinalQuoteSource = await readSource("src/frontend/components/AdminFinalQuoteForm.tsx");
@@ -487,11 +489,15 @@ test("manual payment confirmation workflow pages avoid customer proof upload", a
   assert.match(customerDetailSource, /订单正在人工确认，自动估价仅供参考/);
   assert.match(customerDetailSource, /请按最终报价付款/);
   assert.match(customerDetailSource, /付款完成后，工作人员核对到账后会更新订单状态。/);
+  assert.match(accountSource, /查看付款方式/);
+  assert.match(customerConfirmSource, /CustomerPaymentOptions/);
+  assert.match(customerConfirmSource, /付款完成后，工作人员核对到账后会更新订单状态。/);
   assert.match(customerPaymentSource, /微信转账/);
   assert.match(customerPaymentSource, /支付宝转账/);
   assert.match(customerPaymentSource, /闲鱼链接/);
   assert.match(customerPaymentSource, /淘宝链接/);
   assert.doesNotMatch(customerDetailSource, /付款凭证|paymentProof|上传截图|我已付款/);
+  assert.doesNotMatch(customerConfirmSource, /付款凭证|paymentProof|上传截图|我已付款/);
   assert.doesNotMatch(customerPaymentSource, /付款凭证|paymentProof|上传截图|我已付款/);
 
   assert.match(adminFinalQuoteSource, /确认报价并通知客户/);
