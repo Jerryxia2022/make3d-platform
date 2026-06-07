@@ -6,6 +6,8 @@ import {
   getFileById,
   getOrderById,
   getOrderStatusLogsByOrderId,
+  confirmOrderFinalQuote,
+  confirmOrderPayment,
   initDatabase,
   searchOrders,
   ORDER_STATUSES,
@@ -129,15 +131,100 @@ test("updates order status only to allowed values", () => {
     "待付款",
     "已付款",
     "排产中",
-    "打印中",
+    "生产中",
     "后处理",
     "已发货",
     "已完成",
     "已取消",
   ]);
-  assert.equal(updateOrderStatus(db, order.id, { status: "打印中", operator: "admin" }), true);
-  assert.equal(getOrderById(db, order.id).status, "打印中");
+  assert.throws(
+    () => updateOrderStatus(db, order.id, { status: "待付款", operator: "admin" }),
+    /没有最终报价不能进入待付款/,
+  );
+  assert.throws(
+    () => updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" }),
+    /未付款不能进入生产流程/,
+  );
   assert.throws(() => updateOrderStatus(db, order.id, { status: "未知状态", operator: "admin" }), /无效订单状态/);
+
+  db.close();
+});
+
+test("admin confirms final quote before customer payment", () => {
+  const db = initDatabase(":memory:");
+  const order = createFixtureOrder(db);
+
+  assert.equal(
+    confirmOrderFinalQuote(db, order.id, {
+      finalPrice: 88.5,
+      finalLeadTimeHours: 72,
+      priceAdjustmentReason: "增加支撑和后处理",
+      productionNote: "按白色 PLA 生产",
+      operator: "admin",
+    }),
+    true,
+  );
+
+  const detail = getOrderById(db, order.id);
+  const logs = getOrderStatusLogsByOrderId(db, order.id);
+
+  assert.equal(detail.status, "待付款");
+  assert.equal(detail.finalPrice, 88.5);
+  assert.equal(detail.finalLeadTimeHours, 72);
+  assert.equal(detail.priceAdjustmentReason, "增加支撑和后处理");
+  assert.equal(detail.productionNote, "按白色 PLA 生产");
+  assert.equal(logs[0].fromStatus, "待确认");
+  assert.equal(logs[0].toStatus, "待付款");
+
+  db.close();
+});
+
+test("admin manually confirms payment and blocks unsafe payment transitions", () => {
+  const db = initDatabase(":memory:");
+  const order = createFixtureOrder(db);
+
+  assert.throws(
+    () => confirmOrderPayment(db, order.id, { paymentNote: "微信到账", operator: "admin" }),
+    /只有待付款订单可以确认到账/,
+  );
+
+  confirmOrderFinalQuote(db, order.id, {
+    finalPrice: 88.5,
+    finalLeadTimeHours: 72,
+    priceAdjustmentReason: "人工确认",
+    productionNote: "准备生产",
+    operator: "admin",
+  });
+
+  assert.equal(
+    confirmOrderPayment(db, order.id, {
+      paymentMethod: "微信转账",
+      paymentNote: "微信到账",
+      operator: "admin",
+    }),
+    true,
+  );
+
+  const paid = getOrderById(db, order.id);
+  assert.equal(paid.status, "已付款");
+  assert.equal(paid.paymentMethod, "微信转账");
+  assert.equal(paid.paymentConfirmedBy, "admin");
+  assert.equal(paid.paymentNote, "微信到账");
+  assert.ok(paid.paymentConfirmedAt);
+
+  assert.equal(updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" }), true);
+  assert.equal(getOrderById(db, order.id).status, "生产中");
+  assert.throws(
+    () => confirmOrderPayment(db, order.id, { paymentNote: "重复确认", operator: "admin" }),
+    /只有待付款订单可以确认到账/,
+  );
+
+  const canceled = createFixtureOrder(db);
+  updateOrderStatus(db, canceled.id, { status: "已取消", operator: "admin" });
+  assert.throws(
+    () => confirmOrderPayment(db, canceled.id, { paymentNote: "取消后付款", operator: "admin" }),
+    /已取消订单不能付款/,
+  );
 
   db.close();
 });
@@ -145,6 +232,18 @@ test("updates order status only to allowed values", () => {
 test("records order status workflow logs and admin fulfillment fields", () => {
   const db = initDatabase(":memory:");
   const order = createFixtureOrder(db);
+
+  confirmOrderFinalQuote(db, order.id, {
+    finalPrice: 66,
+    finalLeadTimeHours: 48,
+    priceAdjustmentReason: "人工确认",
+    productionNote: "排产",
+    operator: "admin",
+  });
+  confirmOrderPayment(db, order.id, { paymentNote: "支付宝到账", operator: "admin" });
+  updateOrderStatus(db, order.id, { status: "排产中", operator: "admin" });
+  updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" });
+  updateOrderStatus(db, order.id, { status: "后处理", operator: "admin" });
 
   assert.equal(
     updateOrderStatus(db, order.id, {
@@ -163,9 +262,13 @@ test("records order status workflow logs and admin fulfillment fields", () => {
   assert.equal(detail.shippingCompany, "顺丰快递");
   assert.equal(detail.trackingNumber, "SF123456789");
   assert.equal(detail.adminRemark, "已通知客户");
-  assert.equal(logs.length, 1);
-  assert.equal(logs[0].fromStatus, "待确认");
-  assert.equal(logs[0].toStatus, "已发货");
+  assert.equal(logs.length, 6);
+  assert.ok(logs.some((log) => log.fromStatus === "待确认" && log.toStatus === "待付款"));
+  assert.ok(logs.some((log) => log.fromStatus === "待付款" && log.toStatus === "已付款"));
+  assert.ok(logs.some((log) => log.fromStatus === "已付款" && log.toStatus === "排产中"));
+  assert.ok(logs.some((log) => log.fromStatus === "排产中" && log.toStatus === "生产中"));
+  assert.ok(logs.some((log) => log.fromStatus === "生产中" && log.toStatus === "后处理"));
+  assert.ok(logs.some((log) => log.fromStatus === "后处理" && log.toStatus === "已发货"));
   assert.equal(logs[0].operator, "admin");
 
   db.close();

@@ -37,6 +37,9 @@ export default async function AdminOrdersPage({
             <Link className="font-semibold text-graphite" href="/">
               返回首页
             </Link>
+            <Link className="font-semibold text-graphite" href="/admin/settings/payment">
+              付款设置
+            </Link>
             <AdminLogoutButton />
           </div>
         </div>

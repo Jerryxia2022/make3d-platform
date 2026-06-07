@@ -29,16 +29,16 @@ import {
   resetUploadRateLimit,
 } from "../src/backend/rateLimit.ts";
 
-test("initializes orders, files, and slice_jobs tables with estimate, shipping, and model option columns", async () => {
+test("initializes orders, files, slice_jobs, and payment settings tables", async () => {
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
 
-  assert.deepEqual(tables, ["files", "orders", "slice_jobs"]);
+  assert.deepEqual(tables, ["files", "orders", "payment_settings", "slice_jobs"]);
 
   const fileColumns = db.prepare("PRAGMA table_info(files)").all().map((row) => row.name);
   for (const column of [
@@ -84,8 +84,27 @@ test("initializes orders, files, and slice_jobs tables with estimate, shipping, 
     "print_fee_total",
     "payable_price",
     "estimated_lead_time_hours",
+    "final_price",
+    "final_lead_time_hours",
+    "price_adjustment_reason",
+    "production_note",
+    "payment_method",
+    "payment_confirmed_at",
+    "payment_confirmed_by",
+    "payment_note",
   ]) {
     assert.equal(orderColumns.includes(column), true);
+  }
+
+  const paymentColumns = db.prepare("PRAGMA table_info(payment_settings)").all().map((row) => row.name);
+  for (const column of [
+    "wechat_qr_path",
+    "alipay_qr_path",
+    "xianyu_url",
+    "taobao_url",
+    "other_note",
+  ]) {
+    assert.equal(paymentColumns.includes(column), true);
   }
 
   const sliceJobColumns = db.prepare("PRAGMA table_info(slice_jobs)").all().map((row) => row.name);

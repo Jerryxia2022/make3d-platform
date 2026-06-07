@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { confirmOrderFinalQuote, getOrderById, openDatabase } from "@/backend/database";
+import { confirmOrderPayment, getOrderById, openDatabase } from "@/backend/database";
 import { notifyCustomerOrderStatus } from "@/backend/email";
 import { requireAdminSession } from "@/backend/nextAdmin";
 
@@ -20,11 +20,9 @@ export async function POST(
 
     try {
       const orderId = Number(id);
-      const updated = confirmOrderFinalQuote(db, orderId, {
-        finalPrice: parseFinalPrice(body.finalPrice),
-        finalLeadTimeHours: parseOptionalInteger(body.finalLeadTimeHours),
-        priceAdjustmentReason: getOptionalString(body.priceAdjustmentReason),
-        productionNote: getOptionalString(body.productionNote),
+      const updated = confirmOrderPayment(db, orderId, {
+        paymentMethod: getOptionalString(body.paymentMethod),
+        paymentNote: getOptionalString(body.paymentNote),
         operator: "admin",
       });
 
@@ -40,33 +38,9 @@ export async function POST(
       db.close();
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "最终报价保存失败";
+    const message = error instanceof Error ? error.message : "确认到账失败";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-}
-
-function parseFinalPrice(value: unknown) {
-  const price = Number(value);
-
-  if (!Number.isFinite(price) || price <= 0) {
-    throw new Error("没有最终报价不能进入待付款");
-  }
-
-  return Math.round(price * 100) / 100;
-}
-
-function parseOptionalInteger(value: unknown) {
-  if (value === "" || value == null) {
-    return null;
-  }
-
-  const number = Number(value);
-
-  if (!Number.isFinite(number) || number < 0) {
-    throw new Error("最终交货期必须为非负整数小时");
-  }
-
-  return Math.ceil(number);
 }
 
 function getOptionalString(value: unknown) {

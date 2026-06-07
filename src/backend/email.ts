@@ -29,10 +29,18 @@ export type MailTransport = {
 
 export type OrderStatusEmailOrder = Pick<
   OrderRecord,
-  "id" | "orderNo" | "email" | "status" | "shippingCompany" | "trackingNumber"
+  | "id"
+  | "orderNo"
+  | "email"
+  | "status"
+  | "phone"
+  | "finalPrice"
+  | "finalLeadTimeHours"
+  | "shippingCompany"
+  | "trackingNumber"
 >;
 
-const CUSTOMER_STATUS_EMAIL_STATUSES = new Set(["待付款", "打印中", "已发货", "已完成"]);
+const CUSTOMER_STATUS_EMAIL_STATUSES = new Set(["待付款", "已付款", "生产中", "已发货", "已完成"]);
 
 export function buildNewOrderEmail(order: NewOrderEmailOrder, appUrl = getAppUrl()): MailMessage {
   const detailUrl = `${appUrl.replace(/\/$/, "")}/admin/orders/${order.id}`;
@@ -86,6 +94,18 @@ export function buildOrderStatusEmail(
     `当前状态：${order.status}`,
     `订单详情：${detailUrl}`,
   ];
+
+  if (order.status === "待付款") {
+    lines.push(`最终报价：${formatMoney(order.finalPrice)}`);
+    lines.push(`预计交货期：${formatLeadTime(order.finalLeadTimeHours)}`);
+    lines.push("请按最终报价付款，付款时请备注订单编号或注册手机号，便于我们核对。");
+    lines.push(`付款入口：${detailUrl}`);
+    lines.push(`备注建议：${order.orderNo}/${order.phone || "-"}`);
+  }
+
+  if (order.status === "已付款") {
+    lines.push("付款已确认，订单已进入生产准备。");
+  }
 
   if (order.status === "已发货") {
     lines.push(`快递公司：${order.shippingCompany || "-"}`);

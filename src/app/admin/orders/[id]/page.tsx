@@ -13,6 +13,7 @@ import {
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { getPrusaSlicerConfig } from "@/backend/slicer";
 import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
+import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 
@@ -49,10 +50,13 @@ export default async function AdminOrderDetailPage({
             </div>
             <div className="grid gap-4 sm:min-w-80">
               <AdminFinalQuoteForm
+                finalLeadTimeHours={order.finalLeadTimeHours}
                 finalPrice={order.finalPrice}
                 orderId={order.id}
                 priceAdjustmentReason={order.priceAdjustmentReason}
+                productionNote={order.productionNote}
               />
+              {order.status === "待付款" ? <AdminPaymentConfirmForm orderId={order.id} /> : null}
               <AdminStatusForm orderId={order.id} status={order.status} shippingCompany={order.shippingCompany} trackingNumber={order.trackingNumber} adminRemark={order.adminRemark} />
             </div>
           </div>
@@ -68,6 +72,7 @@ export default async function AdminOrderDetailPage({
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
                 <Detail label="自动报价" value={formatAutomaticPrice(order)} />
                 <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+                <Detail label="最终交货期" value={formatLeadTimeHours(order.finalLeadTimeHours)} />
                 <Detail label="调价原因" value={order.priceAdjustmentReason || "-"} />
                 <Detail label="最终报价更新时间" value={formatOptionalDate(order.finalPriceUpdatedAt)} />
                 <Detail label="预估价格" value={formatPrice(order)} />
@@ -118,8 +123,26 @@ export default async function AdminOrderDetailPage({
           </section>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">付款核对</h2>
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+              <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+              <Detail label="客户姓名" value={order.customerName} />
+              <Detail label="注册手机号" value={order.phone} />
+              <Detail label="微信号" value={order.wechat} />
+              <Detail label="订单编号" value={order.orderNo} />
+              <Detail label="付款识别备注建议" value="付款时请备注：订单编号/手机号" />
+              <Detail label="到账方式" value={order.paymentMethod || "-"} />
+              <Detail label="确认时间" value={formatOptionalDate(order.paymentConfirmedAt)} />
+              <Detail label="确认人" value={order.paymentConfirmedBy || "-"} />
+              <Detail label="付款备注" value={order.paymentNote || "-"} />
+            </dl>
+          </section>
+
+          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-graphite">{order.remark || "无备注"}</p>
+            <h3 className="mt-6 text-base font-bold">生产备注</h3>
+            <p className="mt-3 whitespace-pre-wrap text-graphite">{order.productionNote || "无备注"}</p>
             <h3 className="mt-6 text-base font-bold">管理员备注</h3>
             <p className="mt-3 whitespace-pre-wrap text-graphite">{order.adminRemark || "无备注"}</p>
           </section>
@@ -320,6 +343,10 @@ function formatLeadTime(order: OrderDetail) {
   }
 
   return `约${order.estimatedLeadTimeMaxHours}小时`;
+}
+
+function formatLeadTimeHours(value: number | null) {
+  return value == null ? "-" : `约${value}小时`;
 }
 
 function formatOrderLeadTime(order: OrderDetail) {

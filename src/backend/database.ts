@@ -33,7 +33,11 @@ export type OrderInput = {
   payablePrice?: number;
   estimatedLeadTimeHours?: number;
   finalPrice?: number | null;
+  finalLeadTimeHours?: number | null;
   priceAdjustmentReason?: string | null;
+  productionNote?: string | null;
+  paymentMethod?: string | null;
+  paymentNote?: string | null;
   shippingCompany?: string | null;
   trackingNumber?: string | null;
   adminRemark?: string | null;
@@ -102,7 +106,7 @@ export const ORDER_STATUSES = [
   "待付款",
   "已付款",
   "排产中",
-  "打印中",
+  "生产中",
   "后处理",
   "已发货",
   "已完成",
@@ -171,8 +175,14 @@ export type OrderRecord = {
   payablePrice: number | null;
   estimatedLeadTimeHours: number | null;
   finalPrice: number | null;
+  finalLeadTimeHours: number | null;
   priceAdjustmentReason: string | null;
   finalPriceUpdatedAt: string | null;
+  productionNote: string | null;
+  paymentMethod: string | null;
+  paymentConfirmedAt: string | null;
+  paymentConfirmedBy: string | null;
+  paymentNote: string | null;
   shippingCompany: string | null;
   trackingNumber: string | null;
   adminRemark: string | null;
@@ -195,6 +205,14 @@ export type OrderStatusLogRecord = {
   toStatus: string;
   operator: string;
   createdAt: string;
+};
+
+export type PaymentSettings = {
+  wechatQrPath: string | null;
+  alipayQrPath: string | null;
+  xianyuUrl: string | null;
+  taobaoUrl: string | null;
+  otherNote: string | null;
 };
 
 export type SliceJobInput = {
@@ -288,8 +306,14 @@ export function initDatabase(dbPath = getDatabasePath()) {
       payable_price REAL,
       estimated_lead_time_hours INTEGER,
       final_price REAL,
+      final_lead_time_hours INTEGER,
       price_adjustment_reason TEXT,
       final_price_updated_at DATETIME,
+      production_note TEXT,
+      payment_method TEXT,
+      payment_confirmed_at DATETIME,
+      payment_confirmed_by TEXT,
+      payment_note TEXT,
       shipping_company TEXT,
       tracking_number TEXT,
       admin_remark TEXT,
@@ -331,6 +355,16 @@ export function initDatabase(dbPath = getDatabasePath()) {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(identifier_type, identifier),
       CHECK (identifier_type IN ('phone', 'ip'))
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      wechat_qr_path TEXT,
+      alipay_qr_path TEXT,
+      xianyu_url TEXT,
+      taobao_url TEXT,
+      other_note TEXT,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS order_status_logs (
@@ -421,12 +455,27 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["payable_price", "REAL"],
     ["estimated_lead_time_hours", "INTEGER"],
     ["final_price", "REAL"],
+    ["final_lead_time_hours", "INTEGER"],
     ["price_adjustment_reason", "TEXT"],
     ["final_price_updated_at", "DATETIME"],
+    ["production_note", "TEXT"],
+    ["payment_method", "TEXT"],
+    ["payment_confirmed_at", "DATETIME"],
+    ["payment_confirmed_by", "TEXT"],
+    ["payment_note", "TEXT"],
     ["shipping_company", "TEXT"],
     ["tracking_number", "TEXT"],
     ["admin_remark", "TEXT"],
   ]);
+  ensureColumns(db, "payment_settings", [
+    ["wechat_qr_path", "TEXT"],
+    ["alipay_qr_path", "TEXT"],
+    ["xianyu_url", "TEXT"],
+    ["taobao_url", "TEXT"],
+    ["other_note", "TEXT"],
+    ["updated_at", "DATETIME"],
+  ]);
+  db.prepare("INSERT OR IGNORE INTO payment_settings (id) VALUES (1)").run();
   ensureColumns(db, "files", [
     ["bounding_box_x", "REAL"],
     ["bounding_box_y", "REAL"],
@@ -524,13 +573,19 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           payable_price,
           estimated_lead_time_hours,
           final_price,
+          final_lead_time_hours,
           price_adjustment_reason,
           final_price_updated_at,
+          production_note,
+          payment_method,
+          payment_confirmed_at,
+          payment_confirmed_by,
+          payment_note,
           shipping_company,
           tracking_number,
           admin_remark,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -562,8 +617,14 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.payablePrice ?? null,
         input.estimatedLeadTimeHours ?? null,
         input.finalPrice ?? null,
+        input.finalLeadTimeHours ?? null,
         input.priceAdjustmentReason || null,
         null,
+        input.productionNote || null,
+        input.paymentMethod || null,
+        null,
+        null,
+        input.paymentNote || null,
         input.shippingCompany ?? null,
         input.trackingNumber ?? null,
         input.adminRemark ?? null,
@@ -817,13 +878,15 @@ export function updateOrderStatus(
     throw new Error("无效订单状态");
   }
 
-  const current = db.prepare("SELECT status FROM orders WHERE id = ?").get(id) as
-    | { status: string }
+  const current = db.prepare("SELECT status, final_price AS finalPrice FROM orders WHERE id = ?").get(id) as
+    | { status: string; finalPrice: number | null }
     | undefined;
 
   if (!current) {
     return false;
   }
+
+  assertAllowedStatusUpdate(current.status, status, current.finalPrice);
 
   const shippingCompany =
     typeof input === "string" ? null : normalizeOptionalText(input.shippingCompany);
@@ -845,14 +908,7 @@ export function updateOrderStatus(
     .run(status, shippingCompany, trackingNumber, adminRemark, id);
 
   if (result.changes > 0 && current.status !== status) {
-    db.prepare(
-      `INSERT INTO order_status_logs (
-        order_id,
-        from_status,
-        to_status,
-        operator
-      ) VALUES (?, ?, ?, ?)`,
-    ).run(id, current.status, status, operator);
+    insertStatusLog(db, id, current.status, status, operator);
   }
 
   return result.changes > 0;
@@ -861,7 +917,12 @@ export function updateOrderStatus(
 export function updateOrderFinalQuote(
   db: DatabaseSync,
   id: number,
-  input: { finalPrice: number | null; priceAdjustmentReason?: string | null },
+  input: {
+    finalPrice: number | null;
+    finalLeadTimeHours?: number | null;
+    priceAdjustmentReason?: string | null;
+    productionNote?: string | null;
+  },
 ) {
   const finalPrice = input.finalPrice;
 
@@ -869,15 +930,149 @@ export function updateOrderFinalQuote(
     throw new Error("最终报价必须为非负数字");
   }
 
+  const finalLeadTimeHours = normalizeOptionalNonNegativeInteger(
+    input.finalLeadTimeHours,
+    "最终交货期必须为非负整数小时",
+  );
+
   const result = db
     .prepare(
       `UPDATE orders
        SET final_price = ?,
+           final_lead_time_hours = COALESCE(?, final_lead_time_hours),
            price_adjustment_reason = ?,
+           production_note = COALESCE(?, production_note),
            final_price_updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
-    .run(finalPrice, normalizeOptionalText(input.priceAdjustmentReason), id);
+    .run(
+      finalPrice,
+      finalLeadTimeHours,
+      normalizeOptionalText(input.priceAdjustmentReason),
+      normalizeOptionalText(input.productionNote),
+      id,
+    );
+
+  return result.changes > 0;
+}
+
+export function confirmOrderFinalQuote(
+  db: DatabaseSync,
+  id: number,
+  input: {
+    finalPrice: number;
+    finalLeadTimeHours?: number | null;
+    priceAdjustmentReason?: string | null;
+    productionNote?: string | null;
+    operator?: string;
+  },
+) {
+  const finalPrice = input.finalPrice;
+
+  if (!Number.isFinite(finalPrice) || finalPrice <= 0) {
+    throw new Error("没有最终报价不能进入待付款");
+  }
+
+  const current = db.prepare("SELECT status FROM orders WHERE id = ?").get(id) as
+    | { status: string }
+    | undefined;
+
+  if (!current) {
+    return false;
+  }
+
+  if (current.status === "已取消") {
+    throw new Error("已取消订单不能确认报价");
+  }
+
+  if (current.status === "已完成") {
+    throw new Error("已完成订单不能重新确认报价");
+  }
+
+  const finalLeadTimeHours = normalizeOptionalNonNegativeInteger(
+    input.finalLeadTimeHours,
+    "最终交货期必须为非负整数小时",
+  );
+  const result = db
+    .prepare(
+      `UPDATE orders
+       SET final_price = ?,
+           final_lead_time_hours = ?,
+           price_adjustment_reason = ?,
+           production_note = ?,
+           final_price_updated_at = CURRENT_TIMESTAMP,
+           status = '待付款'
+       WHERE id = ?`,
+    )
+    .run(
+      Math.round(finalPrice * 100) / 100,
+      finalLeadTimeHours,
+      normalizeOptionalText(input.priceAdjustmentReason),
+      normalizeOptionalText(input.productionNote),
+      id,
+    );
+
+  if (result.changes > 0 && current.status !== "待付款") {
+    insertStatusLog(db, id, current.status, "待付款", input.operator || "admin");
+  }
+
+  return result.changes > 0;
+}
+
+export function confirmOrderPayment(
+  db: DatabaseSync,
+  id: number,
+  input: {
+    paymentMethod?: string | null;
+    paymentNote?: string | null;
+    operator?: string;
+  },
+) {
+  const current = db
+    .prepare("SELECT status, final_price AS finalPrice FROM orders WHERE id = ?")
+    .get(id) as { status: string; finalPrice: number | null } | undefined;
+
+  if (!current) {
+    return false;
+  }
+
+  if (current.status === "已取消") {
+    throw new Error("已取消订单不能付款");
+  }
+
+  if (current.status === "已完成") {
+    throw new Error("已完成订单不能重新付款");
+  }
+
+  if (current.status !== "待付款") {
+    throw new Error("只有待付款订单可以确认到账");
+  }
+
+  if (current.finalPrice == null || current.finalPrice <= 0) {
+    throw new Error("没有最终报价不能确认到账");
+  }
+
+  const operator = input.operator || "admin";
+  const result = db
+    .prepare(
+      `UPDATE orders
+       SET status = '已付款',
+           payment_method = ?,
+           payment_confirmed_at = CURRENT_TIMESTAMP,
+           payment_confirmed_by = ?,
+           payment_note = ?
+       WHERE id = ?`,
+    )
+    .run(
+      normalizeOptionalText(input.paymentMethod),
+      operator,
+      normalizeOptionalText(input.paymentNote),
+      id,
+    );
+
+  if (result.changes > 0) {
+    insertStatusLog(db, id, current.status, "已付款", operator);
+  }
 
   return result.changes > 0;
 }
@@ -900,6 +1095,56 @@ export function getOrderStatusLogsByOrderId(
       ORDER BY created_at DESC, id DESC`,
     )
     .all(orderId) as OrderStatusLogRecord[];
+}
+
+export function getPaymentSettings(db: DatabaseSync): PaymentSettings {
+  const row = db
+    .prepare(
+      `SELECT
+        wechat_qr_path AS wechatQrPath,
+        alipay_qr_path AS alipayQrPath,
+        xianyu_url AS xianyuUrl,
+        taobao_url AS taobaoUrl,
+        other_note AS otherNote
+      FROM payment_settings
+      WHERE id = 1`,
+    )
+    .get() as PaymentSettings | undefined;
+
+  return (
+    row || {
+      wechatQrPath: null,
+      alipayQrPath: null,
+      xianyuUrl: null,
+      taobaoUrl: null,
+      otherNote: null,
+    }
+  );
+}
+
+export function updatePaymentSettings(db: DatabaseSync, input: PaymentSettings) {
+  db.prepare("INSERT OR IGNORE INTO payment_settings (id) VALUES (1)").run();
+
+  const result = db
+    .prepare(
+      `UPDATE payment_settings
+       SET wechat_qr_path = ?,
+           alipay_qr_path = ?,
+           xianyu_url = ?,
+           taobao_url = ?,
+           other_note = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = 1`,
+    )
+    .run(
+      normalizeOptionalText(input.wechatQrPath),
+      normalizeOptionalText(input.alipayQrPath),
+      normalizeOptionalText(input.xianyuUrl),
+      normalizeOptionalText(input.taobaoUrl),
+      normalizeOptionalText(input.otherNote),
+    );
+
+  return result.changes > 0;
 }
 
 export function createCustomerAccount(db: DatabaseSync, input: CustomerAccountInput) {
@@ -1172,8 +1417,14 @@ function orderSelectSql(suffix: string) {
     payable_price AS payablePrice,
     estimated_lead_time_hours AS estimatedLeadTimeHours,
     final_price AS finalPrice,
+    final_lead_time_hours AS finalLeadTimeHours,
     price_adjustment_reason AS priceAdjustmentReason,
     final_price_updated_at AS finalPriceUpdatedAt,
+    production_note AS productionNote,
+    payment_method AS paymentMethod,
+    payment_confirmed_at AS paymentConfirmedAt,
+    payment_confirmed_by AS paymentConfirmedBy,
+    payment_note AS paymentNote,
     shipping_company AS shippingCompany,
     tracking_number AS trackingNumber,
     admin_remark AS adminRemark,
@@ -1270,6 +1521,52 @@ function isOrderStatus(status: string): status is OrderStatus {
   return ORDER_STATUSES.includes(status as OrderStatus);
 }
 
+function assertAllowedStatusUpdate(currentStatus: string, nextStatus: string, finalPrice: number | null) {
+  if (currentStatus === nextStatus) {
+    return;
+  }
+
+  if (currentStatus === "已取消") {
+    throw new Error("已取消订单不能继续流转");
+  }
+
+  if (currentStatus === "已完成" && nextStatus === "已付款") {
+    throw new Error("已完成订单不能重新付款");
+  }
+
+  if (nextStatus === "待付款" && (finalPrice == null || finalPrice <= 0)) {
+    throw new Error("没有最终报价不能进入待付款");
+  }
+
+  if (nextStatus === "已付款") {
+    throw new Error("请使用确认到账按钮更新为已付款");
+  }
+
+  const productionStatuses = new Set(["排产中", "生产中", "后处理", "已发货", "已完成"]);
+  const paidOrProductionStatuses = new Set(["已付款", "排产中", "生产中", "后处理", "已发货", "已完成"]);
+
+  if (productionStatuses.has(nextStatus) && !paidOrProductionStatuses.has(currentStatus)) {
+    throw new Error("未付款不能进入生产流程");
+  }
+}
+
+function insertStatusLog(
+  db: DatabaseSync,
+  orderId: number,
+  fromStatus: string | null,
+  toStatus: string,
+  operator: string,
+) {
+  db.prepare(
+    `INSERT INTO order_status_logs (
+      order_id,
+      from_status,
+      to_status,
+      operator
+    ) VALUES (?, ?, ?, ?)`,
+  ).run(orderId, fromStatus, toStatus, operator);
+}
+
 function normalizeOptionalText(value: string | null | undefined) {
   if (typeof value !== "string") {
     return null;
@@ -1279,11 +1576,23 @@ function normalizeOptionalText(value: string | null | undefined) {
   return normalized || null;
 }
 
+function normalizeOptionalNonNegativeInteger(value: number | null | undefined, errorMessage: string) {
+  if (value == null) {
+    return null;
+  }
+
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(errorMessage);
+  }
+
+  return Math.ceil(value);
+}
+
 function migrateLegacyOrderStatuses(db: DatabaseSync) {
   const legacyStatusMap = [
     ["待处理", "待确认"],
     ["已报价", "待付款"],
-    ["生产中", "打印中"],
+    ["打印中", "生产中"],
   ] as const;
 
   for (const [legacyStatus, nextStatus] of legacyStatusMap) {

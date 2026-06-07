@@ -474,6 +474,50 @@ test("admin order status API records admin workflow and notifies customers", asy
   assert.match(source, /notifyCustomerOrderStatus/);
 });
 
+test("manual payment confirmation workflow pages avoid customer proof upload", async () => {
+  const customerDetailSource = await readSource("src/app/account/orders/[id]/page.tsx");
+  const customerPaymentSource = await readSource("src/frontend/components/CustomerPaymentOptions.tsx");
+  const adminDetailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
+  const adminFinalQuoteSource = await readSource("src/frontend/components/AdminFinalQuoteForm.tsx");
+  const adminPaymentConfirmSource = await readSource("src/frontend/components/AdminPaymentConfirmForm.tsx");
+  const adminPaymentSettingsFormSource = await readSource("src/frontend/components/AdminPaymentSettingsForm.tsx");
+  const paymentConfirmSource = await readSource("src/app/api/admin/orders/[id]/payment-confirm/route.ts");
+  const finalQuoteSource = await readSource("src/app/api/admin/orders/[id]/final-quote/route.ts");
+
+  assert.match(customerDetailSource, /订单正在人工确认，自动估价仅供参考/);
+  assert.match(customerDetailSource, /请按最终报价付款/);
+  assert.match(customerDetailSource, /付款完成后，工作人员核对到账后会更新订单状态。/);
+  assert.match(customerPaymentSource, /微信转账/);
+  assert.match(customerPaymentSource, /支付宝转账/);
+  assert.match(customerPaymentSource, /闲鱼链接/);
+  assert.match(customerPaymentSource, /淘宝链接/);
+  assert.doesNotMatch(customerDetailSource, /付款凭证|paymentProof|上传截图|我已付款/);
+  assert.doesNotMatch(customerPaymentSource, /付款凭证|paymentProof|上传截图|我已付款/);
+
+  assert.match(adminFinalQuoteSource, /确认报价并通知客户/);
+  assert.match(adminPaymentConfirmSource, /确认到账/);
+  assert.match(adminDetailSource, /付款时请备注：订单编号\/手机号/);
+  assert.match(paymentConfirmSource, /confirmOrderPayment/);
+  assert.match(paymentConfirmSource, /paymentNote/);
+  assert.match(paymentConfirmSource, /notifyCustomerOrderStatus/);
+  assert.match(finalQuoteSource, /confirmOrderFinalQuote/);
+  assert.match(finalQuoteSource, /notifyCustomerOrderStatus/);
+});
+
+test("admin payment settings page and API exist", async () => {
+  const pageSource = await readSource("src/app/admin/settings/payment/page.tsx");
+  const formSource = await readSource("src/frontend/components/AdminPaymentSettingsForm.tsx");
+  const apiSource = await readSource("src/app/api/admin/settings/payment/route.ts");
+
+  assert.match(formSource, /微信收款二维码图片路径/);
+  assert.match(formSource, /支付宝收款二维码图片路径/);
+  assert.match(formSource, /闲鱼付款链接/);
+  assert.match(formSource, /淘宝付款链接/);
+  assert.match(pageSource, /AdminPaymentSettingsForm/);
+  assert.match(apiSource, /updatePaymentSettings/);
+  assert.match(apiSource, /requireAdminSession/);
+});
+
 test("success page and contact information section remain available", async () => {
   const successSource = await readSource("src/app/success/page.tsx");
   const contactSource = await readSource("src/frontend/components/ContactSection.tsx");

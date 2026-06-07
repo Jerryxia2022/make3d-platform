@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  getPaymentSettings,
   getOrderByIdForCustomer,
   getOrderStatusLogsByOrderId,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
   type OrderStatusLogRecord,
+  type PaymentSettings,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
+import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
 
 export default async function CustomerOrderDetailPage({
   params,
@@ -28,6 +31,7 @@ export default async function CustomerOrderDetailPage({
   try {
     const order = getOrderByIdForCustomer(db, Number(id), customer.id);
     const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
+    const paymentSettings = getPaymentSettings(db);
 
     return (
       <main className="min-h-screen px-6 py-10 text-ink">
@@ -58,7 +62,7 @@ export default async function CustomerOrderDetailPage({
                 <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
                 <Detail label="调价原因" value={order.priceAdjustmentReason || "-"} />
                 <Detail label="总价" value={formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)} />
-                <Detail label="预计交货期" value={formatLeadTime(order.estimatedLeadTimeHours)} />
+                <Detail label="预计交货期" value={formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)} />
                 <Detail label="订单状态" value={order.status} />
               </dl>
             </div>
@@ -85,6 +89,8 @@ export default async function CustomerOrderDetailPage({
             <h2 className="text-xl font-bold">状态时间轴</h2>
             <StatusTimeline order={order} logs={statusLogs} />
           </section>
+
+          <PaymentStatusPanel order={order} paymentSettings={paymentSettings} />
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">管理员备注</h2>
@@ -131,7 +137,7 @@ export default async function CustomerOrderDetailPage({
               <Detail label="自动报价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
               <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
               <Detail label="总价" value={formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)} />
-              <Detail label="预计交货期" value={formatLeadTime(order.estimatedLeadTimeHours)} />
+              <Detail label="预计交货期" value={formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)} />
               <Detail label="订单状态" value={order.status} />
             </dl>
             {order.status === "待付款" ? (
@@ -148,6 +154,54 @@ export default async function CustomerOrderDetailPage({
   } finally {
     db.close();
   }
+}
+
+function PaymentStatusPanel({
+  order,
+  paymentSettings,
+}: {
+  order: OrderDetail;
+  paymentSettings: PaymentSettings;
+}) {
+  if (order.status === "待确认") {
+    return (
+      <section className="mt-8 border border-coral/30 bg-coral/5 p-6 shadow-sm">
+        <h2 className="text-xl font-bold">付款确认</h2>
+        <p className="mt-4 text-sm font-semibold text-coral">订单正在人工确认，自动估价仅供参考</p>
+        <p className="mt-2 text-sm text-graphite">人工确认最终报价前不显示付款方式。</p>
+      </section>
+    );
+  }
+
+  if (order.status === "待付款") {
+    return (
+      <section className="mt-8 border border-coral/30 bg-coral/5 p-6 shadow-sm">
+        <h2 className="text-xl font-bold">付款说明</h2>
+        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+          <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+          <Detail label="预计交货期" value={formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)} />
+        </dl>
+        <p className="mt-5 text-sm font-semibold text-coral">
+          请按最终报价付款，付款时请备注订单编号或注册手机号，便于我们核对。
+        </p>
+        <CustomerPaymentOptions settings={paymentSettings} />
+        <p className="mt-5 text-sm font-semibold text-graphite">
+          付款完成后，工作人员核对到账后会更新订单状态。
+        </p>
+      </section>
+    );
+  }
+
+  if (order.status === "已付款") {
+    return (
+      <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+        <h2 className="text-xl font-bold">付款状态</h2>
+        <p className="mt-4 text-sm font-semibold text-coral">付款已确认，订单已进入生产准备</p>
+      </section>
+    );
+  }
+
+  return null;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
