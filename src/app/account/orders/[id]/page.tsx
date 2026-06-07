@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   getOrderByIdForCustomer,
+  getOrderStatusLogsByOrderId,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
+  type OrderStatusLogRecord,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
@@ -25,6 +27,7 @@ export default async function CustomerOrderDetailPage({
 
   try {
     const order = getOrderByIdForCustomer(db, Number(id), customer.id);
+    const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
 
     return (
       <main className="min-h-screen px-6 py-10 text-ink">
@@ -51,7 +54,10 @@ export default async function CustomerOrderDetailPage({
               <dl className="mt-5 grid gap-4 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
-                <Detail label="总价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
+                <Detail label="自动报价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
+                <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+                <Detail label="调价原因" value={order.priceAdjustmentReason || "-"} />
+                <Detail label="总价" value={formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)} />
                 <Detail label="预计交货期" value={formatLeadTime(order.estimatedLeadTimeHours)} />
                 <Detail label="订单状态" value={order.status} />
               </dl>
@@ -69,8 +75,22 @@ export default async function CustomerOrderDetailPage({
                 <Detail label="收件手机号" value={order.recipientPhone || "-"} />
                 <Detail label="收货地址" value={formatAddress(order)} />
                 <Detail label="配送备注" value={order.shippingRemark || "-"} />
+                <Detail label="快递公司" value={order.shippingCompany || "-"} />
+                <Detail label="物流单号" value={order.trackingNumber || "-"} />
               </dl>
             </div>
+          </section>
+
+          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">状态时间轴</h2>
+            <StatusTimeline order={order} logs={statusLogs} />
+          </section>
+
+          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">管理员备注</h2>
+            <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-graphite">
+              {order.adminRemark || "暂无管理员备注"}
+            </p>
           </section>
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
@@ -108,7 +128,9 @@ export default async function CustomerOrderDetailPage({
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">
               <Detail label="文件数量" value={`${order.files.length} 个`} />
               <Detail label="总数量" value={`${formatTotalQuantity(order.files)} 件`} />
-              <Detail label="总价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
+              <Detail label="自动报价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
+              <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+              <Detail label="总价" value={formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)} />
               <Detail label="预计交货期" value={formatLeadTime(order.estimatedLeadTimeHours)} />
               <Detail label="订单状态" value={order.status} />
             </dl>
@@ -134,6 +156,42 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite">{label}</p>
       <p className="mt-2 font-semibold">{value}</p>
     </div>
+  );
+}
+
+function StatusTimeline({
+  order,
+  logs,
+}: {
+  order: OrderDetail;
+  logs: OrderStatusLogRecord[];
+}) {
+  const events =
+    logs.length > 0
+      ? logs
+      : [
+          {
+            id: 0,
+            orderId: order.id,
+            fromStatus: null,
+            toStatus: order.status,
+            operator: "system",
+            createdAt: order.createdAt,
+          },
+        ];
+
+  return (
+    <ol className="mt-5 space-y-4">
+      {events.map((log) => (
+        <li className="grid gap-3 border-l-2 border-coral/60 pl-4 text-sm" key={log.id}>
+          <p className="font-semibold">{log.toStatus}</p>
+          <p className="text-graphite">
+            {formatDate(log.createdAt)}
+            {log.fromStatus ? ` · ${log.fromStatus} → ${log.toStatus}` : ""}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 

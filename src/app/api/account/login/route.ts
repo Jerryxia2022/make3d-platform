@@ -10,6 +10,12 @@ import {
   recordCustomerLoginFailure,
 } from "@/backend/customerLoginThrottle";
 import { findCustomerByLogin, openDatabase, verifyPassword } from "@/backend/database";
+import {
+  clearRedisSuccessfulCustomerLoginFailures,
+  getRedisCustomerLoginBlock,
+  isRedisLoginThrottleConfigured,
+  recordRedisCustomerLoginFailure,
+} from "@/backend/redisLoginThrottle";
 import { isValidMainlandPhone, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
 
 export const runtime = "nodejs";
@@ -33,8 +39,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const phoneBlock = getCustomerLoginBlock(db, "phone", phone);
-    const ipBlock = getCustomerLoginBlock(db, "ip", ip);
+    const phoneBlock = await getLoginBlock(db, "phone", phone);
+    const ipBlock = await getLoginBlock(db, "ip", ip);
     const block = phoneBlock || ipBlock;
 
     if (block) {
@@ -44,14 +50,14 @@ export async function POST(request: Request) {
     const customer = findCustomerByLogin(db, phone);
 
     if (!customer || !verifyPassword(password, customer.passwordHash)) {
-      const phoneFailure = recordCustomerLoginFailure(db, "phone", phone);
-      const ipFailure = recordCustomerLoginFailure(db, "ip", ip);
+      const phoneFailure = await recordLoginFailure(db, "phone", phone);
+      const ipFailure = await recordLoginFailure(db, "ip", ip);
       const failure = [phoneFailure, ipFailure].find((item) => !item.allowed) || phoneFailure;
 
       return Response.json(formatLoginError(failure), { status: failure.status });
     }
 
-    clearSuccessfulCustomerLoginFailures(db, phone);
+    await clearSuccessfulLoginFailures(db, phone);
 
     if (wantsJson(request)) {
       const response = Response.json({ success: true, redirect: "/quote" });
@@ -86,4 +92,37 @@ function formatLoginError(block: {
 
 function wantsJson(request: Request) {
   return request.headers.get("accept")?.includes("application/json");
+}
+
+async function getLoginBlock(
+  db: ReturnType<typeof openDatabase>,
+  identifierType: "phone" | "ip",
+  identifier: string,
+) {
+  if (isRedisLoginThrottleConfigured()) {
+    return getRedisCustomerLoginBlock(identifierType, identifier);
+  }
+
+  return getCustomerLoginBlock(db, identifierType, identifier);
+}
+
+async function recordLoginFailure(
+  db: ReturnType<typeof openDatabase>,
+  identifierType: "phone" | "ip",
+  identifier: string,
+) {
+  if (isRedisLoginThrottleConfigured()) {
+    return recordRedisCustomerLoginFailure(identifierType, identifier);
+  }
+
+  return recordCustomerLoginFailure(db, identifierType, identifier);
+}
+
+async function clearSuccessfulLoginFailures(db: ReturnType<typeof openDatabase>, phone: string) {
+  if (isRedisLoginThrottleConfigured()) {
+    await clearRedisSuccessfulCustomerLoginFailures(phone);
+    return;
+  }
+
+  clearSuccessfulCustomerLoginFailures(db, phone);
 }

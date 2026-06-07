@@ -32,6 +32,8 @@ export type OrderInput = {
   printFeeTotal?: number;
   payablePrice?: number;
   estimatedLeadTimeHours?: number;
+  finalPrice?: number | null;
+  priceAdjustmentReason?: string | null;
   shippingCompany?: string | null;
   trackingNumber?: string | null;
   adminRemark?: string | null;
@@ -168,6 +170,9 @@ export type OrderRecord = {
   printFeeTotal: number | null;
   payablePrice: number | null;
   estimatedLeadTimeHours: number | null;
+  finalPrice: number | null;
+  priceAdjustmentReason: string | null;
+  finalPriceUpdatedAt: string | null;
   shippingCompany: string | null;
   trackingNumber: string | null;
   adminRemark: string | null;
@@ -282,6 +287,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
       print_fee_total REAL,
       payable_price REAL,
       estimated_lead_time_hours INTEGER,
+      final_price REAL,
+      price_adjustment_reason TEXT,
+      final_price_updated_at DATETIME,
       shipping_company TEXT,
       tracking_number TEXT,
       admin_remark TEXT,
@@ -412,6 +420,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["print_fee_total", "REAL"],
     ["payable_price", "REAL"],
     ["estimated_lead_time_hours", "INTEGER"],
+    ["final_price", "REAL"],
+    ["price_adjustment_reason", "TEXT"],
+    ["final_price_updated_at", "DATETIME"],
     ["shipping_company", "TEXT"],
     ["tracking_number", "TEXT"],
     ["admin_remark", "TEXT"],
@@ -512,11 +523,14 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           print_fee_total,
           payable_price,
           estimated_lead_time_hours,
+          final_price,
+          price_adjustment_reason,
+          final_price_updated_at,
           shipping_company,
           tracking_number,
           admin_remark,
           status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -547,6 +561,9 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.printFeeTotal ?? null,
         input.payablePrice ?? null,
         input.estimatedLeadTimeHours ?? null,
+        input.finalPrice ?? null,
+        input.priceAdjustmentReason || null,
+        null,
         input.shippingCompany ?? null,
         input.trackingNumber ?? null,
         input.adminRemark ?? null,
@@ -634,6 +651,34 @@ export function createOrderWithFile(db: DatabaseSync, input: SingleFileOrderInpu
 
 export function listOrders(db: DatabaseSync): OrderRecord[] {
   return db.prepare(orderSelectSql("ORDER BY created_at DESC")).all() as OrderRecord[];
+}
+
+export type OrderListFilters = {
+  query?: string;
+  status?: string;
+};
+
+export function searchOrders(db: DatabaseSync, filters: OrderListFilters): OrderRecord[] {
+  const where: string[] = [];
+  const values: string[] = [];
+  const query = filters.query?.trim();
+  const status = filters.status?.trim();
+
+  if (query) {
+    where.push(
+      `(order_no LIKE ? OR customer_name LIKE ? OR phone LIKE ? OR wechat LIKE ? OR email LIKE ?)`,
+    );
+    const like = `%${query}%`;
+    values.push(like, like, like, like, like);
+  }
+
+  if (status && isOrderStatus(status)) {
+    where.push("status = ?");
+    values.push(status);
+  }
+
+  const suffix = `${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC`;
+  return db.prepare(orderSelectSql(suffix)).all(...values) as OrderRecord[];
 }
 
 export function listOrdersByCustomerId(db: DatabaseSync, customerId: number): OrderRecord[] {
@@ -809,6 +854,30 @@ export function updateOrderStatus(
       ) VALUES (?, ?, ?, ?)`,
     ).run(id, current.status, status, operator);
   }
+
+  return result.changes > 0;
+}
+
+export function updateOrderFinalQuote(
+  db: DatabaseSync,
+  id: number,
+  input: { finalPrice: number | null; priceAdjustmentReason?: string | null },
+) {
+  const finalPrice = input.finalPrice;
+
+  if (finalPrice != null && (!Number.isFinite(finalPrice) || finalPrice < 0)) {
+    throw new Error("最终报价必须为非负数字");
+  }
+
+  const result = db
+    .prepare(
+      `UPDATE orders
+       SET final_price = ?,
+           price_adjustment_reason = ?,
+           final_price_updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .run(finalPrice, normalizeOptionalText(input.priceAdjustmentReason), id);
 
   return result.changes > 0;
 }
@@ -1102,6 +1171,9 @@ function orderSelectSql(suffix: string) {
     print_fee_total AS printFeeTotal,
     payable_price AS payablePrice,
     estimated_lead_time_hours AS estimatedLeadTimeHours,
+    final_price AS finalPrice,
+    price_adjustment_reason AS priceAdjustmentReason,
+    final_price_updated_at AS finalPriceUpdatedAt,
     shipping_company AS shippingCompany,
     tracking_number AS trackingNumber,
     admin_remark AS adminRemark,

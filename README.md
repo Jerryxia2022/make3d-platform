@@ -88,6 +88,7 @@ ADMIN_USERNAME=
 ADMIN_PASSWORD=
 SESSION_SECRET=
 COOKIE_SECURE=false
+REDIS_URL=
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
@@ -98,6 +99,8 @@ ADMIN_EMAIL=
 `SESSION_SECRET` 必须是随机长字符串，生产环境建议至少 32 字节随机值。
 
 HTTP 测试环境使用 `COOKIE_SECURE=false`，否则浏览器不会保存管理员登录 cookie。HTTPS 正式环境使用 `COOKIE_SECURE=true`。
+
+客户登录防爆破默认使用 SQLite 记录。配置 `REDIS_URL=redis://...` 后，客户登录失败计数和分级封禁会优先写入 Redis；管理员登录不受该机制影响。
 
 3. 构建并启动：
 
@@ -145,6 +148,7 @@ ADMIN_USERNAME=
 ADMIN_PASSWORD=
 SESSION_SECRET=
 COOKIE_SECURE=false
+REDIS_URL=
 ADMIN_EMAIL=
 SMTP_HOST=
 SMTP_PORT=587
@@ -158,7 +162,19 @@ SMTP_PASS=
 
 `COOKIE_SECURE` 控制管理员登录 cookie 是否带 `Secure` 属性。HTTP 测试环境使用 `COOKIE_SECURE=false`；HTTPS 正式环境使用 `COOKIE_SECURE=true`。
 
+`REDIS_URL` 为可选项。为空时客户登录防爆破继续使用 SQLite；配置 Redis 后，客户登录 3 次错误锁 10 分钟、第二阶段 24 小时、第三阶段永久封禁的状态会写入 Redis。
+
 新订单邮件通知需要配置 `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS` 和 `ADMIN_EMAIL`。客户提交订单成功后，系统会发送标题为 `Make3D 新订单通知 - 订单编号` 的邮件给管理员；如果 SMTP 发送失败，订单提交仍会成功。
+
+## 自动备份
+
+提供 `npm run backup` 脚本，默认备份 SQLite 数据库、`uploads` 和 `profiles`：
+
+```bash
+npm run backup
+```
+
+可通过 `BACKUP_ROOT`、`DATABASE_PATH`、`UPLOADS_DIR`、`PROFILES_DIR` 覆盖备份位置和来源目录。脚本会在 `backups/时间戳/` 下生成数据库备份、上传文件压缩包、配置文件压缩包和 manifest。
 
 ## Docker PrusaSlicer
 

@@ -20,8 +20,8 @@ export default async function QuotePage() {
   return (
     <main className="min-h-screen px-6 py-8 text-ink">
       <CustomerAuthBar returnTo="/quote" />
-      <section className="mx-auto grid w-full max-w-6xl gap-8 py-8 lg:grid-cols-[0.9fr_1.1fr]">
-        <div>
+      <section className="mx-auto grid w-full max-w-7xl gap-8 py-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-8 lg:self-start">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">
             上传模型获取报价
           </p>

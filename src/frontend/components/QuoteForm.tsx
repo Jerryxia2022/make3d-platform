@@ -485,9 +485,10 @@ export function QuoteForm({
 
   return (
     <form
-      className="space-y-6 border border-ink/10 bg-white/75 p-6 shadow-sm"
+      className="grid gap-6 border border-ink/10 bg-white/75 p-6 shadow-sm xl:grid-cols-[minmax(0,1fr)_22rem]"
       onSubmit={handleSubmit}
     >
+      <div className="space-y-6">
       <section>
         <div
           className="relative flex min-h-56 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-6 py-10 text-center"
@@ -763,6 +764,9 @@ export function QuoteForm({
         </label>
       </section>
 
+      </div>
+
+      <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
       <section className="border border-ink/10 bg-white/70 p-5">
         <h2 className="text-lg font-bold">订单汇总</h2>
         {hasPendingQuotes ? (
@@ -810,6 +814,7 @@ export function QuoteForm({
       >
         {hasPendingQuotes ? "请等待报价完成后提交" : isSubmitting ? "提交中..." : "提交订单"}
       </button>
+      </aside>
     </form>
   );
 }

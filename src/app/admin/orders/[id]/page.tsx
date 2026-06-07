@@ -12,6 +12,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { getPrusaSlicerConfig } from "@/backend/slicer";
+import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 
@@ -46,7 +47,14 @@ export default async function AdminOrderDetailPage({
               </p>
               <h1 className="mt-3 text-4xl font-bold">订单详情</h1>
             </div>
-            <AdminStatusForm orderId={order.id} status={order.status} shippingCompany={order.shippingCompany} trackingNumber={order.trackingNumber} adminRemark={order.adminRemark} />
+            <div className="grid gap-4 sm:min-w-80">
+              <AdminFinalQuoteForm
+                finalPrice={order.finalPrice}
+                orderId={order.id}
+                priceAdjustmentReason={order.priceAdjustmentReason}
+              />
+              <AdminStatusForm orderId={order.id} status={order.status} shippingCompany={order.shippingCompany} trackingNumber={order.trackingNumber} adminRemark={order.adminRemark} />
+            </div>
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -58,6 +66,10 @@ export default async function AdminOrderDetailPage({
                 <Detail label="会员订单" value={order.customerId ? "是" : "否"} />
                 <Detail label="客户历史订单数" value={String(order.customerOrderCount)} />
                 <Detail label="提交时间" value={formatDate(order.createdAt)} />
+                <Detail label="自动报价" value={formatAutomaticPrice(order)} />
+                <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+                <Detail label="调价原因" value={order.priceAdjustmentReason || "-"} />
+                <Detail label="最终报价更新时间" value={formatOptionalDate(order.finalPriceUpdatedAt)} />
                 <Detail label="预估价格" value={formatPrice(order)} />
                 <Detail label="预估货期" value={formatLeadTime(order)} />
                 <Detail label="打印费合计" value={formatMoney(order.printFeeTotal)} />
@@ -287,6 +299,14 @@ function SliceJobResult({ job }: { job: SliceJobRecord }) {
 
 function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatOptionalDate(value: string | null) {
+  return value ? formatDate(value) : "-";
+}
+
+function formatAutomaticPrice(order: OrderDetail) {
+  return formatMoney(order.payablePrice ?? order.estimatedPrice);
 }
 
 function formatPrice(order: OrderDetail) {

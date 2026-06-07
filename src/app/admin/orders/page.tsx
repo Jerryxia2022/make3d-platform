@@ -1,16 +1,26 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { listOrders, openDatabase, type OrderRecord } from "@/backend/database";
+import {
+  ORDER_STATUSES,
+  openDatabase,
+  searchOrders,
+  type OrderRecord,
+} from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
 
-export default async function AdminOrdersPage() {
+export default async function AdminOrdersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string; status?: string }>;
+}) {
   if (!(await requireAdminSession())) {
     redirect("/admin/login");
   }
 
+  const filters = (await searchParams) || {};
   const db = openDatabase();
-  const orders = listOrders(db);
+  const orders = searchOrders(db, { query: filters.q, status: filters.status });
   db.close();
 
   return (
@@ -31,8 +41,43 @@ export default async function AdminOrdersPage() {
           </div>
         </div>
 
+        <form className="mt-8 grid gap-3 border border-ink/10 bg-white/80 p-4 shadow-sm md:grid-cols-[1fr_220px_auto]" method="get">
+          <label className="text-sm font-semibold">
+            搜索订单
+            <input
+              className="mt-2 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+              defaultValue={filters.q || ""}
+              name="q"
+              placeholder="订单号、客户、电话、微信、邮箱"
+            />
+          </label>
+          <label className="text-sm font-semibold">
+            状态筛选
+            <select
+              className="mt-2 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+              defaultValue={filters.status || ""}
+              name="status"
+            >
+              <option value="">全部状态</option>
+              {ORDER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-end gap-3">
+            <button className="bg-ink px-5 py-2 text-sm font-semibold text-white" type="submit">
+              搜索
+            </button>
+            <Link className="border border-ink/20 px-5 py-2 text-sm font-semibold" href="/admin/orders">
+              重置
+            </Link>
+          </div>
+        </form>
+
         <div className="mt-8 overflow-x-auto border border-ink/10 bg-white/80 shadow-sm">
-          <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
             <thead className="bg-ink text-white">
               <tr>
                 {[
@@ -44,6 +89,7 @@ export default async function AdminOrdersPage() {
                   "材料",
                   "数量",
                   "预估价格",
+                  "最终报价",
                   "预估货期",
                   "配送方式",
                   "状态",
@@ -69,6 +115,7 @@ export default async function AdminOrdersPage() {
                   <td className="px-4 py-3">{order.material}</td>
                   <td className="px-4 py-3">{order.quantity}</td>
                   <td className="px-4 py-3">{formatPrice(order)}</td>
+                  <td className="px-4 py-3">{formatMoney(order.finalPrice)}</td>
                   <td className="px-4 py-3">{formatLeadTime(order)}</td>
                   <td className="px-4 py-3">{order.shippingMethod || "-"}</td>
                   <td className="px-4 py-3">{order.status}</td>
@@ -76,7 +123,7 @@ export default async function AdminOrdersPage() {
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-graphite" colSpan={11}>
+                  <td className="px-4 py-8 text-center text-graphite" colSpan={12}>
                     暂无订单
                   </td>
                 </tr>
@@ -94,8 +141,12 @@ function formatDate(value: string) {
 }
 
 function formatPrice(order: OrderRecord) {
-  const price = order.estimatedPrice || order.estimatedPriceMax;
+  const price = order.payablePrice ?? order.estimatedPrice ?? order.estimatedPriceMax;
   return price ? `¥${price.toFixed(2)}` : "-";
+}
+
+function formatMoney(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? `¥${value.toFixed(2)}` : "-";
 }
 
 function formatLeadTime(order: OrderRecord) {

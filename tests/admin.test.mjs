@@ -7,7 +7,9 @@ import {
   getOrderById,
   getOrderStatusLogsByOrderId,
   initDatabase,
+  searchOrders,
   ORDER_STATUSES,
+  updateOrderFinalQuote,
   updateOrderStatus,
 } from "../src/backend/database.ts";
 import {
@@ -165,6 +167,25 @@ test("records order status workflow logs and admin fulfillment fields", () => {
   assert.equal(logs[0].fromStatus, "待确认");
   assert.equal(logs[0].toStatus, "已发货");
   assert.equal(logs[0].operator, "admin");
+
+  db.close();
+});
+
+test("searches orders and saves admin final quote", () => {
+  const db = initDatabase(":memory:");
+  const order = createFixtureOrder(db);
+
+  assert.equal(updateOrderFinalQuote(db, order.id, {
+    finalPrice: 248.08,
+    priceAdjustmentReason: "支撑和后处理人工确认",
+  }), true);
+
+  const detail = getOrderById(db, order.id);
+  assert.equal(detail.finalPrice, 248.08);
+  assert.equal(detail.priceAdjustmentReason, "支撑和后处理人工确认");
+  assert.ok(detail.finalPriceUpdatedAt);
+  assert.equal(searchOrders(db, { query: "Jerry", status: "待确认" }).length, 1);
+  assert.equal(searchOrders(db, { query: "no-match", status: "待确认" }).length, 0);
 
   db.close();
 });

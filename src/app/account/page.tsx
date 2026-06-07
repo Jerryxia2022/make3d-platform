@@ -6,6 +6,7 @@ import {
   type OrderRecord,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
+import { ChangePasswordForm } from "@/frontend/components/ChangePasswordForm";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 
 export default async function AccountPage() {
@@ -44,6 +45,12 @@ export default async function AccountPage() {
               <Detail label="微信" value={customer.wechat} />
               <Detail label="邮箱" value={customer.email || "-"} />
             </div>
+          </section>
+
+          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">修改密码</h2>
+            <p className="mt-2 text-sm text-graphite">用于保护报价、订单和收货信息。</p>
+            <ChangePasswordForm />
           </section>
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">

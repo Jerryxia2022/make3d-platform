@@ -19,6 +19,17 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
   assert.match(source, /ContactSection/);
 });
 
+test("home page exposes Sprint 1 industrial sections", async () => {
+  const source = await readSource("src/app/page.tsx");
+
+  assert.match(source, /在线3D打印接单系统/);
+  assert.match(source, /advantages/);
+  assert.match(source, /服务范围/);
+  assert.match(source, /案例展示/);
+  assert.match(source, /流程说明/);
+  assert.match(source, /FAQ/);
+});
+
 test("front pages show customer auth state while admin pages stay independent", async () => {
   const navSource = await readSource("src/frontend/components/CustomerAuthBar.tsx");
   const homeSource = await readSource("src/app/page.tsx");
@@ -71,6 +82,8 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(accountSource, /用户资料/);
   assert.match(accountSource, /我的订单/);
   assert.match(accountSource, /我的历史报价/);
+  assert.match(accountSource, /修改密码/);
+  assert.match(accountSource, /ChangePasswordForm/);
   assert.match(accountSource, /\/account\/orders\/\$\{order\.id\}/);
   assert.match(accountSource, /formatFileCount/);
   assert.match(accountSource, /formatMoney\(order\.payablePrice/);
@@ -89,6 +102,11 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(detailSource, /formatMoney\(file\.unitPrice/);
   assert.match(detailSource, /formatMoney\(file\.subtotalPrice/);
   assert.match(detailSource, /href="\/quote"/);
+  assert.match(detailSource, /自动报价/);
+  assert.match(detailSource, /最终报价/);
+  assert.match(detailSource, /状态时间轴/);
+  assert.match(detailSource, /管理员备注/);
+  assert.match(detailSource, /物流单号/);
   assert.match(detailSource, /请联系工作人员完成付款/);
 
   assert.match(confirmSource, /getOrderByIdForCustomer/);
@@ -166,9 +184,11 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(quoteSource, /quoteCustomer/);
   assert.match(quoteSource, /customer={quoteCustomer}/);
   assert.match(quoteSource, /登录后可上传模型文件，自动计算打印价格和预计交货期。/);
+  assert.match(quoteSource, /lg:grid-cols-\[280px_minmax\(0,1fr\)\]/);
   assert.match(formSource, /disabled = false/);
   assert.match(formSource, /customer\?: QuoteFormCustomer/);
   assert.match(formSource, /guestUploadGateMessage/);
+  assert.match(formSource, /xl:sticky xl:top-6/);
   assert.match(formSource, /if \(disabled\) \{/);
   assert.match(formSource, /disabled={disabled}/);
   assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes \|\| disabled}/);
@@ -329,6 +349,9 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   const listSource = await readSource("src/app/admin/orders/page.tsx");
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
 
+  assert.match(listSource, /searchOrders/);
+  assert.match(listSource, /状态筛选/);
+  assert.match(listSource, /最终报价/);
   assert.match(listSource, /formatPrice\(order\)/);
   assert.match(listSource, /formatLeadTime\(order\)/);
   assert.match(listSource, /order\.shippingMethod/);
@@ -344,6 +367,9 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   assert.match(detailSource, /addressRegion/);
   assert.match(detailSource, /addressDetail/);
   assert.match(detailSource, /shippingRemark/);
+  assert.match(detailSource, /AdminFinalQuoteForm/);
+  assert.match(detailSource, /priceAdjustmentReason/);
+  assert.match(detailSource, /finalPrice/);
 });
 
 test("admin order detail page shows complete order fields and per-file V2 estimate actions", async () => {
