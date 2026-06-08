@@ -1111,15 +1111,13 @@ export function getPaymentSettings(db: DatabaseSync): PaymentSettings {
     )
     .get() as PaymentSettings | undefined;
 
-  return (
-    row || {
-      wechatQrPath: null,
-      alipayQrPath: null,
-      xianyuUrl: null,
-      taobaoUrl: null,
-      otherNote: null,
-    }
-  );
+  return {
+    wechatQrPath: row?.wechatQrPath ?? null,
+    alipayQrPath: row?.alipayQrPath ?? null,
+    xianyuUrl: row?.xianyuUrl ?? null,
+    taobaoUrl: row?.taobaoUrl ?? null,
+    otherNote: row?.otherNote ?? null,
+  };
 }
 
 export function updatePaymentSettings(db: DatabaseSync, input: PaymentSettings) {

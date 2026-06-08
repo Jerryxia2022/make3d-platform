@@ -12,6 +12,7 @@ import {
   getOrderById,
   getOrderByIdForCustomer,
   getLatestSliceJobByOrderId,
+  getPaymentSettings,
   getSliceJobsByOrderId,
   initDatabase,
   listOrders,
@@ -135,6 +136,23 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   ]) {
     assert.equal(sliceJobColumns.includes(column), true);
   }
+
+  db.close();
+});
+
+test("returns payment settings as a plain object for client components", () => {
+  const db = initDatabase(":memory:");
+
+  const settings = getPaymentSettings(db);
+
+  assert.equal(Object.getPrototypeOf(settings), Object.prototype);
+  assert.deepEqual(settings, {
+    wechatQrPath: null,
+    alipayQrPath: null,
+    xianyuUrl: null,
+    taobaoUrl: null,
+    otherNote: null,
+  });
 
   db.close();
 });

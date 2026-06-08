@@ -26,7 +26,11 @@ ENV NODE_OPTIONS=--experimental-sqlite
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN apt-get update \
+RUN sed -i \
+    -e 's|http://deb.debian.org/debian-security|http://mirrors.aliyun.com/debian-security|g' \
+    -e 's|http://deb.debian.org/debian|http://mirrors.aliyun.com/debian|g' \
+    /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
   && apt-get install -y --no-install-recommends prusa-slicer \
   && rm -rf /var/lib/apt/lists/*
 

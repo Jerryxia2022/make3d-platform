@@ -7,9 +7,11 @@ yarn-error.log*
 pnpm-debug.log*
 .env
 .env.local
+.env.production
 .env.*.local
 data
 uploads
+gcode
 coverage
 Dockerfile
 docker-compose.yml
