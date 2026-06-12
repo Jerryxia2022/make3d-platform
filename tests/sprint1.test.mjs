@@ -46,9 +46,11 @@ test("SEO sitemap, robots, and metadata are configured", async () => {
   const robots = await readSource("src/app/robots.ts");
 
   assert.match(layout, /metadataBase/);
-  assert.match(layout, /Make3D 在线3D打印接单系统/);
+  assert.match(layout, /Make3D 3D打印与小型研发制造服务/);
   assert.match(layout, /openGraph/);
   assert.match(sitemap, /\/quote/);
+  assert.match(sitemap, /\/request\/design/);
+  assert.match(sitemap, /\/request\/development/);
   assert.match(sitemap, /\/account\/login/);
   assert.match(robots, /disallow: \["\/admin", "\/api"\]/);
   assert.match(robots, /sitemap/);

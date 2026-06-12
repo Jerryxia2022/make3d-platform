@@ -37,6 +37,9 @@ export default async function AdminOrdersPage({
             <Link className="font-semibold text-graphite" href="/">
               返回首页
             </Link>
+            <Link className="font-semibold text-graphite" href="/admin/requests">
+              非标准需求
+            </Link>
             <Link className="font-semibold text-graphite" href="/admin/settings/payment">
               付款设置
             </Link>
@@ -121,7 +124,9 @@ export default async function AdminOrdersPage({
                   <td className="px-4 py-3">{formatMoney(order.finalPrice)}</td>
                   <td className="px-4 py-3">{formatLeadTime(order)}</td>
                   <td className="px-4 py-3">{order.shippingMethod || "-"}</td>
-                  <td className="px-4 py-3">{order.status}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={order.status} />
+                  </td>
                 </tr>
               ))}
               {orders.length === 0 ? (
@@ -141,6 +146,15 @@ export default async function AdminOrdersPage({
 
 function formatDate(value: string) {
   return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+}
+
+function StatusBadge({ status }: { status: OrderRecord["status"] }) {
+  const urgent = status === "待确认" || status === "待付款";
+  return (
+    <span className={urgent ? "inline-flex border border-coral/30 bg-coral/10 px-2 py-1 text-xs font-bold text-coral" : "inline-flex border border-mint/30 bg-mint/10 px-2 py-1 text-xs font-bold text-ink"}>
+      {status}
+    </span>
+  );
 }
 
 function formatPrice(order: OrderRecord) {

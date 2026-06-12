@@ -15,18 +15,24 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
 
   assert.match(source, /Make3D/);
   assert.match(source, /href="\/quote"/);
+  assert.match(source, /href: "\/request\/design"/);
+  assert.match(source, /href: "\/request\/development"/);
   assert.match(source, /CustomerAuthBar/);
   assert.match(source, /ContactSection/);
 });
 
-test("home page exposes Sprint 1 industrial sections", async () => {
+test("home page exposes compact request intake sections", async () => {
   const source = await readSource("src/app/page.tsx");
 
-  assert.match(source, /在线3D打印接单系统/);
-  assert.match(source, /advantages/);
-  assert.match(source, /服务范围/);
-  assert.match(source, /案例展示/);
-  assert.match(source, /流程说明/);
+  assert.match(source, /从模型上传到样机交付/);
+  assert.match(source, /标准3D打印/);
+  assert.match(source, /模型修改与打印/);
+  assert.match(source, /工装夹具\/研发咨询/);
+  assert.match(source, /立即上传报价/);
+  assert.match(source, /提交修改需求/);
+  assert.match(source, /提交研发需求/);
+  assert.match(source, /服务流程/);
+  assert.match(source, /常见适用场景/);
   assert.match(source, /FAQ/);
 });
 
@@ -79,8 +85,10 @@ test("customer account center shows profile, order history, quote history, and o
   const confirmSource = await readSource("src/app/account/orders/[id]/confirm/page.tsx");
 
   assert.match(accountSource, /listOrdersByCustomerId/);
+  assert.match(accountSource, /listServiceRequestsByCustomerId/);
   assert.match(accountSource, /用户资料/);
   assert.match(accountSource, /我的订单/);
+  assert.match(accountSource, /我的非标准需求/);
   assert.match(accountSource, /我的历史报价/);
   assert.match(accountSource, /修改密码/);
   assert.match(accountSource, /ChangePasswordForm/);
@@ -184,7 +192,7 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(quoteSource, /quoteCustomer/);
   assert.match(quoteSource, /customer={quoteCustomer}/);
   assert.match(quoteSource, /登录后可上传模型文件，自动计算打印价格和预计交货期。/);
-  assert.match(quoteSource, /lg:grid-cols-\[280px_minmax\(0,1fr\)\]/);
+  assert.match(quoteSource, /xl:grid-cols-\[260px_minmax\(0,1fr\)\]/);
   assert.match(formSource, /disabled = false/);
   assert.match(formSource, /customer\?: QuoteFormCustomer/);
   assert.match(formSource, /guestUploadGateMessage/);
@@ -334,10 +342,15 @@ test("quote form handles failed auto quote API responses without staying calcula
 test("admin pages display contact fields from the matching order properties", async () => {
   const listSource = await readSource("src/app/admin/orders/page.tsx");
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
+  const requestsSource = await readSource("src/app/admin/requests/page.tsx");
 
   assert.match(listSource, /{order\.customerName}/);
   assert.match(listSource, /{order\.phone}/);
   assert.match(listSource, /{order\.wechat}/);
+  assert.match(listSource, /href="\/admin\/requests"/);
+  assert.match(requestsSource, /需求类型/);
+  assert.match(requestsSource, /项目名称/);
+  assert.match(requestsSource, /手机号/);
   assert.match(detailSource, /value={order\.customerName}/);
   assert.match(detailSource, /value={order\.phone}/);
   assert.match(detailSource, /value={order\.wechat}/);

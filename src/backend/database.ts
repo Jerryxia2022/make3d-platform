@@ -101,6 +101,99 @@ export type CustomerRecord = {
   createdAt: string;
 };
 
+export const SERVICE_REQUEST_TYPES = ["design", "development"] as const;
+
+export type ServiceRequestType = (typeof SERVICE_REQUEST_TYPES)[number];
+
+export const SERVICE_REQUEST_STATUSES = [
+  "待评估",
+  "已联系",
+  "已报价",
+  "已接受",
+  "已拒绝",
+  "已完成",
+] as const;
+
+export type ServiceRequestStatus = (typeof SERVICE_REQUEST_STATUSES)[number];
+
+export type ServiceRequestFileInput = {
+  filename: string;
+  filepath: string;
+  filesize: number;
+};
+
+export type ServiceRequestInput = {
+  requestType: ServiceRequestType;
+  customerId: number;
+  projectName: string;
+  customerName: string;
+  phone: string;
+  wechat?: string | null;
+  email?: string | null;
+  budgetRange: string;
+  expectedDeliveryTime?: string | null;
+  modificationNotes?: string | null;
+  keyDimensions?: string | null;
+  needsPrinting?: string | null;
+  projectType?: string | null;
+  functionDescription?: string | null;
+  hasDrawingsOrSample?: string | null;
+  needsOnsiteMeasurement?: string | null;
+  acceptsEveningOrWeekendContact?: string | null;
+  remarks?: string | null;
+  files?: ServiceRequestFileInput[];
+};
+
+export type ServiceRequestFileRecord = {
+  id: number;
+  requestId: number;
+  filename: string;
+  filepath: string;
+  filesize: number;
+  createdAt: string;
+};
+
+export type ServiceRequestRecord = {
+  id: number;
+  requestType: ServiceRequestType;
+  customerId: number | null;
+  projectName: string;
+  customerName: string;
+  phone: string;
+  wechat: string | null;
+  email: string | null;
+  budgetRange: string;
+  expectedDeliveryTime: string | null;
+  modificationNotes: string | null;
+  keyDimensions: string | null;
+  needsPrinting: string | null;
+  projectType: string | null;
+  functionDescription: string | null;
+  hasDrawingsOrSample: string | null;
+  needsOnsiteMeasurement: string | null;
+  acceptsEveningOrWeekendContact: string | null;
+  remarks: string | null;
+  adminNote: string | null;
+  status: ServiceRequestStatus;
+  fileCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ServiceRequestDetail = ServiceRequestRecord & {
+  files: ServiceRequestFileRecord[];
+};
+
+export type ServiceRequestLogRecord = {
+  id: number;
+  requestId: number;
+  fromStatus: string | null;
+  toStatus: string;
+  operator: string;
+  note: string | null;
+  createdAt: string;
+};
+
 export const ORDER_STATUSES = [
   "待确认",
   "待付款",
@@ -377,6 +470,55 @@ export function initDatabase(dbPath = getDatabasePath()) {
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS service_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_type TEXT NOT NULL,
+      customer_id INTEGER,
+      project_name TEXT NOT NULL,
+      customer_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      wechat TEXT,
+      email TEXT,
+      budget_range TEXT NOT NULL,
+      expected_delivery_time TEXT,
+      modification_notes TEXT,
+      key_dimensions TEXT,
+      needs_printing TEXT,
+      project_type TEXT,
+      function_description TEXT,
+      has_drawings_or_sample TEXT,
+      needs_onsite_measurement TEXT,
+      accepts_evening_or_weekend_contact TEXT,
+      remarks TEXT,
+      admin_note TEXT,
+      status TEXT NOT NULL DEFAULT '待评估',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      CHECK (request_type IN ('design', 'development'))
+    );
+
+    CREATE TABLE IF NOT EXISTS service_request_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      filepath TEXT NOT NULL,
+      filesize INTEGER NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS service_request_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id INTEGER NOT NULL,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      operator TEXT NOT NULL,
+      note TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
@@ -476,6 +618,30 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["updated_at", "DATETIME"],
   ]);
   db.prepare("INSERT OR IGNORE INTO payment_settings (id) VALUES (1)").run();
+  ensureColumns(db, "service_requests", [
+    ["request_type", "TEXT"],
+    ["customer_id", "INTEGER"],
+    ["project_name", "TEXT"],
+    ["customer_name", "TEXT"],
+    ["phone", "TEXT"],
+    ["wechat", "TEXT"],
+    ["email", "TEXT"],
+    ["budget_range", "TEXT"],
+    ["expected_delivery_time", "TEXT"],
+    ["modification_notes", "TEXT"],
+    ["key_dimensions", "TEXT"],
+    ["needs_printing", "TEXT"],
+    ["project_type", "TEXT"],
+    ["function_description", "TEXT"],
+    ["has_drawings_or_sample", "TEXT"],
+    ["needs_onsite_measurement", "TEXT"],
+    ["accepts_evening_or_weekend_contact", "TEXT"],
+    ["remarks", "TEXT"],
+    ["admin_note", "TEXT"],
+    ["status", "TEXT NOT NULL DEFAULT '待评估'"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
   ensureColumns(db, "files", [
     ["bounding_box_x", "REAL"],
     ["bounding_box_y", "REAL"],
@@ -857,6 +1023,244 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
   }
 
   return normalizeFileRecord(file) as OrderFileRecord;
+}
+
+export function createServiceRequest(
+  db: DatabaseSync,
+  input: ServiceRequestInput,
+): { id: number } {
+  if (!isServiceRequestType(input.requestType)) {
+    throw new Error("无效需求类型");
+  }
+
+  const projectName = normalizeRequiredText(input.projectName, "请填写项目名称");
+  const customerName = normalizeRequiredText(input.customerName, "请填写联系人");
+  const phone = normalizeRequiredText(input.phone, "请填写联系方式");
+  const budgetRange = normalizeRequiredText(input.budgetRange, "请选择预算范围");
+  const files = input.files || [];
+
+  try {
+    db.exec("BEGIN");
+    const result = db
+      .prepare(
+        `INSERT INTO service_requests (
+          request_type,
+          customer_id,
+          project_name,
+          customer_name,
+          phone,
+          wechat,
+          email,
+          budget_range,
+          expected_delivery_time,
+          modification_notes,
+          key_dimensions,
+          needs_printing,
+          project_type,
+          function_description,
+          has_drawings_or_sample,
+          needs_onsite_measurement,
+          accepts_evening_or_weekend_contact,
+          remarks,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待评估')`,
+      )
+      .run(
+        input.requestType,
+        input.customerId,
+        projectName,
+        customerName,
+        phone,
+        normalizeOptionalText(input.wechat),
+        normalizeOptionalText(input.email),
+        budgetRange,
+        normalizeOptionalText(input.expectedDeliveryTime),
+        normalizeOptionalText(input.modificationNotes),
+        normalizeOptionalText(input.keyDimensions),
+        normalizeOptionalText(input.needsPrinting),
+        normalizeOptionalText(input.projectType),
+        normalizeOptionalText(input.functionDescription),
+        normalizeOptionalText(input.hasDrawingsOrSample),
+        normalizeOptionalText(input.needsOnsiteMeasurement),
+        normalizeOptionalText(input.acceptsEveningOrWeekendContact),
+        normalizeOptionalText(input.remarks),
+      );
+
+    const requestId = Number(result.lastInsertRowid);
+    const insertFile = db.prepare(
+      `INSERT INTO service_request_files (
+        request_id,
+        filename,
+        filepath,
+        filesize
+      ) VALUES (?, ?, ?, ?)`,
+    );
+
+    for (const file of files) {
+      insertFile.run(requestId, file.filename, file.filepath, file.filesize);
+    }
+
+    insertServiceRequestLog(db, requestId, null, "待评估", "customer", "需求提交");
+    db.exec("COMMIT");
+
+    return { id: requestId };
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export type ServiceRequestListFilters = {
+  query?: string;
+  status?: string;
+  requestType?: string;
+};
+
+export function searchServiceRequests(
+  db: DatabaseSync,
+  filters: ServiceRequestListFilters = {},
+): ServiceRequestRecord[] {
+  const where: string[] = [];
+  const values: string[] = [];
+  const query = filters.query?.trim();
+  const status = filters.status?.trim();
+  const requestType = filters.requestType?.trim();
+
+  if (query) {
+    where.push(
+      `(project_name LIKE ? OR customer_name LIKE ? OR phone LIKE ? OR wechat LIKE ? OR email LIKE ? OR modification_notes LIKE ? OR function_description LIKE ?)`,
+    );
+    const like = `%${query}%`;
+    values.push(like, like, like, like, like, like, like);
+  }
+
+  if (status && isServiceRequestStatus(status)) {
+    where.push("status = ?");
+    values.push(status);
+  }
+
+  if (requestType && isServiceRequestType(requestType)) {
+    where.push("request_type = ?");
+    values.push(requestType);
+  }
+
+  const suffix = `${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC, id DESC`;
+  return db
+    .prepare(serviceRequestSelectSql(suffix))
+    .all(...values)
+    .map(normalizeServiceRequestRecord) as ServiceRequestRecord[];
+}
+
+export function listServiceRequestsByCustomerId(
+  db: DatabaseSync,
+  customerId: number,
+): ServiceRequestRecord[] {
+  return db
+    .prepare(serviceRequestSelectSql("WHERE customer_id = ? ORDER BY created_at DESC, id DESC"))
+    .all(customerId)
+    .map(normalizeServiceRequestRecord) as ServiceRequestRecord[];
+}
+
+export function getServiceRequestById(db: DatabaseSync, id: number): ServiceRequestDetail {
+  const request = db
+    .prepare(serviceRequestSelectSql("WHERE id = ?"))
+    .get(id);
+
+  if (!request) {
+    throw new Error("需求不存在");
+  }
+
+  return loadServiceRequestDetail(db, normalizeServiceRequestRecord(request));
+}
+
+export function getServiceRequestFileById(
+  db: DatabaseSync,
+  id: number,
+): ServiceRequestFileRecord {
+  const file = db
+    .prepare(
+      `SELECT
+        id,
+        request_id AS requestId,
+        filename,
+        filepath,
+        filesize,
+        created_at AS createdAt
+      FROM service_request_files
+      WHERE id = ?`,
+    )
+    .get(id) as ServiceRequestFileRecord | undefined;
+
+  if (!file) {
+    throw new Error("文件不存在");
+  }
+
+  return file;
+}
+
+export function updateServiceRequestStatus(
+  db: DatabaseSync,
+  id: number,
+  input: {
+    status: string;
+    adminNote?: string | null;
+    contactNote?: string | null;
+    operator?: string;
+  },
+) {
+  const status = input.status.trim();
+
+  if (!isServiceRequestStatus(status)) {
+    throw new Error("无效需求状态");
+  }
+
+  const current = db
+    .prepare("SELECT status FROM service_requests WHERE id = ?")
+    .get(id) as { status: string } | undefined;
+
+  if (!current) {
+    return false;
+  }
+
+  const adminNote = normalizeOptionalText(input.adminNote);
+  const contactNote = normalizeOptionalText(input.contactNote);
+  const operator = input.operator || "admin";
+  const result = db
+    .prepare(
+      `UPDATE service_requests
+       SET status = ?,
+           admin_note = COALESCE(?, admin_note),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .run(status, adminNote, id);
+
+  if (result.changes > 0 && (current.status !== status || contactNote)) {
+    insertServiceRequestLog(db, id, current.status, status, operator, contactNote);
+  }
+
+  return result.changes > 0;
+}
+
+export function getServiceRequestLogsByRequestId(
+  db: DatabaseSync,
+  requestId: number,
+): ServiceRequestLogRecord[] {
+  return db
+    .prepare(
+      `SELECT
+        id,
+        request_id AS requestId,
+        from_status AS fromStatus,
+        to_status AS toStatus,
+        operator,
+        note,
+        created_at AS createdAt
+      FROM service_request_logs
+      WHERE request_id = ?
+      ORDER BY created_at DESC, id DESC`,
+    )
+    .all(requestId) as ServiceRequestLogRecord[];
 }
 
 export type OrderStatusUpdateInput = {
@@ -1383,6 +1787,58 @@ export function getSliceJobsByOrderId(db: DatabaseSync, orderId: number) {
     .map(normalizeSliceJobRecord) as SliceJobRecord[];
 }
 
+function serviceRequestSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    request_type AS requestType,
+    customer_id AS customerId,
+    project_name AS projectName,
+    customer_name AS customerName,
+    phone,
+    wechat,
+    email,
+    budget_range AS budgetRange,
+    expected_delivery_time AS expectedDeliveryTime,
+    modification_notes AS modificationNotes,
+    key_dimensions AS keyDimensions,
+    needs_printing AS needsPrinting,
+    project_type AS projectType,
+    function_description AS functionDescription,
+    has_drawings_or_sample AS hasDrawingsOrSample,
+    needs_onsite_measurement AS needsOnsiteMeasurement,
+    accepts_evening_or_weekend_contact AS acceptsEveningOrWeekendContact,
+    remarks,
+    admin_note AS adminNote,
+    status,
+    (SELECT COUNT(*) FROM service_request_files WHERE service_request_files.request_id = service_requests.id) AS fileCount,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM service_requests
+  ${suffix}`;
+}
+
+function loadServiceRequestDetail(
+  db: DatabaseSync,
+  request: ServiceRequestRecord,
+): ServiceRequestDetail {
+  const files = db
+    .prepare(
+      `SELECT
+        id,
+        request_id AS requestId,
+        filename,
+        filepath,
+        filesize,
+        created_at AS createdAt
+      FROM service_request_files
+      WHERE request_id = ?
+      ORDER BY created_at ASC, id ASC`,
+    )
+    .all(request.id) as ServiceRequestFileRecord[];
+
+  return { ...request, files };
+}
+
 function orderSelectSql(suffix: string) {
   return `SELECT
     id,
@@ -1500,6 +1956,10 @@ function normalizeSliceJobRecord(job: unknown) {
   } as SliceJobRecord;
 }
 
+function normalizeServiceRequestRecord(request: unknown) {
+  return request as ServiceRequestRecord;
+}
+
 function createOrderNo() {
   const now = new Date();
   const timestamp = [
@@ -1517,6 +1977,14 @@ function createOrderNo() {
 
 function isOrderStatus(status: string): status is OrderStatus {
   return ORDER_STATUSES.includes(status as OrderStatus);
+}
+
+function isServiceRequestType(type: string): type is ServiceRequestType {
+  return SERVICE_REQUEST_TYPES.includes(type as ServiceRequestType);
+}
+
+function isServiceRequestStatus(status: string): status is ServiceRequestStatus {
+  return SERVICE_REQUEST_STATUSES.includes(status as ServiceRequestStatus);
 }
 
 function assertAllowedStatusUpdate(currentStatus: string, nextStatus: string, finalPrice: number | null) {
@@ -1565,6 +2033,25 @@ function insertStatusLog(
   ).run(orderId, fromStatus, toStatus, operator);
 }
 
+function insertServiceRequestLog(
+  db: DatabaseSync,
+  requestId: number,
+  fromStatus: string | null,
+  toStatus: string,
+  operator: string,
+  note?: string | null,
+) {
+  db.prepare(
+    `INSERT INTO service_request_logs (
+      request_id,
+      from_status,
+      to_status,
+      operator,
+      note
+    ) VALUES (?, ?, ?, ?, ?)`,
+  ).run(requestId, fromStatus, toStatus, operator, normalizeOptionalText(note));
+}
+
 function normalizeOptionalText(value: string | null | undefined) {
   if (typeof value !== "string") {
     return null;
@@ -1572,6 +2059,16 @@ function normalizeOptionalText(value: string | null | undefined) {
 
   const normalized = value.trim();
   return normalized || null;
+}
+
+function normalizeRequiredText(value: string | null | undefined, errorMessage: string) {
+  const normalized = normalizeOptionalText(value);
+
+  if (!normalized) {
+    throw new Error(errorMessage);
+  }
+
+  return normalized;
 }
 
 function normalizeOptionalNonNegativeInteger(value: number | null | undefined, errorMessage: string) {

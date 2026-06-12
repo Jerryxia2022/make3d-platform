@@ -485,13 +485,13 @@ export function QuoteForm({
 
   return (
     <form
-      className="grid gap-6 border border-ink/10 bg-white/75 p-6 shadow-sm xl:grid-cols-[minmax(0,1fr)_22rem]"
+      className="grid gap-5 border border-ink/10 bg-white/85 p-4 shadow-sm xl:grid-cols-[minmax(0,1fr)_20rem] xl:p-5"
       onSubmit={handleSubmit}
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
       <section>
         <div
-          className="relative flex min-h-56 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-6 py-10 text-center"
+          className="relative flex min-h-44 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-5 py-7 text-center"
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
         >
@@ -547,7 +547,7 @@ export function QuoteForm({
             const fileSubtotal = getFileSubtotalPrice(quote, files.length, item.quantity);
 
             return (
-            <article className="border border-ink/10 bg-white/80 p-4" key={item.id}>
+            <article className="border border-ink/10 bg-white/90 p-3" key={item.id}>
               <input
                 name="fileDimensionX"
                 type="hidden"
@@ -563,7 +563,7 @@ export function QuoteForm({
                 type="hidden"
                 value={formatDimensionFormValue(dimensions?.z)}
               />
-              <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+              <div className="grid gap-4 sm:grid-cols-[6.5rem_1fr]">
                 <div>
                   <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
                     占位缩略图
@@ -572,7 +572,7 @@ export function QuoteForm({
                     {formatDimensions(dimensions)}
                   </p>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-semibold">{item.file.name || "未命名模型文件"}</p>
@@ -614,7 +614,7 @@ export function QuoteForm({
                     <label className="block text-sm font-semibold">
                       材料
                       <select
-                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
                         disabled={disabled}
                         name="fileMaterials"
                         onChange={(event) =>
@@ -632,7 +632,7 @@ export function QuoteForm({
                     <label className="block text-sm font-semibold">
                       颜色
                       <select
-                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
                         disabled={disabled}
                         name="fileColors"
                         onChange={(event) => updateFileOption(item.id, "color", event.target.value)}
@@ -648,7 +648,7 @@ export function QuoteForm({
                     <label className="block text-sm font-semibold">
                       数量
                       <input
-                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
                         disabled={disabled}
                         inputMode="numeric"
                         max="1000"
@@ -727,7 +727,7 @@ export function QuoteForm({
         <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
           配送方式
           <select
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+            className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
             disabled={disabled}
             id="shippingMethod"
             name="shippingMethod"
@@ -745,7 +745,7 @@ export function QuoteForm({
         <label className="mt-4 block text-sm font-semibold">
           收货地址
           <textarea
-            className="mt-2 min-h-24 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
             disabled={disabled}
             name="addressDetail"
             placeholder="填写省市区、详细地址、收件说明等"
@@ -756,7 +756,7 @@ export function QuoteForm({
         <label className="mt-4 block text-sm font-semibold">
           备注
           <textarea
-            className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          className="mt-2 min-h-24 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
             disabled={disabled}
             name="remark"
             placeholder="补充特殊层高、强度、表面效果、支撑方式、分件打印、加急等要求"
@@ -766,7 +766,7 @@ export function QuoteForm({
 
       </div>
 
-      <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+      <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
       <section className="border border-ink/10 bg-white/70 p-5">
         <h2 className="text-lg font-bold">订单汇总</h2>
         {hasPendingQuotes ? (
@@ -925,7 +925,7 @@ function TextField({
       {label}
       <input
         autoComplete={autoComplete}
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
         defaultValue={defaultValue}
         disabled={disabled}
         inputMode={inputMode}

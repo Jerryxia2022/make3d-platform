@@ -13,6 +13,7 @@ const config: Config = {
         mint: "#2bbf9c",
         coral: "#ef735c",
         paper: "#f7f5ef",
+        ash: "#ece8de",
       },
     },
   },
