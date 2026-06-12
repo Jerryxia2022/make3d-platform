@@ -12,6 +12,8 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 ENV NODE_OPTIONS=--experimental-sqlite
+ARG NEXT_PUBLIC_ICP_BEIAN=
+ENV NEXT_PUBLIC_ICP_BEIAN=${NEXT_PUBLIC_ICP_BEIAN}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

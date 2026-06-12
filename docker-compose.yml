@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_ICP_BEIAN: ${NEXT_PUBLIC_ICP_BEIAN:-}
     container_name: make3d-platform
     restart: unless-stopped
     ports:
@@ -10,6 +12,7 @@ services:
     environment:
       NODE_ENV: production
       APP_URL: ${APP_URL}
+      NEXT_PUBLIC_ICP_BEIAN: ${NEXT_PUBLIC_ICP_BEIAN:-}
       DATABASE_URL: ${DATABASE_URL}
       UPLOAD_DIR: ${UPLOAD_DIR}
       ADMIN_USERNAME: ${ADMIN_USERNAME}

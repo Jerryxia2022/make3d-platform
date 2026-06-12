@@ -13,6 +13,17 @@ test("docker compose mounts slicer profile and gcode directories", async () => {
   assert.match(compose, /- \.\/gcode:\/app\/gcode/);
 });
 
+test("docker build receives public ICP filing environment", async () => {
+  const compose = await readSource("docker-compose.yml");
+  const dockerfile = await readSource("Dockerfile");
+
+  assert.match(compose, /args:/);
+  assert.match(compose, /NEXT_PUBLIC_ICP_BEIAN: \$\{NEXT_PUBLIC_ICP_BEIAN:-\}/);
+  assert.match(compose, /environment:/);
+  assert.match(dockerfile, /ARG NEXT_PUBLIC_ICP_BEIAN=/);
+  assert.match(dockerfile, /ENV NEXT_PUBLIC_ICP_BEIAN=\$\{NEXT_PUBLIC_ICP_BEIAN\}/);
+});
+
 test("Dockerfile creates runtime slicer profile and gcode directories", async () => {
   const dockerfile = await readSource("Dockerfile");
 
