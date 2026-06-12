@@ -62,6 +62,24 @@ test("front pages show customer auth state while admin pages stay independent", 
   assert.doesNotMatch(adminOrdersSource, /CustomerAuthBar/);
 });
 
+test("global footer reads ICP filing number from environment", async () => {
+  const layoutSource = await readSource("src/app/layout.tsx");
+  const footerSource = await readSource("src/frontend/components/SiteFooter.tsx");
+  const envExample = await readSource(".env.example");
+  const productionEnvExample = await readSource(".env.production.example");
+
+  assert.match(layoutSource, /SiteFooter/);
+  assert.match(layoutSource, /<SiteFooter \/>/);
+  assert.match(footerSource, /process\.env\.NEXT_PUBLIC_ICP_BEIAN\?\.trim\(\)/);
+  assert.match(footerSource, /beian\.miit\.gov\.cn/);
+  assert.match(footerSource, /target="_blank"/);
+  assert.match(footerSource, /rel="noopener noreferrer"/);
+  assert.match(footerSource, /&copy; 2026 Make3D/);
+  assert.match(footerSource, /icpBeian \?/);
+  assert.match(envExample, /NEXT_PUBLIC_ICP_BEIAN=/);
+  assert.match(productionEnvExample, /NEXT_PUBLIC_ICP_BEIAN=陕ICP备2026014335号-1/);
+});
+
 test("customer MVP pages and logout route exist", async () => {
   const accountSource = await readSource("src/app/account/page.tsx");
   const logoutSource = await readSource("src/app/account/logout/route.ts");
