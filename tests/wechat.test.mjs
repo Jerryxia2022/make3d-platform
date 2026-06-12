@@ -1,0 +1,324 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  bindWechatAccountByCode,
+  confirmOrderFinalQuote,
+  confirmOrderPayment,
+  createCustomerAccount,
+  createOrderWithFile,
+  createWechatBindCode,
+  getOrderById,
+  getWechatAccountByCustomerId,
+  initDatabase,
+  listWechatNotificationsByOrderId,
+  searchCustomerServiceRequests,
+  updateOrderStatus,
+} from "../src/backend/database.ts";
+import {
+  buildWechatOrderStatusContent,
+  handleWechatMessage,
+  notifyWechatOrderStatus,
+  verifyWechatSignature,
+} from "../src/backend/wechat.ts";
+
+async function readSource(path) {
+  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+test("wechat callback GET verification uses sha1 signature and returns echostr", async () => {
+  const token = "make3d-token";
+  const timestamp = "1718000000";
+  const nonce = "nonce-value";
+  const signature = signWechat(token, timestamp, nonce);
+  const routeSource = await readSource("src/app/api/wechat/callback/route.ts");
+
+  assert.equal(verifyWechatSignature(token, timestamp, nonce, signature), true);
+  assert.equal(verifyWechatSignature(token, timestamp, nonce, "bad"), false);
+  assert.match(routeSource, /searchParams\.get\("echostr"\)/);
+  assert.match(routeSource, /verifyWechatSignature/);
+});
+
+test("wechat subscribe event replies with onboarding guidance", async () => {
+  const db = initDatabase(":memory:");
+
+  const reply = await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "event",
+      Event: "subscribe",
+      FromUserName: "openid-subscribe",
+    }),
+  );
+
+  assert.match(reply, /欢迎关注 Make3D/);
+  assert.equal(db.prepare("SELECT subscribed FROM wechat_accounts WHERE openid = ?").get("openid-subscribe").subscribed, 1);
+
+  db.close();
+});
+
+test("generates 30 minute wechat bind codes for logged-in customers", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const now = 1_718_000_000_000;
+
+  const bindCode = createWechatBindCode(db, customer.id, now);
+  const account = getWechatAccountByCustomerId(db, customer.id);
+
+  assert.match(bindCode.bindCode, /^M3D-\d{6}$/);
+  assert.equal(bindCode.expiresAt, now + 30 * 60 * 1000);
+  assert.equal(account?.bindCode, bindCode.bindCode);
+  assert.equal(account?.bindCodeExpiresAt, bindCode.expiresAt);
+
+  db.close();
+});
+
+test("text bind code binds openid to customer account", async () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+
+  const reply = await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "text",
+      Content: bindCode,
+      FromUserName: "openid-bound",
+    }),
+  );
+  const account = getWechatAccountByCustomerId(db, customer.id);
+
+  assert.match(reply, /绑定成功/);
+  assert.equal(account?.openid, "openid-bound");
+  assert.equal(account?.subscribed, true);
+  assert.equal(account?.bindCode, null);
+
+  db.close();
+});
+
+test("wrong or expired bind codes receive invalid message", async () => {
+  const db = initDatabase(":memory:");
+
+  const reply = await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "text",
+      Content: "M3D-000000",
+      FromUserName: "openid-wrong-code",
+    }),
+  );
+
+  assert.match(reply, /绑定码无效或已过期/);
+
+  db.close();
+});
+
+test("wechat keyword quote replies with quote link", async () => {
+  const previousAppUrl = process.env.APP_URL;
+  const db = initDatabase(":memory:");
+
+  try {
+    process.env.APP_URL = "https://make3d.com.cn";
+    const reply = await handleWechatMessage(
+      db,
+      createWechatXml({
+        MsgType: "text",
+        Content: "我要报价",
+        FromUserName: "openid-quote",
+      }),
+    );
+
+    assert.match(reply, /https:\/\/make3d\.com\.cn\/quote/);
+  } finally {
+    restoreEnv({ APP_URL: previousAppUrl });
+    db.close();
+  }
+});
+
+test("wechat keyword customer service creates service request", async () => {
+  const db = initDatabase(":memory:");
+
+  const reply = await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "text",
+      Content: "人工 客服 13800000000",
+      FromUserName: "openid-service",
+    }),
+  );
+  const requests = searchCustomerServiceRequests(db, {});
+
+  assert.match(reply, /已收到人工客服请求/);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].openid, "openid-service");
+  assert.equal(requests[0].phone, "13800000000");
+  assert.equal(requests[0].status, "待处理");
+
+  db.close();
+});
+
+test("does not send wechat notification for unbound customer", async () => {
+  const previous = snapshotWechatEnv();
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const order = createPayableOrder(db, customer.id);
+  const sent = [];
+
+  try {
+    process.env.WECHAT_MP_ENABLED = "true";
+    const result = await notifyWechatOrderStatus(db, getOrderById(db, order.id), {
+      sendText: async (openid, content) => sent.push({ openid, content }),
+    });
+
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, "customer_not_bound");
+    assert.equal(sent.length, 0);
+    assert.equal(listWechatNotificationsByOrderId(db, order.id).length, 0);
+  } finally {
+    restoreEnv(previous);
+    db.close();
+  }
+});
+
+test("sends wechat notification for bound customer status updates", async () => {
+  const previous = snapshotWechatEnv();
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-bound" });
+  const order = createPayableOrder(db, customer.id);
+  const sent = [];
+
+  try {
+    process.env.WECHAT_MP_ENABLED = "true";
+    const detail = getOrderById(db, order.id);
+    const result = await notifyWechatOrderStatus(db, detail, {
+      sendText: async (openid, content) => sent.push({ openid, content }),
+    });
+    const notifications = listWechatNotificationsByOrderId(db, order.id);
+
+    assert.equal(result.sent, true);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].openid, "openid-bound");
+    assert.match(sent[0].content, /订单编号/);
+    assert.match(buildWechatOrderStatusContent(detail), /订单详情：https:\/\/make3d\.com\.cn\/account\/orders\//);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].sendStatus, "sent");
+  } finally {
+    restoreEnv(previous);
+    db.close();
+  }
+});
+
+test("missing wechat send configuration does not block order status changes", async () => {
+  const previous = snapshotWechatEnv();
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-config-missing" });
+  const order = createPayableOrder(db, customer.id);
+
+  try {
+    process.env.WECHAT_MP_ENABLED = "true";
+    delete process.env.WECHAT_MP_APP_ID;
+    delete process.env.WECHAT_MP_APP_SECRET;
+
+    assert.equal(confirmOrderPayment(db, order.id, { paymentMethod: "线下转账", operator: "admin" }), true);
+    assert.equal(updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" }), true);
+    const result = await notifyWechatOrderStatus(db, getOrderById(db, order.id));
+    const notifications = listWechatNotificationsByOrderId(db, order.id);
+
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, "wechat_config_missing");
+    assert.equal(getOrderById(db, order.id).status, "生产中");
+    assert.equal(notifications[0].sendStatus, "skipped");
+  } finally {
+    restoreEnv(previous);
+    db.close();
+  }
+});
+
+function createCustomerFixture() {
+  return {
+    phone: "13800000000",
+    password: "password123",
+    name: "Jerry",
+    wechat: "make3d",
+    email: "jerry@example.com",
+  };
+}
+
+function createPayableOrder(db, customerId) {
+  const order = createOrderWithFile(db, {
+    customerId,
+    customerName: "Jerry",
+    phone: "13800000000",
+    wechat: "make3d",
+    email: "jerry@example.com",
+    material: "PLA",
+    color: "white",
+    quantity: 1,
+    estimatedPrice: 30,
+    file: {
+      filename: "wechat.stl",
+      filepath: "/uploads/wechat.stl",
+      filesize: 128,
+    },
+  });
+
+  confirmOrderFinalQuote(db, order.id, {
+    finalPrice: 88,
+    finalLeadTimeHours: 48,
+    operator: "admin",
+  });
+
+  return order;
+}
+
+function createWechatXml(fields) {
+  const values = {
+    ToUserName: "make3d-mp",
+    FromUserName: "openid-test",
+    CreateTime: "1718000000",
+    MsgType: "text",
+    Content: "",
+    Event: "",
+    EventKey: "",
+    ...fields,
+  };
+
+  return [
+    "<xml>",
+    ...Object.entries(values)
+      .filter(([, value]) => value !== "")
+      .map(([key, value]) => `<${key}><![CDATA[${value}]]></${key}>`),
+    "</xml>",
+  ].join("");
+}
+
+function signWechat(token, timestamp, nonce) {
+  return createHash("sha1").update([token, timestamp, nonce].sort().join("")).digest("hex");
+}
+
+function snapshotWechatEnv() {
+  return {
+    APP_URL: process.env.APP_URL,
+    WECHAT_MP_ENABLED: process.env.WECHAT_MP_ENABLED,
+    WECHAT_MP_APP_ID: process.env.WECHAT_MP_APP_ID,
+    WECHAT_MP_APP_SECRET: process.env.WECHAT_MP_APP_SECRET,
+    WECHAT_MP_TOKEN: process.env.WECHAT_MP_TOKEN,
+    WECHAT_MP_AES_KEY: process.env.WECHAT_MP_AES_KEY,
+  };
+}
+
+function restoreEnv(previous) {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}

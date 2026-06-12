@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  getWechatAccountByCustomerId,
   listServiceRequestsByCustomerId,
   listOrdersByCustomerId,
   openDatabase,
@@ -8,8 +9,10 @@ import {
   type ServiceRequestRecord,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
+import { maskOpenid } from "@/backend/wechat";
 import { ChangePasswordForm } from "@/frontend/components/ChangePasswordForm";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
+import { WechatBindCard } from "@/frontend/components/WechatBindCard";
 
 export default async function AccountPage() {
   const customer = await getCurrentCustomer();
@@ -23,6 +26,13 @@ export default async function AccountPage() {
   try {
     const orders = listOrdersByCustomerId(db, customer.id);
     const serviceRequests = listServiceRequestsByCustomerId(db, customer.id);
+    const wechatAccount = getWechatAccountByCustomerId(db, customer.id);
+    const activeBindCode =
+      wechatAccount?.bindCode &&
+      wechatAccount.bindCodeExpiresAt &&
+      wechatAccount.bindCodeExpiresAt > Date.now()
+        ? wechatAccount.bindCode
+        : null;
 
     return (
       <main className="min-h-screen px-6 py-10 text-ink">
@@ -55,6 +65,14 @@ export default async function AccountPage() {
             <p className="mt-2 text-sm text-graphite">用于保护报价、订单和收货信息。</p>
             <ChangePasswordForm />
           </section>
+
+          <WechatBindCard
+            bound={Boolean(wechatAccount?.openid)}
+            initialBindCode={activeBindCode}
+            initialExpiresAt={activeBindCode ? wechatAccount?.bindCodeExpiresAt : null}
+            maskedOpenid={maskOpenid(wechatAccount?.openid)}
+            subscribed={Boolean(wechatAccount?.subscribed)}
+          />
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

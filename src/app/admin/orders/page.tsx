@@ -40,6 +40,9 @@ export default async function AdminOrdersPage({
             <Link className="font-semibold text-graphite" href="/admin/requests">
               非标准需求
             </Link>
+            <Link className="font-semibold text-graphite" href="/admin/customer-service">
+              人工客服
+            </Link>
             <Link className="font-semibold text-graphite" href="/admin/settings/payment">
               付款设置
             </Link>

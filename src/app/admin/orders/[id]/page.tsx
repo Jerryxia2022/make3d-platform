@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  getBoundWechatAccountByCustomerId,
+  getLatestWechatNotificationByOrderId,
   getOrderById,
   getOrderStatusLogsByOrderId,
   getSliceJobsByOrderId,
@@ -11,6 +13,7 @@ import {
   type SliceJobRecord,
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
+import { maskOpenid } from "@/backend/wechat";
 import { getPrusaSlicerConfig } from "@/backend/slicer";
 import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
@@ -34,6 +37,8 @@ export default async function AdminOrderDetailPage({
     const order = getOrderById(db, Number(id));
     const sliceJobs = getSliceJobsByOrderId(db, order.id);
     const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
+    const wechatAccount = getBoundWechatAccountByCustomerId(db, order.customerId);
+    const latestWechatNotification = getLatestWechatNotificationByOrderId(db, order.id);
 
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
@@ -94,6 +99,16 @@ export default async function AdminOrderDetailPage({
                 <Detail label="微信" value={order.wechat} />
                 <Detail label="邮箱" value={order.email || "-"} />
                 <Detail label="公司" value={order.company || "-"} />
+              </dl>
+            </section>
+
+            <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+              <h2 className="text-xl font-bold">微信公众号</h2>
+              <dl className="mt-5 grid gap-4 text-sm">
+                <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
+                <Detail label="openid" value={maskOpenid(wechatAccount?.openid)} />
+                <Detail label="通知状态" value={latestWechatNotification?.sendStatus || "-"} />
+                <Detail label="通知错误" value={latestWechatNotification?.errorMessage || "-"} />
               </dl>
             </section>
 

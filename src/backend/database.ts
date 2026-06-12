@@ -101,6 +101,58 @@ export type CustomerRecord = {
   createdAt: string;
 };
 
+export type WechatAccountRecord = {
+  id: number;
+  customerId: number | null;
+  openid: string | null;
+  unionid: string | null;
+  subscribed: boolean;
+  bindCode: string | null;
+  bindCodeExpiresAt: number | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WechatNotificationRecord = {
+  id: number;
+  customerId: number | null;
+  openid: string | null;
+  orderId: number | null;
+  type: string;
+  content: string;
+  sendStatus: string;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
+export const CUSTOMER_SERVICE_REQUEST_STATUSES = ["待处理", "已处理"] as const;
+
+export type CustomerServiceRequestStatus =
+  (typeof CUSTOMER_SERVICE_REQUEST_STATUSES)[number];
+
+export type CustomerServiceRequestInput = {
+  customerId?: number | null;
+  openid?: string | null;
+  phone?: string | null;
+  orderId?: number | null;
+  message: string;
+};
+
+export type CustomerServiceRequestRecord = {
+  id: number;
+  customerId: number | null;
+  customerName: string | null;
+  openid: string | null;
+  phone: string | null;
+  orderId: number | null;
+  orderNo: string | null;
+  message: string;
+  status: CustomerServiceRequestStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export const SERVICE_REQUEST_TYPES = ["design", "development"] as const;
 
 export type ServiceRequestType = (typeof SERVICE_REQUEST_TYPES)[number];
@@ -519,6 +571,48 @@ export function initDatabase(dbPath = getDatabasePath()) {
       FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS wechat_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER UNIQUE,
+      openid TEXT UNIQUE,
+      unionid TEXT,
+      subscribed INTEGER NOT NULL DEFAULT 0,
+      bind_code TEXT UNIQUE,
+      bind_code_expires_at INTEGER,
+      last_message_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS wechat_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER,
+      openid TEXT,
+      order_id INTEGER,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      send_status TEXT NOT NULL,
+      error_message TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_service_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER,
+      openid TEXT,
+      phone TEXT,
+      order_id INTEGER,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT '待处理',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    );
+
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
@@ -639,6 +733,37 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["remarks", "TEXT"],
     ["admin_note", "TEXT"],
     ["status", "TEXT NOT NULL DEFAULT '待评估'"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "wechat_accounts", [
+    ["customer_id", "INTEGER"],
+    ["openid", "TEXT"],
+    ["unionid", "TEXT"],
+    ["subscribed", "INTEGER NOT NULL DEFAULT 0"],
+    ["bind_code", "TEXT"],
+    ["bind_code_expires_at", "INTEGER"],
+    ["last_message_at", "DATETIME"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "wechat_notifications", [
+    ["customer_id", "INTEGER"],
+    ["openid", "TEXT"],
+    ["order_id", "INTEGER"],
+    ["type", "TEXT"],
+    ["content", "TEXT"],
+    ["send_status", "TEXT"],
+    ["error_message", "TEXT"],
+    ["created_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "customer_service_requests", [
+    ["customer_id", "INTEGER"],
+    ["openid", "TEXT"],
+    ["phone", "TEXT"],
+    ["order_id", "INTEGER"],
+    ["message", "TEXT"],
+    ["status", "TEXT NOT NULL DEFAULT '待处理'"],
     ["created_at", "DATETIME"],
     ["updated_at", "DATETIME"],
   ]);
@@ -1600,6 +1725,278 @@ export function getCustomerBySessionToken(db: DatabaseSync, token?: string) {
   return session ? getCustomerById(db, session.customerId) : null;
 }
 
+export function createWechatBindCode(
+  db: DatabaseSync,
+  customerId: number,
+  now = Date.now(),
+) {
+  const expiresAt = now + 30 * 60 * 1000;
+  const bindCode = createUniqueWechatBindCode(db);
+
+  db.prepare(
+    `INSERT INTO wechat_accounts (
+      customer_id,
+      bind_code,
+      bind_code_expires_at,
+      updated_at
+    ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(customer_id) DO UPDATE SET
+      bind_code = excluded.bind_code,
+      bind_code_expires_at = excluded.bind_code_expires_at,
+      updated_at = CURRENT_TIMESTAMP`,
+  ).run(customerId, bindCode, expiresAt);
+
+  return { bindCode, expiresAt };
+}
+
+export function getWechatAccountByCustomerId(
+  db: DatabaseSync,
+  customerId: number,
+): WechatAccountRecord | null {
+  const account = db
+    .prepare(wechatAccountSelectSql("WHERE customer_id = ? LIMIT 1"))
+    .get(customerId);
+
+  return account ? normalizeWechatAccountRecord(account) : null;
+}
+
+export function getWechatAccountByOpenid(
+  db: DatabaseSync,
+  openid: string,
+): WechatAccountRecord | null {
+  const account = db.prepare(wechatAccountSelectSql("WHERE openid = ? LIMIT 1")).get(openid);
+  return account ? normalizeWechatAccountRecord(account) : null;
+}
+
+export function getBoundWechatAccountByCustomerId(
+  db: DatabaseSync,
+  customerId: number | null | undefined,
+): WechatAccountRecord | null {
+  if (!customerId) {
+    return null;
+  }
+
+  const account = db
+    .prepare(wechatAccountSelectSql("WHERE customer_id = ? AND openid IS NOT NULL LIMIT 1"))
+    .get(customerId);
+
+  return account ? normalizeWechatAccountRecord(account) : null;
+}
+
+export function markWechatSubscribed(
+  db: DatabaseSync,
+  input: { openid: string; unionid?: string | null; subscribed: boolean },
+) {
+  const existing = getWechatAccountByOpenid(db, input.openid);
+
+  if (existing) {
+    db.prepare(
+      `UPDATE wechat_accounts
+       SET subscribed = ?,
+           unionid = COALESCE(?, unionid),
+           last_message_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE openid = ?`,
+    ).run(input.subscribed ? 1 : 0, normalizeOptionalText(input.unionid), input.openid);
+    return getWechatAccountByOpenid(db, input.openid);
+  }
+
+  db.prepare(
+    `INSERT INTO wechat_accounts (
+      openid,
+      unionid,
+      subscribed,
+      last_message_at,
+      updated_at
+    ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+  ).run(input.openid, normalizeOptionalText(input.unionid), input.subscribed ? 1 : 0);
+
+  return getWechatAccountByOpenid(db, input.openid);
+}
+
+export function touchWechatAccountMessage(db: DatabaseSync, openid: string) {
+  db.prepare(
+    `UPDATE wechat_accounts
+     SET last_message_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE openid = ?`,
+  ).run(openid);
+}
+
+export function bindWechatAccountByCode(
+  db: DatabaseSync,
+  input: { openid: string; bindCode: string; unionid?: string | null; now?: number },
+): WechatAccountRecord | null {
+  const now = input.now ?? Date.now();
+  const bindCode = input.bindCode.trim().toUpperCase();
+  const account = db
+    .prepare(
+      wechatAccountSelectSql(
+        "WHERE bind_code = ? AND bind_code_expires_at IS NOT NULL AND bind_code_expires_at >= ? LIMIT 1",
+      ),
+    )
+    .get(bindCode, now);
+
+  if (!account) {
+    return null;
+  }
+
+  const bindAccount = normalizeWechatAccountRecord(account);
+
+  try {
+    db.exec("BEGIN");
+    db.prepare(
+      `UPDATE wechat_accounts
+       SET openid = NULL,
+           subscribed = 0,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE openid = ? AND (customer_id IS NULL OR customer_id != ?)`,
+    ).run(input.openid, bindAccount.customerId);
+    db.prepare(
+      `UPDATE wechat_accounts
+       SET openid = ?,
+           unionid = COALESCE(?, unionid),
+           subscribed = 1,
+           bind_code = NULL,
+           bind_code_expires_at = NULL,
+           last_message_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(input.openid, normalizeOptionalText(input.unionid), bindAccount.id);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return bindAccount.customerId
+    ? getWechatAccountByCustomerId(db, bindAccount.customerId)
+    : getWechatAccountByOpenid(db, input.openid);
+}
+
+export function createWechatNotification(
+  db: DatabaseSync,
+  input: {
+    customerId?: number | null;
+    openid?: string | null;
+    orderId?: number | null;
+    type: string;
+    content: string;
+    sendStatus: string;
+    errorMessage?: string | null;
+  },
+) {
+  const result = db
+    .prepare(
+      `INSERT INTO wechat_notifications (
+        customer_id,
+        openid,
+        order_id,
+        type,
+        content,
+        send_status,
+        error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.customerId ?? null,
+      input.openid ?? null,
+      input.orderId ?? null,
+      input.type,
+      input.content,
+      input.sendStatus,
+      normalizeOptionalText(input.errorMessage),
+    );
+
+  return Number(result.lastInsertRowid);
+}
+
+export function getLatestWechatNotificationByOrderId(
+  db: DatabaseSync,
+  orderId: number,
+): WechatNotificationRecord | null {
+  const notification = db
+    .prepare(wechatNotificationSelectSql("WHERE order_id = ? ORDER BY created_at DESC, id DESC LIMIT 1"))
+    .get(orderId);
+
+  return notification ? (notification as WechatNotificationRecord) : null;
+}
+
+export function listWechatNotificationsByOrderId(
+  db: DatabaseSync,
+  orderId: number,
+): WechatNotificationRecord[] {
+  return db
+    .prepare(wechatNotificationSelectSql("WHERE order_id = ? ORDER BY created_at DESC, id DESC"))
+    .all(orderId) as WechatNotificationRecord[];
+}
+
+export function createCustomerServiceRequest(
+  db: DatabaseSync,
+  input: CustomerServiceRequestInput,
+) {
+  const message = normalizeRequiredText(input.message, "请填写客服请求内容");
+  const result = db
+    .prepare(
+      `INSERT INTO customer_service_requests (
+        customer_id,
+        openid,
+        phone,
+        order_id,
+        message,
+        status
+      ) VALUES (?, ?, ?, ?, ?, '待处理')`,
+    )
+    .run(
+      input.customerId ?? null,
+      normalizeOptionalText(input.openid),
+      normalizeOptionalText(input.phone),
+      input.orderId ?? null,
+      message,
+    );
+
+  return { id: Number(result.lastInsertRowid) };
+}
+
+export function searchCustomerServiceRequests(
+  db: DatabaseSync,
+  filters: { status?: string; query?: string } = {},
+): CustomerServiceRequestRecord[] {
+  const where: string[] = [];
+  const values: string[] = [];
+  const status = filters.status?.trim();
+  const query = filters.query?.trim();
+
+  if (status && isCustomerServiceRequestStatus(status)) {
+    where.push("customer_service_requests.status = ?");
+    values.push(status);
+  }
+
+  if (query) {
+    where.push(
+      `(customer_service_requests.message LIKE ? OR customer_service_requests.phone LIKE ? OR customer_service_requests.openid LIKE ? OR customers.name LIKE ? OR orders.order_no LIKE ?)`,
+    );
+    const like = `%${query}%`;
+    values.push(like, like, like, like, like);
+  }
+
+  const suffix = `${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY customer_service_requests.created_at DESC, customer_service_requests.id DESC`;
+  return db.prepare(customerServiceRequestSelectSql(suffix)).all(...values) as CustomerServiceRequestRecord[];
+}
+
+export function markCustomerServiceRequestHandled(db: DatabaseSync, id: number) {
+  const result = db
+    .prepare(
+      `UPDATE customer_service_requests
+       SET status = '已处理',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .run(id);
+
+  return result.changes > 0;
+}
+
 export function createPasswordResetToken(db: DatabaseSync, customerId: number, now = Date.now()) {
   const recentCount = Number(
     (db
@@ -1932,8 +2329,66 @@ function customerSelectSql(suffix: string) {
   ${suffix}`;
 }
 
+function wechatAccountSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    customer_id AS customerId,
+    openid,
+    unionid,
+    subscribed,
+    bind_code AS bindCode,
+    bind_code_expires_at AS bindCodeExpiresAt,
+    last_message_at AS lastMessageAt,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM wechat_accounts
+  ${suffix}`;
+}
+
+function wechatNotificationSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    customer_id AS customerId,
+    openid,
+    order_id AS orderId,
+    type,
+    content,
+    send_status AS sendStatus,
+    error_message AS errorMessage,
+    created_at AS createdAt
+  FROM wechat_notifications
+  ${suffix}`;
+}
+
+function customerServiceRequestSelectSql(suffix: string) {
+  return `SELECT
+    customer_service_requests.id,
+    customer_service_requests.customer_id AS customerId,
+    customers.name AS customerName,
+    customer_service_requests.openid,
+    customer_service_requests.phone,
+    customer_service_requests.order_id AS orderId,
+    orders.order_no AS orderNo,
+    customer_service_requests.message,
+    customer_service_requests.status,
+    customer_service_requests.created_at AS createdAt,
+    customer_service_requests.updated_at AS updatedAt
+  FROM customer_service_requests
+  LEFT JOIN customers ON customers.id = customer_service_requests.customer_id
+  LEFT JOIN orders ON orders.id = customer_service_requests.order_id
+  ${suffix}`;
+}
+
 function normalizeCustomer(customer: unknown) {
   return customer as CustomerRecord;
+}
+
+function normalizeWechatAccountRecord(account: unknown) {
+  const record = account as Record<string, unknown> & { subscribed: 0 | 1 | boolean };
+  return {
+    ...record,
+    subscribed: Boolean(record.subscribed),
+  } as WechatAccountRecord;
 }
 
 function hashResetToken(token: string) {
@@ -1958,6 +2413,26 @@ function normalizeSliceJobRecord(job: unknown) {
 
 function normalizeServiceRequestRecord(request: unknown) {
   return request as ServiceRequestRecord;
+}
+
+function createUniqueWechatBindCode(db: DatabaseSync) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const code = createWechatBindCodeCandidate();
+    const exists = db
+      .prepare("SELECT 1 FROM wechat_accounts WHERE bind_code = ? LIMIT 1")
+      .get(code);
+
+    if (!exists) {
+      return code;
+    }
+  }
+
+  throw new Error("绑定码生成失败，请稍后重试");
+}
+
+function createWechatBindCodeCandidate() {
+  const value = randomBytes(4).readUInt32BE(0) % 1000000;
+  return `M3D-${String(value).padStart(6, "0")}`;
 }
 
 function createOrderNo() {
@@ -1985,6 +2460,12 @@ function isServiceRequestType(type: string): type is ServiceRequestType {
 
 function isServiceRequestStatus(status: string): status is ServiceRequestStatus {
   return SERVICE_REQUEST_STATUSES.includes(status as ServiceRequestStatus);
+}
+
+function isCustomerServiceRequestStatus(
+  status: string,
+): status is CustomerServiceRequestStatus {
+  return CUSTOMER_SERVICE_REQUEST_STATUSES.includes(status as CustomerServiceRequestStatus);
 }
 
 function assertAllowedStatusUpdate(currentStatus: string, nextStatus: string, finalPrice: number | null) {

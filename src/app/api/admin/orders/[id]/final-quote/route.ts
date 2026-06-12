@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { confirmOrderFinalQuote, getOrderById, openDatabase } from "@/backend/database";
 import { notifyCustomerOrderStatus } from "@/backend/email";
 import { requireAdminSession } from "@/backend/nextAdmin";
+import { notifyWechatOrderStatus } from "@/backend/wechat";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,7 @@ export async function POST(
 
       const order = getOrderById(db, orderId);
       await notifyCustomerOrderStatus(order);
+      await notifyWechatOrderStatus(db, order);
 
       return NextResponse.json({ ok: true });
     } finally {

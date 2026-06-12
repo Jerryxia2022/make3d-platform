@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "backup": "bash scripts/backup.sh",
+    "wechat:menu": "node scripts/wechat-menu.mjs",
     "test": "node --experimental-strip-types --experimental-specifier-resolution=node --test"
   },
   "dependencies": {

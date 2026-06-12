@@ -24,6 +24,16 @@ test("docker build receives public ICP filing environment", async () => {
   assert.match(dockerfile, /ENV NEXT_PUBLIC_ICP_BEIAN=\$\{NEXT_PUBLIC_ICP_BEIAN\}/);
 });
 
+test("docker compose passes optional wechat official account runtime environment", async () => {
+  const compose = await readSource("docker-compose.yml");
+
+  assert.match(compose, /WECHAT_MP_ENABLED: \$\{WECHAT_MP_ENABLED:-false\}/);
+  assert.match(compose, /WECHAT_MP_APP_ID: \$\{WECHAT_MP_APP_ID:-\}/);
+  assert.match(compose, /WECHAT_MP_APP_SECRET: \$\{WECHAT_MP_APP_SECRET:-\}/);
+  assert.match(compose, /WECHAT_MP_TOKEN: \$\{WECHAT_MP_TOKEN:-\}/);
+  assert.match(compose, /WECHAT_MP_AES_KEY: \$\{WECHAT_MP_AES_KEY:-\}/);
+});
+
 test("Dockerfile creates runtime slicer profile and gcode directories", async () => {
   const dockerfile = await readSource("Dockerfile");
 
