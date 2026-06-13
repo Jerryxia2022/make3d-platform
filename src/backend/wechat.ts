@@ -52,7 +52,15 @@ export type WechatVerificationResult = {
 };
 
 const BIND_CODE_PATTERN = /^M3D-\d{6}$/i;
-const WECHAT_ORDER_NOTIFY_STATUSES = new Set(["待付款", "已付款", "生产中", "已发货", "已完成"]);
+const WECHAT_ORDER_NOTIFY_STATUSES = new Set([
+  "待付款",
+  "已付款",
+  "排产中",
+  "生产中",
+  "后处理",
+  "已发货",
+  "已完成",
+]);
 
 let accessTokenCache:
   | {
@@ -385,6 +393,10 @@ async function handleWechatText(db: DatabaseSync, message: WechatInboundMessage)
     );
   }
 
+  if (matchesAny(content, ["人工", "客服", "联系"])) {
+    return createCustomerServiceRequestReply(db, message, content);
+  }
+
   if (matchesAny(content, ["报价", "上传", "打印"])) {
     return buildWechatTextReply(message, `请点击进入在线报价：${getAppUrl()}/quote`);
   }
@@ -398,10 +410,6 @@ async function handleWechatText(db: DatabaseSync, message: WechatInboundMessage)
       message,
       `请登录网站查看订单详情和付款方式：${getAppUrl()}/account`,
     );
-  }
-
-  if (matchesAny(content, ["人工", "客服", "联系"])) {
-    return createCustomerServiceRequestReply(db, message, content);
   }
 
   return buildWechatTextReply(

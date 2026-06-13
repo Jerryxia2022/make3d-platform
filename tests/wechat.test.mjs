@@ -201,6 +201,76 @@ test("wechat keyword customer service creates service request", async () => {
   db.close();
 });
 
+test("customer service message with order number links the order", async () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const order = createPayableOrder(db, customer.id);
+
+  const reply = await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "text",
+      Content: `人工 请看订单 ${order.orderNo}`,
+      FromUserName: "openid-order-link",
+    }),
+  );
+  const requests = searchCustomerServiceRequests(db, {});
+
+  assert.match(reply, /已收到人工客服请求/);
+  assert.equal(requests[0].orderId, order.id);
+  assert.equal(requests[0].orderNo, order.orderNo);
+  assert.equal(requests[0].customerId, customer.id);
+  assert.equal(requests[0].phone, "13800000000");
+
+  db.close();
+});
+
+test("customer service message with phone links the customer and latest unfinished order", async () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const order = createPayableOrder(db, customer.id);
+
+  await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "text",
+      Content: "人工 客服 13800000000",
+      FromUserName: "openid-phone-link",
+    }),
+  );
+  const requests = searchCustomerServiceRequests(db, {});
+
+  assert.equal(requests[0].customerId, customer.id);
+  assert.equal(requests[0].orderId, order.id);
+  assert.equal(requests[0].phone, "13800000000");
+
+  db.close();
+});
+
+test("bound openid customer service links the customer and latest unfinished order", async () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-bound-service" });
+  const order = createPayableOrder(db, customer.id);
+
+  await handleWechatMessage(
+    db,
+    createWechatXml({
+      MsgType: "text",
+      Content: "人工",
+      FromUserName: "openid-bound-service",
+    }),
+  );
+  const requests = searchCustomerServiceRequests(db, {});
+
+  assert.equal(requests[0].customerId, customer.id);
+  assert.equal(requests[0].orderId, order.id);
+  assert.equal(requests[0].phone, "13800000000");
+
+  db.close();
+});
+
 test("does not send wechat notification for unbound customer", async () => {
   const previous = snapshotWechatEnv();
   const db = initDatabase(":memory:");
@@ -248,6 +318,14 @@ test("sends wechat notification for bound customer status updates", async () => 
     assert.match(buildWechatOrderStatusContent(detail), /订单详情：https:\/\/make3d\.com\.cn\/account\/orders\//);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].sendStatus, "sent");
+
+    confirmOrderPayment(db, order.id, { paymentMethod: "线下转账", operator: "admin" });
+    updateOrderStatus(db, order.id, { status: "排产中", operator: "admin" });
+    const scheduledResult = await notifyWechatOrderStatus(db, getOrderById(db, order.id), {
+      sendText: async (openid, content) => sent.push({ openid, content }),
+    });
+    assert.equal(scheduledResult.sent, true);
+    assert.match(sent[1].content, /当前状态：排产中/);
   } finally {
     restoreEnv(previous);
     db.close();

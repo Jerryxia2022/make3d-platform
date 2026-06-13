@@ -42,7 +42,7 @@ export default async function AdminOrderDetailPage({
 
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
-        <section className="mx-auto w-full max-w-5xl">
+        <section className="mx-auto w-full max-w-7xl">
           <Link className="font-semibold text-graphite" href="/admin/orders">
             返回订单列表
           </Link>
@@ -62,7 +62,22 @@ export default async function AdminOrderDetailPage({
                 productionNote={order.productionNote}
               />
               {order.status === "待付款" ? <AdminPaymentConfirmForm orderId={order.id} /> : null}
-              <AdminStatusForm orderId={order.id} status={order.status} shippingCompany={order.shippingCompany} trackingNumber={order.trackingNumber} adminRemark={order.adminRemark} />
+              <AdminStatusForm
+                actualFinishAt={order.actualFinishAt}
+                actualStartAt={order.actualStartAt}
+                adminRemark={order.adminRemark}
+                assignedPrinter={order.assignedPrinter}
+                estimatedFinishAt={order.estimatedFinishAt}
+                estimatedStartAt={order.estimatedStartAt}
+                internalNote={order.internalNote}
+                orderId={order.id}
+                productionNote={order.productionNote}
+                shippedAt={order.shippedAt}
+                shippingCompany={order.shippingCompany}
+                shippingNote={order.shippingNote}
+                status={order.status}
+                trackingNumber={order.trackingNumber}
+              />
             </div>
           </div>
 
@@ -123,8 +138,27 @@ export default async function AdminOrderDetailPage({
           </div>
 
           <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
-            <h2 className="text-xl font-bold">配送信息</h2>
-            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold">生产管理</h2>
+                <p className="mt-1 text-sm text-graphite">排产、打印、后处理和内部交付信息。</p>
+              </div>
+              <StatusPill status={order.status} />
+            </div>
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <Detail label="分配打印机" value={order.assignedPrinter || "-"} />
+              <Detail label="预计开始时间" value={formatOptionalDate(order.estimatedStartAt)} />
+              <Detail label="预计完成时间" value={formatOptionalDate(order.estimatedFinishAt)} />
+              <Detail label="实际开始时间" value={formatOptionalDate(order.actualStartAt)} />
+              <Detail label="实际完成时间" value={formatOptionalDate(order.actualFinishAt)} />
+              <Detail label="生产备注" value={order.productionNote || "-"} />
+              <Detail label="内部备注" value={order.internalNote || "-"} />
+            </dl>
+          </section>
+
+          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <h2 className="text-xl font-bold">配送与物流</h2>
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <Detail label="配送方式" value={order.shippingMethod || "-"} />
               <Detail label="预估运费" value={order.shippingFeeEstimate || "-"} />
               <Detail label="收件人" value={order.recipientName || "-"} />
@@ -134,6 +168,8 @@ export default async function AdminOrderDetailPage({
               <Detail label="配送备注" value={order.shippingRemark || "-"} />
               <Detail label="快递公司" value={order.shippingCompany || "-"} />
               <Detail label="快递单号" value={order.trackingNumber || "-"} />
+              <Detail label="发货时间" value={formatOptionalDate(order.shippedAt)} />
+              <Detail label="物流备注" value={order.shippingNote || "-"} />
             </dl>
           </section>
 
@@ -244,6 +280,21 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+function StatusPill({ status }: { status: string }) {
+  const urgent = status === "待确认" || status === "待付款";
+  return (
+    <span
+      className={
+        urgent
+          ? "inline-flex border border-coral/30 bg-coral/10 px-3 py-1 text-xs font-bold text-coral"
+          : "inline-flex border border-mint/30 bg-mint/10 px-3 py-1 text-xs font-bold text-ink"
+      }
+    >
+      {status}
+    </span>
+  );
+}
+
 function StatusHistory({ logs }: { logs: OrderStatusLogRecord[] }) {
   if (logs.length === 0) {
     return <p className="mt-4 text-sm text-graphite">暂无状态变更记录</p>;
@@ -258,6 +309,7 @@ function StatusHistory({ logs }: { logs: OrderStatusLogRecord[] }) {
             <th className="py-2 pr-4 font-semibold">原状态</th>
             <th className="py-2 pr-4 font-semibold">新状态</th>
             <th className="py-2 pr-4 font-semibold">操作人</th>
+            <th className="py-2 pr-4 font-semibold">备注</th>
           </tr>
         </thead>
         <tbody>
@@ -267,6 +319,7 @@ function StatusHistory({ logs }: { logs: OrderStatusLogRecord[] }) {
               <td className="py-3 pr-4">{log.fromStatus || "-"}</td>
               <td className="py-3 pr-4 font-semibold">{log.toStatus}</td>
               <td className="py-3 pr-4">{log.operator}</td>
+              <td className="py-3 pr-4">{log.note || "-"}</td>
             </tr>
           ))}
         </tbody>

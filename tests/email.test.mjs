@@ -96,8 +96,9 @@ test("sends customer status notifications only for configured statuses", async (
     );
 
     assert.equal(payable.sent, true);
-    assert.equal(scheduled.skipped, true);
-    assert.equal(sent.length, 1);
+    assert.equal(scheduled.sent, true);
+    assert.equal(sent.length, 2);
+    assert.match(sent[1].text, /订单已进入排产/);
   } finally {
     restoreEnv(previous);
   }

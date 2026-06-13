@@ -89,13 +89,26 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "final_lead_time_hours",
     "price_adjustment_reason",
     "production_note",
+    "assigned_printer",
+    "estimated_start_at",
+    "estimated_finish_at",
+    "actual_start_at",
+    "actual_finish_at",
+    "internal_note",
     "payment_method",
     "payment_confirmed_at",
     "payment_confirmed_by",
     "payment_note",
+    "shipping_company",
+    "tracking_number",
+    "shipped_at",
+    "shipping_note",
   ]) {
     assert.equal(orderColumns.includes(column), true);
   }
+
+  const statusLogColumns = db.prepare("PRAGMA table_info(order_status_logs)").all().map((row) => row.name);
+  assert.equal(statusLogColumns.includes("note"), true);
 
   const paymentColumns = db.prepare("PRAGMA table_info(payment_settings)").all().map((row) => row.name);
   for (const column of [

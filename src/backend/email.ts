@@ -40,7 +40,15 @@ export type OrderStatusEmailOrder = Pick<
   | "trackingNumber"
 >;
 
-const CUSTOMER_STATUS_EMAIL_STATUSES = new Set(["待付款", "已付款", "生产中", "已发货", "已完成"]);
+const CUSTOMER_STATUS_EMAIL_STATUSES = new Set([
+  "待付款",
+  "已付款",
+  "排产中",
+  "生产中",
+  "后处理",
+  "已发货",
+  "已完成",
+]);
 
 export function buildNewOrderEmail(order: NewOrderEmailOrder, appUrl = getAppUrl()): MailMessage {
   const detailUrl = `${appUrl.replace(/\/$/, "")}/admin/orders/${order.id}`;
@@ -107,9 +115,25 @@ export function buildOrderStatusEmail(
     lines.push("付款已确认，订单已进入生产准备。");
   }
 
+  if (order.status === "排产中") {
+    lines.push("订单已进入排产，等待打印。");
+  }
+
+  if (order.status === "生产中") {
+    lines.push("订单正在生产中。");
+  }
+
+  if (order.status === "后处理") {
+    lines.push("订单正在进行后处理、检查或包装。");
+  }
+
   if (order.status === "已发货") {
     lines.push(`快递公司：${order.shippingCompany || "-"}`);
     lines.push(`快递单号：${order.trackingNumber || "待填写"}`);
+  }
+
+  if (order.status === "已完成") {
+    lines.push("订单已完成，感谢使用 Make3D。");
   }
 
   return {

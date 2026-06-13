@@ -215,6 +215,10 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
   assert.equal(updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" }), true);
   assert.equal(getOrderById(db, order.id).status, "生产中");
   assert.throws(
+    () => updateOrderStatus(db, order.id, { status: "待付款", operator: "admin" }),
+    /已付款订单不能退回未付款状态/,
+  );
+  assert.throws(
     () => confirmOrderPayment(db, order.id, { paymentNote: "重复确认", operator: "admin" }),
     /只有待付款订单可以确认到账/,
   );
@@ -224,6 +228,12 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
   assert.throws(
     () => confirmOrderPayment(db, canceled.id, { paymentNote: "取消后付款", operator: "admin" }),
     /已取消订单不能付款/,
+  );
+
+  assert.equal(updateOrderStatus(db, order.id, { status: "已完成", operator: "admin" }), true);
+  assert.throws(
+    () => updateOrderStatus(db, order.id, { status: "待付款", operator: "admin" }),
+    /已完成订单不能继续流转/,
   );
 
   db.close();
@@ -241,17 +251,38 @@ test("records order status workflow logs and admin fulfillment fields", () => {
     operator: "admin",
   });
   confirmOrderPayment(db, order.id, { paymentNote: "支付宝到账", operator: "admin" });
-  updateOrderStatus(db, order.id, { status: "排产中", operator: "admin" });
-  updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" });
+  updateOrderStatus(db, order.id, {
+    status: "排产中",
+    operator: "admin",
+    assignedPrinter: "P1S-03",
+    estimatedStartAt: "2026-06-13T20:00",
+    estimatedFinishAt: "2026-06-14T08:00",
+    productionNote: "今晚排产",
+    internalNote: "优先测试件",
+    note: "进入排产",
+  });
+  updateOrderStatus(db, order.id, {
+    status: "生产中",
+    operator: "admin",
+    actualStartAt: "2026-06-13T21:10",
+    note: "开始打印",
+  });
   updateOrderStatus(db, order.id, { status: "后处理", operator: "admin" });
+
+  assert.throws(
+    () => updateOrderStatus(db, order.id, { status: "已发货", operator: "admin" }),
+    /确认发货需要填写快递公司和运单号/,
+  );
 
   assert.equal(
     updateOrderStatus(db, order.id, {
       status: "已发货",
       operator: "admin",
-      shippingCompany: "顺丰快递",
+      shippingCompany: "顺丰",
       trackingNumber: "SF123456789",
+      shippingNote: "已打包发出",
       adminRemark: "已通知客户",
+      note: "确认发货",
     }),
     true,
   );
@@ -259,8 +290,16 @@ test("records order status workflow logs and admin fulfillment fields", () => {
   const logs = getOrderStatusLogsByOrderId(db, order.id);
 
   assert.equal(detail.status, "已发货");
-  assert.equal(detail.shippingCompany, "顺丰快递");
+  assert.equal(detail.assignedPrinter, "P1S-03");
+  assert.equal(detail.estimatedStartAt, "2026-06-13T20:00");
+  assert.equal(detail.estimatedFinishAt, "2026-06-14T08:00");
+  assert.equal(detail.actualStartAt, "2026-06-13T21:10");
+  assert.equal(detail.productionNote, "今晚排产");
+  assert.equal(detail.internalNote, "优先测试件");
+  assert.equal(detail.shippingCompany, "顺丰");
   assert.equal(detail.trackingNumber, "SF123456789");
+  assert.ok(detail.shippedAt);
+  assert.equal(detail.shippingNote, "已打包发出");
   assert.equal(detail.adminRemark, "已通知客户");
   assert.equal(logs.length, 6);
   assert.ok(logs.some((log) => log.fromStatus === "待确认" && log.toStatus === "待付款"));
@@ -269,6 +308,8 @@ test("records order status workflow logs and admin fulfillment fields", () => {
   assert.ok(logs.some((log) => log.fromStatus === "排产中" && log.toStatus === "生产中"));
   assert.ok(logs.some((log) => log.fromStatus === "生产中" && log.toStatus === "后处理"));
   assert.ok(logs.some((log) => log.fromStatus === "后处理" && log.toStatus === "已发货"));
+  assert.ok(logs.some((log) => log.toStatus === "排产中" && log.note === "进入排产"));
+  assert.ok(logs.some((log) => log.toStatus === "已发货" && log.note === "确认发货"));
   assert.equal(logs[0].operator, "admin");
 
   db.close();

@@ -131,6 +131,19 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(detailSource, /自动报价/);
   assert.match(detailSource, /最终报价/);
   assert.match(detailSource, /状态时间轴/);
+  assert.match(detailSource, /CurrentStatusPanel/);
+  assert.match(detailSource, /已提交订单/);
+  assert.match(detailSource, /已确认报价/);
+  assert.match(detailSource, /排产中/);
+  assert.match(detailSource, /后处理/);
+  assert.match(detailSource, /订单已付款，等待排产。/);
+  assert.match(detailSource, /订单已进入排产，等待打印。/);
+  assert.match(detailSource, /订单正在生产中。/);
+  assert.match(detailSource, /订单正在进行后处理、检查或包装。/);
+  assert.match(detailSource, /订单已完成，感谢使用 Make3D。/);
+  assert.match(detailSource, /生产与物流/);
+  assert.match(detailSource, /快递公司/);
+  assert.match(detailSource, /运单号/);
   assert.match(detailSource, /管理员备注/);
   assert.match(detailSource, /物流单号/);
   assert.match(detailSource, /请联系工作人员完成付款/);
@@ -401,6 +414,11 @@ test("admin pages show V2 estimate and shipping fields", async () => {
 
   assert.match(listSource, /searchOrders/);
   assert.match(listSource, /状态筛选/);
+  assert.match(listSource, /QuickStatusLinks/);
+  assert.match(listSource, /需要确认/);
+  assert.match(listSource, /等待付款/);
+  assert.match(listSource, /待排产/);
+  assert.match(listSource, /待发货/);
   assert.match(listSource, /最终报价/);
   assert.match(listSource, /formatPrice\(order\)/);
   assert.match(listSource, /formatLeadTime\(order\)/);
@@ -417,6 +435,14 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   assert.match(detailSource, /addressRegion/);
   assert.match(detailSource, /addressDetail/);
   assert.match(detailSource, /shippingRemark/);
+  assert.match(detailSource, /assignedPrinter/);
+  assert.match(detailSource, /estimatedStartAt/);
+  assert.match(detailSource, /estimatedFinishAt/);
+  assert.match(detailSource, /actualStartAt/);
+  assert.match(detailSource, /actualFinishAt/);
+  assert.match(detailSource, /internalNote/);
+  assert.match(detailSource, /shippedAt/);
+  assert.match(detailSource, /shippingNote/);
   assert.match(detailSource, /AdminFinalQuoteForm/);
   assert.match(detailSource, /priceAdjustmentReason/);
   assert.match(detailSource, /finalPrice/);
@@ -435,9 +461,13 @@ test("admin order detail page shows complete order fields and per-file V2 estima
   assert.match(detailSource, /自动切片报价尚未启用。/);
   assert.match(detailSource, /requireAdminSession/);
   assert.match(detailSource, /redirect\("\/admin\/login"\)/);
-  assert.match(detailSource, /AdminStatusForm orderId={order\.id} status={order\.status}/);
+  assert.match(detailSource, /<AdminStatusForm/);
+  assert.match(detailSource, /assignedPrinter={order\.assignedPrinter}/);
+  assert.match(detailSource, /shippingNote={order\.shippingNote}/);
   assert.match(detailSource, /getOrderStatusLogsByOrderId/);
   assert.match(detailSource, /状态历史/);
+  assert.match(detailSource, /生产管理/);
+  assert.match(detailSource, /配送与物流/);
   assert.match(detailSource, /shippingCompany/);
   assert.match(detailSource, /trackingNumber/);
   assert.match(detailSource, /adminRemark/);
@@ -518,10 +548,17 @@ test("admin order status API records admin workflow and notifies customers", asy
 
   assert.match(source, /updateOrderStatus/);
   assert.match(source, /operator: "admin"/);
+  assert.match(source, /assignedPrinter/);
+  assert.match(source, /estimatedStartAt/);
+  assert.match(source, /actualStartAt/);
+  assert.match(source, /internalNote/);
   assert.match(source, /shippingCompany/);
   assert.match(source, /trackingNumber/);
+  assert.match(source, /shippedAt/);
+  assert.match(source, /shippingNote/);
   assert.match(source, /adminRemark/);
   assert.match(source, /notifyCustomerOrderStatus/);
+  assert.match(source, /notifyWechatOrderStatus/);
 });
 
 test("manual payment confirmation workflow pages avoid customer proof upload", async () => {

@@ -24,8 +24,18 @@ export async function POST(
       const updated = updateOrderStatus(db, orderId, {
         status: String(body.status || ""),
         operator: "admin",
+        note: getOptionalString(body.note),
+        assignedPrinter: getOptionalString(body.assignedPrinter),
+        estimatedStartAt: getOptionalString(body.estimatedStartAt),
+        estimatedFinishAt: getOptionalString(body.estimatedFinishAt),
+        actualStartAt: getOptionalString(body.actualStartAt),
+        actualFinishAt: getOptionalString(body.actualFinishAt),
+        productionNote: getOptionalString(body.productionNote),
+        internalNote: getOptionalString(body.internalNote),
         shippingCompany: getOptionalString(body.shippingCompany),
         trackingNumber: getOptionalString(body.trackingNumber),
+        shippedAt: getOptionalString(body.shippedAt),
+        shippingNote: getOptionalString(body.shippingNote),
         adminRemark: getOptionalString(body.adminRemark),
       });
 

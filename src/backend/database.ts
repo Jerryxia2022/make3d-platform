@@ -36,10 +36,18 @@ export type OrderInput = {
   finalLeadTimeHours?: number | null;
   priceAdjustmentReason?: string | null;
   productionNote?: string | null;
+  assignedPrinter?: string | null;
+  estimatedStartAt?: string | null;
+  estimatedFinishAt?: string | null;
+  actualStartAt?: string | null;
+  actualFinishAt?: string | null;
+  internalNote?: string | null;
   paymentMethod?: string | null;
   paymentNote?: string | null;
   shippingCompany?: string | null;
   trackingNumber?: string | null;
+  shippedAt?: string | null;
+  shippingNote?: string | null;
   adminRemark?: string | null;
   files: OrderFileInput[];
 };
@@ -324,12 +332,20 @@ export type OrderRecord = {
   priceAdjustmentReason: string | null;
   finalPriceUpdatedAt: string | null;
   productionNote: string | null;
+  assignedPrinter: string | null;
+  estimatedStartAt: string | null;
+  estimatedFinishAt: string | null;
+  actualStartAt: string | null;
+  actualFinishAt: string | null;
+  internalNote: string | null;
   paymentMethod: string | null;
   paymentConfirmedAt: string | null;
   paymentConfirmedBy: string | null;
   paymentNote: string | null;
   shippingCompany: string | null;
   trackingNumber: string | null;
+  shippedAt: string | null;
+  shippingNote: string | null;
   adminRemark: string | null;
   fileCount: number;
   status: OrderStatus;
@@ -349,6 +365,7 @@ export type OrderStatusLogRecord = {
   fromStatus: string | null;
   toStatus: string;
   operator: string;
+  note: string | null;
   createdAt: string;
 };
 
@@ -455,12 +472,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
       price_adjustment_reason TEXT,
       final_price_updated_at DATETIME,
       production_note TEXT,
+      assigned_printer TEXT,
+      estimated_start_at DATETIME,
+      estimated_finish_at DATETIME,
+      actual_start_at DATETIME,
+      actual_finish_at DATETIME,
+      internal_note TEXT,
       payment_method TEXT,
       payment_confirmed_at DATETIME,
       payment_confirmed_by TEXT,
       payment_note TEXT,
       shipping_company TEXT,
       tracking_number TEXT,
+      shipped_at DATETIME,
+      shipping_note TEXT,
       admin_remark TEXT,
       status TEXT NOT NULL DEFAULT '待确认',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -518,6 +543,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       from_status TEXT,
       to_status TEXT NOT NULL,
       operator TEXT NOT NULL,
+      note TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
@@ -695,14 +721,23 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["price_adjustment_reason", "TEXT"],
     ["final_price_updated_at", "DATETIME"],
     ["production_note", "TEXT"],
+    ["assigned_printer", "TEXT"],
+    ["estimated_start_at", "DATETIME"],
+    ["estimated_finish_at", "DATETIME"],
+    ["actual_start_at", "DATETIME"],
+    ["actual_finish_at", "DATETIME"],
+    ["internal_note", "TEXT"],
     ["payment_method", "TEXT"],
     ["payment_confirmed_at", "DATETIME"],
     ["payment_confirmed_by", "TEXT"],
     ["payment_note", "TEXT"],
     ["shipping_company", "TEXT"],
     ["tracking_number", "TEXT"],
+    ["shipped_at", "DATETIME"],
+    ["shipping_note", "TEXT"],
     ["admin_remark", "TEXT"],
   ]);
+  ensureColumns(db, "order_status_logs", [["note", "TEXT"]]);
   ensureColumns(db, "payment_settings", [
     ["wechat_qr_path", "TEXT"],
     ["alipay_qr_path", "TEXT"],
@@ -1391,8 +1426,18 @@ export function getServiceRequestLogsByRequestId(
 export type OrderStatusUpdateInput = {
   status: string;
   operator?: string;
+  note?: string | null;
+  assignedPrinter?: string | null;
+  estimatedStartAt?: string | null;
+  estimatedFinishAt?: string | null;
+  actualStartAt?: string | null;
+  actualFinishAt?: string | null;
+  productionNote?: string | null;
+  internalNote?: string | null;
   shippingCompany?: string | null;
   trackingNumber?: string | null;
+  shippedAt?: string | null;
+  shippingNote?: string | null;
   adminRemark?: string | null;
 };
 
@@ -1407,8 +1452,29 @@ export function updateOrderStatus(
     throw new Error("无效订单状态");
   }
 
-  const current = db.prepare("SELECT status, final_price AS finalPrice FROM orders WHERE id = ?").get(id) as
-    | { status: string; finalPrice: number | null }
+  const current = db
+    .prepare(
+      `SELECT
+        status,
+        final_price AS finalPrice,
+        shipping_company AS shippingCompany,
+        tracking_number AS trackingNumber,
+        actual_start_at AS actualStartAt,
+        actual_finish_at AS actualFinishAt,
+        shipped_at AS shippedAt
+      FROM orders
+      WHERE id = ?`,
+    )
+    .get(id) as
+    | {
+        status: string;
+        finalPrice: number | null;
+        shippingCompany: string | null;
+        trackingNumber: string | null;
+        actualStartAt: string | null;
+        actualFinishAt: string | null;
+        shippedAt: string | null;
+      }
     | undefined;
 
   if (!current) {
@@ -1421,23 +1487,90 @@ export function updateOrderStatus(
     typeof input === "string" ? null : normalizeOptionalText(input.shippingCompany);
   const trackingNumber =
     typeof input === "string" ? null : normalizeOptionalText(input.trackingNumber);
+  const assignedPrinter =
+    typeof input === "string" ? null : normalizeOptionalText(input.assignedPrinter);
+  const estimatedStartAt =
+    typeof input === "string" ? null : normalizeOptionalText(input.estimatedStartAt);
+  const estimatedFinishAt =
+    typeof input === "string" ? null : normalizeOptionalText(input.estimatedFinishAt);
+  const actualStartAt =
+    typeof input === "string" ? null : normalizeOptionalText(input.actualStartAt);
+  const actualFinishAt =
+    typeof input === "string" ? null : normalizeOptionalText(input.actualFinishAt);
+  const productionNote =
+    typeof input === "string" ? null : normalizeOptionalText(input.productionNote);
+  const internalNote =
+    typeof input === "string" ? null : normalizeOptionalText(input.internalNote);
+  const shippedAt =
+    typeof input === "string" ? null : normalizeOptionalText(input.shippedAt);
+  const shippingNote =
+    typeof input === "string" ? null : normalizeOptionalText(input.shippingNote);
   const adminRemark =
     typeof input === "string" ? null : normalizeOptionalText(input.adminRemark);
   const operator = typeof input === "string" ? "admin" : input.operator || "admin";
+  const note = typeof input === "string" ? null : normalizeOptionalText(input.note);
+  const nextShippingCompany = shippingCompany ?? current.shippingCompany;
+  const nextTrackingNumber = trackingNumber ?? current.trackingNumber;
+
+  if (status === "已发货" && (!nextShippingCompany || !nextTrackingNumber)) {
+    throw new Error("确认发货需要填写快递公司和运单号");
+  }
 
   const result = db
     .prepare(
       `UPDATE orders
        SET status = ?,
+           assigned_printer = COALESCE(?, assigned_printer),
+           estimated_start_at = COALESCE(?, estimated_start_at),
+           estimated_finish_at = COALESCE(?, estimated_finish_at),
+           actual_start_at = CASE
+             WHEN ? IS NOT NULL THEN ?
+             WHEN ? IN ('生产中', '后处理', '已发货', '已完成') AND actual_start_at IS NULL THEN CURRENT_TIMESTAMP
+             ELSE actual_start_at
+           END,
+           actual_finish_at = CASE
+             WHEN ? IS NOT NULL THEN ?
+             WHEN ? = '已完成' AND actual_finish_at IS NULL THEN CURRENT_TIMESTAMP
+             ELSE actual_finish_at
+           END,
+           production_note = COALESCE(?, production_note),
+           internal_note = COALESCE(?, internal_note),
            shipping_company = COALESCE(?, shipping_company),
            tracking_number = COALESCE(?, tracking_number),
+           shipped_at = CASE
+             WHEN ? IS NOT NULL THEN ?
+             WHEN ? = '已发货' AND shipped_at IS NULL THEN CURRENT_TIMESTAMP
+             ELSE shipped_at
+           END,
+           shipping_note = COALESCE(?, shipping_note),
            admin_remark = COALESCE(?, admin_remark)
        WHERE id = ?`,
     )
-    .run(status, shippingCompany, trackingNumber, adminRemark, id);
+    .run(
+      status,
+      assignedPrinter,
+      estimatedStartAt,
+      estimatedFinishAt,
+      actualStartAt,
+      actualStartAt,
+      status,
+      actualFinishAt,
+      actualFinishAt,
+      status,
+      productionNote,
+      internalNote,
+      shippingCompany,
+      trackingNumber,
+      shippedAt,
+      shippedAt,
+      status,
+      shippingNote,
+      adminRemark,
+      id,
+    );
 
   if (result.changes > 0 && current.status !== status) {
-    insertStatusLog(db, id, current.status, status, operator);
+    insertStatusLog(db, id, current.status, status, operator, note);
   }
 
   return result.changes > 0;
@@ -1618,6 +1751,7 @@ export function getOrderStatusLogsByOrderId(
         from_status AS fromStatus,
         to_status AS toStatus,
         operator,
+        note,
         created_at AS createdAt
       FROM order_status_logs
       WHERE order_id = ?
@@ -1936,6 +2070,10 @@ export function createCustomerServiceRequest(
   input: CustomerServiceRequestInput,
 ) {
   const message = normalizeRequiredText(input.message, "请填写客服请求内容");
+  const links = resolveCustomerServiceRequestLinks(db, {
+    ...input,
+    message,
+  });
   const result = db
     .prepare(
       `INSERT INTO customer_service_requests (
@@ -1948,14 +2086,77 @@ export function createCustomerServiceRequest(
       ) VALUES (?, ?, ?, ?, ?, '待处理')`,
     )
     .run(
-      input.customerId ?? null,
+      links.customerId,
       normalizeOptionalText(input.openid),
-      normalizeOptionalText(input.phone),
-      input.orderId ?? null,
+      links.phone,
+      links.orderId,
       message,
     );
 
   return { id: Number(result.lastInsertRowid) };
+}
+
+function resolveCustomerServiceRequestLinks(
+  db: DatabaseSync,
+  input: CustomerServiceRequestInput & { message: string },
+) {
+  const orderNo = extractOrderNo(input.message);
+  let phone = normalizeOptionalText(input.phone) || extractMainlandPhone(input.message);
+  let customerId = input.customerId ?? null;
+  let orderId = input.orderId ?? null;
+
+  if (orderNo && !orderId) {
+    const order = db
+      .prepare(
+        `SELECT
+          id,
+          customer_id AS customerId,
+          phone
+        FROM orders
+        WHERE order_no = ?
+        LIMIT 1`,
+      )
+      .get(orderNo) as { id: number; customerId: number | null; phone: string | null } | undefined;
+
+    if (order) {
+      orderId = order.id;
+      customerId = customerId ?? order.customerId;
+      phone = order.phone || phone || null;
+    }
+  }
+
+  if (!customerId && input.openid) {
+    customerId = getWechatAccountByOpenid(db, input.openid)?.customerId ?? null;
+  }
+
+  if (!customerId && phone) {
+    customerId = findCustomerByLogin(db, phone)?.id ?? null;
+  }
+
+  if (!orderId && customerId) {
+    const order = db
+      .prepare(
+        `SELECT id
+        FROM orders
+        WHERE customer_id = ?
+          AND status NOT IN ('已完成', '已取消')
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1`,
+      )
+      .get(customerId) as { id: number } | undefined;
+
+    orderId = order?.id ?? null;
+  }
+
+  if (customerId && !phone) {
+    phone = getCustomerById(db, customerId)?.phone ?? null;
+  }
+
+  return {
+    customerId,
+    orderId,
+    phone,
+  };
 }
 
 export function searchCustomerServiceRequests(
@@ -2272,12 +2473,20 @@ function orderSelectSql(suffix: string) {
     price_adjustment_reason AS priceAdjustmentReason,
     final_price_updated_at AS finalPriceUpdatedAt,
     production_note AS productionNote,
+    assigned_printer AS assignedPrinter,
+    estimated_start_at AS estimatedStartAt,
+    estimated_finish_at AS estimatedFinishAt,
+    actual_start_at AS actualStartAt,
+    actual_finish_at AS actualFinishAt,
+    internal_note AS internalNote,
     payment_method AS paymentMethod,
     payment_confirmed_at AS paymentConfirmedAt,
     payment_confirmed_by AS paymentConfirmedBy,
     payment_note AS paymentNote,
     shipping_company AS shippingCompany,
     tracking_number AS trackingNumber,
+    shipped_at AS shippedAt,
+    shipping_note AS shippingNote,
     admin_remark AS adminRemark,
     (SELECT COUNT(*) FROM files WHERE files.order_id = orders.id) AS fileCount,
     status,
@@ -2477,8 +2686,8 @@ function assertAllowedStatusUpdate(currentStatus: string, nextStatus: string, fi
     throw new Error("已取消订单不能继续流转");
   }
 
-  if (currentStatus === "已完成" && nextStatus === "已付款") {
-    throw new Error("已完成订单不能重新付款");
+  if (currentStatus === "已完成") {
+    throw new Error("已完成订单不能继续流转");
   }
 
   if (nextStatus === "待付款" && (finalPrice == null || finalPrice <= 0)) {
@@ -2491,6 +2700,11 @@ function assertAllowedStatusUpdate(currentStatus: string, nextStatus: string, fi
 
   const productionStatuses = new Set(["排产中", "生产中", "后处理", "已发货", "已完成"]);
   const paidOrProductionStatuses = new Set(["已付款", "排产中", "生产中", "后处理", "已发货", "已完成"]);
+  const unpaidStatuses = new Set(["待确认", "待付款"]);
+
+  if (paidOrProductionStatuses.has(currentStatus) && unpaidStatuses.has(nextStatus)) {
+    throw new Error("已付款订单不能退回未付款状态");
+  }
 
   if (productionStatuses.has(nextStatus) && !paidOrProductionStatuses.has(currentStatus)) {
     throw new Error("未付款不能进入生产流程");
@@ -2503,15 +2717,17 @@ function insertStatusLog(
   fromStatus: string | null,
   toStatus: string,
   operator: string,
+  note?: string | null,
 ) {
   db.prepare(
     `INSERT INTO order_status_logs (
       order_id,
       from_status,
       to_status,
-      operator
-    ) VALUES (?, ?, ?, ?)`,
-  ).run(orderId, fromStatus, toStatus, operator);
+      operator,
+      note
+    ) VALUES (?, ?, ?, ?, ?)`,
+  ).run(orderId, fromStatus, toStatus, operator, normalizeOptionalText(note));
 }
 
 function insertServiceRequestLog(
@@ -2540,6 +2756,14 @@ function normalizeOptionalText(value: string | null | undefined) {
 
   const normalized = value.trim();
   return normalized || null;
+}
+
+function extractOrderNo(value: string) {
+  return value.match(/M3D\d{12,24}/i)?.[0].toUpperCase() || null;
+}
+
+function extractMainlandPhone(value: string) {
+  return value.match(/1[3-9]\d{9}/)?.[0] || null;
 }
 
 function normalizeRequiredText(value: string | null | undefined, errorMessage: string) {

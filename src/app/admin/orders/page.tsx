@@ -85,6 +85,8 @@ export default async function AdminOrdersPage({
           </div>
         </form>
 
+        <QuickStatusLinks activeStatus={filters.status || ""} />
+
         <div className="mt-8 overflow-x-auto border border-ink/10 bg-white/80 shadow-sm">
           <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
             <thead className="bg-ink text-white">
@@ -144,6 +146,34 @@ export default async function AdminOrdersPage({
         </div>
       </section>
     </main>
+  );
+}
+
+function QuickStatusLinks({ activeStatus }: { activeStatus: string }) {
+  const links = [
+    ["需要确认", "待确认"],
+    ["等待付款", "待付款"],
+    ["待排产", "已付款"],
+    ["生产中", "生产中"],
+    ["待发货", "后处理"],
+  ] as const;
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2 text-sm">
+      {links.map(([label, status]) => (
+        <Link
+          className={
+            activeStatus === status
+              ? "border border-coral bg-coral/10 px-3 py-2 font-semibold text-coral"
+              : "border border-ink/10 bg-white px-3 py-2 font-semibold text-graphite"
+          }
+          href={`/admin/orders?status=${encodeURIComponent(status)}`}
+          key={label}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
   );
 }
 

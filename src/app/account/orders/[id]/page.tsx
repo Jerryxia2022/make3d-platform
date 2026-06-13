@@ -52,6 +52,8 @@ export default async function CustomerOrderDetailPage({
             </Link>
           </div>
 
+          <CurrentStatusPanel order={order} />
+
           <section className="mt-8 grid gap-6 lg:grid-cols-3">
             <div className="border border-ink/10 bg-white/80 p-6 shadow-sm">
               <h2 className="text-xl font-bold">订单信息</h2>
@@ -156,6 +158,25 @@ export default async function CustomerOrderDetailPage({
   }
 }
 
+function CurrentStatusPanel({ order }: { order: OrderDetail }) {
+  const statusText = getCustomerStatusText(order);
+
+  return (
+    <section className="mt-8 border border-ink/10 bg-white/90 p-6 shadow-sm">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-coral">当前状态：{order.status}</p>
+          <h2 className="mt-2 text-2xl font-bold">{statusText}</h2>
+        </div>
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <Detail label="订单编号" value={order.orderNo} />
+          <Detail label="预计交货期" value={formatLeadTime(order.finalLeadTimeHours ?? order.estimatedLeadTimeHours)} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PaymentStatusPanel({
   order,
   paymentSettings,
@@ -195,8 +216,28 @@ function PaymentStatusPanel({
   if (order.status === "已付款") {
     return (
       <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
-        <h2 className="text-xl font-bold">付款状态</h2>
-        <p className="mt-4 text-sm font-semibold text-coral">付款已确认，订单已进入生产准备</p>
+        <h2 className="text-xl font-bold">生产进度</h2>
+        <p className="mt-4 text-sm font-semibold text-coral">订单已付款，等待排产。</p>
+      </section>
+    );
+  }
+
+  if (["排产中", "生产中", "后处理", "已发货", "已完成"].includes(order.status)) {
+    return (
+      <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+        <h2 className="text-xl font-bold">生产与物流</h2>
+        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <Detail label="分配打印机" value={order.assignedPrinter || "-"} />
+          <Detail label="预计开始" value={formatOptionalDate(order.estimatedStartAt)} />
+          <Detail label="预计完成" value={formatOptionalDate(order.estimatedFinishAt)} />
+          <Detail label="发货时间" value={formatOptionalDate(order.shippedAt)} />
+        </dl>
+        {order.status === "已发货" ? (
+          <div className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+            <Detail label="快递公司" value={order.shippingCompany || "-"} />
+            <Detail label="运单号" value={order.trackingNumber || "-"} />
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -220,38 +261,75 @@ function StatusTimeline({
   order: OrderDetail;
   logs: OrderStatusLogRecord[];
 }) {
-  const events =
-    logs.length > 0
-      ? logs
-      : [
-          {
-            id: 0,
-            orderId: order.id,
-            fromStatus: null,
-            toStatus: order.status,
-            operator: "system",
-            createdAt: order.createdAt,
-          },
-        ];
+  const items = buildTimelineItems(order, logs);
 
   return (
-    <ol className="mt-5 space-y-4">
-      {events.map((log) => (
-        <li className="grid gap-3 border-l-2 border-coral/60 pl-4 text-sm" key={log.id}>
-          <p className="font-semibold">{log.toStatus}</p>
-          <p className="text-graphite">
-            {formatDate(log.createdAt)}
-            {log.fromStatus ? ` · ${log.fromStatus} → ${log.toStatus}` : ""}
-          </p>
+    <ol className="mt-5 grid gap-3 md:grid-cols-3">
+      {items.map((item) => (
+        <li
+          className={
+            item.completed
+              ? "border border-coral/30 bg-coral/5 px-4 py-3 text-sm"
+              : "border border-ink/10 bg-paper/70 px-4 py-3 text-sm text-graphite"
+          }
+          key={item.label}
+        >
+          <p className="font-semibold">{item.label}</p>
+          <p className="mt-2">{item.completed && item.time ? formatDate(item.time) : "未完成"}</p>
         </li>
       ))}
     </ol>
   );
 }
 
+function buildTimelineItems(order: OrderDetail, logs: OrderStatusLogRecord[]) {
+  const statusOrder = ["待确认", "待付款", "已付款", "排产中", "生产中", "后处理", "已发货", "已完成"];
+  const currentIndex = statusOrder.indexOf(order.status);
+  const hasReached = (status: string) => currentIndex >= statusOrder.indexOf(status);
+  const findLogTime = (status: string) =>
+    [...logs].reverse().find((log) => log.toStatus === status)?.createdAt || null;
+
+  return [
+    { label: "已提交订单", completed: true, time: order.createdAt },
+    {
+      label: "已确认报价",
+      completed: hasReached("待付款"),
+      time: findLogTime("待付款") || order.finalPriceUpdatedAt,
+    },
+    { label: "待付款", completed: hasReached("待付款"), time: findLogTime("待付款") },
+    { label: "已付款", completed: hasReached("已付款"), time: findLogTime("已付款") || order.paymentConfirmedAt },
+    { label: "排产中", completed: hasReached("排产中"), time: findLogTime("排产中") },
+    { label: "生产中", completed: hasReached("生产中"), time: findLogTime("生产中") || order.actualStartAt },
+    { label: "后处理", completed: hasReached("后处理"), time: findLogTime("后处理") },
+    { label: "已发货", completed: hasReached("已发货"), time: findLogTime("已发货") || order.shippedAt },
+    { label: "已完成", completed: hasReached("已完成"), time: findLogTime("已完成") || order.actualFinishAt },
+  ];
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
 }
+
+function formatOptionalDate(value?: string | null) {
+  return value ? formatDate(value) : "-";
+}
+
+function getCustomerStatusText(order: OrderDetail) {
+  const textByStatus: Record<string, string> = {
+    待确认: "订单已提交，正在确认最终报价。",
+    待付款: "最终报价已确认，请按页面提示完成付款。",
+    已付款: "订单已付款，等待排产。",
+    排产中: "订单已进入排产，等待打印。",
+    生产中: "订单正在生产中。",
+    后处理: "订单正在进行后处理、检查或包装。",
+    已发货: "订单已发货，请留意物流信息。",
+    已完成: "订单已完成，感谢使用 Make3D。",
+    已取消: "订单已取消，如需继续请重新提交订单。",
+  };
+
+  return textByStatus[order.status] || "订单状态已更新。";
+}
+
 
 function formatMoney(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)} 元` : "-";
