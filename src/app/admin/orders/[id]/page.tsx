@@ -19,6 +19,7 @@ import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
+import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminOrderDetailPage({
@@ -252,9 +253,20 @@ export default async function AdminOrderDetailPage({
             <div className="mt-4 space-y-3">
               {order.files.map((file) => (
                 <div
-                  className="flex flex-col gap-3 border border-ink/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="grid gap-4 border border-ink/10 px-4 py-3 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:items-start"
                   key={file.id}
                 >
+                  <StlModelPreview
+                    color={file.color}
+                    compact
+                    dimensions={getFileDimensions(file)}
+                    fileUrl={`/api/admin/files/${file.id}/download`}
+                    filename={file.filename}
+                    filesize={file.filesize}
+                    material={file.material}
+                    quantity={file.quantity}
+                    quoteStatus={order.status}
+                  />
                   <div className="space-y-1">
                     <p className="font-semibold">{file.filename}</p>
                     <p className="text-sm text-graphite">
@@ -470,6 +482,18 @@ function formatDimensions(file: OrderFileRecord) {
   }
 
   return `${file.boundingBoxX || "-"} × ${file.boundingBoxY || "-"} × ${file.boundingBoxZ || "-"} mm`;
+}
+
+function getFileDimensions(file: OrderFileRecord) {
+  if (file.boundingBoxX == null || file.boundingBoxY == null || file.boundingBoxZ == null) {
+    return null;
+  }
+
+  return {
+    x: file.boundingBoxX,
+    y: file.boundingBoxY,
+    z: file.boundingBoxZ,
+  };
 }
 
 function formatMoney(value: number | null) {

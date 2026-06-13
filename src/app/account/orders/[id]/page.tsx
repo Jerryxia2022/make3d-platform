@@ -13,6 +13,7 @@ import {
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
+import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export const dynamic = "force-dynamic";
@@ -108,9 +109,10 @@ export default async function CustomerOrderDetailPage({
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">文件明细</h2>
             <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-ink/10 text-graphite">
+                    <th className="py-3 pr-4 font-semibold">模型预览</th>
                     <th className="py-3 pr-4 font-semibold">文件名称</th>
                     <th className="py-3 pr-4 font-semibold">材料</th>
                     <th className="py-3 pr-4 font-semibold">颜色</th>
@@ -122,6 +124,19 @@ export default async function CustomerOrderDetailPage({
                 <tbody>
                   {order.files.map((file) => (
                     <tr className="border-b border-ink/10" key={file.id}>
+                      <td className="py-3 pr-4 align-top">
+                        <StlModelPreview
+                          color={file.color}
+                          compact
+                          dimensions={getFileDimensions(file)}
+                          fileUrl={`/api/account/files/${file.id}/download`}
+                          filename={file.filename}
+                          filesize={file.filesize}
+                          material={file.material}
+                          quantity={file.quantity}
+                          quoteStatus={order.status}
+                        />
+                      </td>
                       <td className="py-3 pr-4 font-semibold">{file.filename}</td>
                       <td className="py-3 pr-4">{file.material || "-"}</td>
                       <td className="py-3 pr-4">{file.color || "-"}</td>
@@ -346,6 +361,18 @@ function formatLeadTime(value?: number | null) {
 
 function formatAddress(order: OrderDetail) {
   return [order.addressRegion, order.addressDetail].filter(Boolean).join(" ") || "-";
+}
+
+function getFileDimensions(file: OrderFileRecord) {
+  if (file.boundingBoxX == null || file.boundingBoxY == null || file.boundingBoxZ == null) {
+    return null;
+  }
+
+  return {
+    x: file.boundingBoxX,
+    y: file.boundingBoxY,
+    z: file.boundingBoxZ,
+  };
 }
 
 function formatTotalQuantity(files: OrderFileRecord[]) {

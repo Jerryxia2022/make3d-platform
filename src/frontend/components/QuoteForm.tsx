@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -21,6 +21,7 @@ import {
   mainlandPhoneErrorMessage,
   mainlandPhoneHtmlPattern,
 } from "@/shared/phoneValidation";
+import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 
 const materials = ["PLA", "PETG", "ABS"];
 const colors = ["黑", "白", "红", "蓝"];
@@ -88,6 +89,7 @@ export function QuoteForm({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<SelectedModelFile[]>([]);
+  const [stlDimensions, setStlDimensions] = useState<Record<string, QuoteDimensions>>({});
   const [sliceQuotes, setSliceQuotes] = useState<Record<string, SliceQuoteState>>({});
   const sliceQuotesRef = useRef<Record<string, SliceQuoteState>>({});
   const [shippingMethod, setShippingMethod] = useState("普通快递");
@@ -361,12 +363,36 @@ export function QuoteForm({
 
   function removeFile(id: string) {
     setFiles((currentFiles) => currentFiles.filter((item) => item.id !== id));
+    setStlDimensions((dimensions) => {
+      const nextDimensions = { ...dimensions };
+      delete nextDimensions[id];
+      return nextDimensions;
+    });
     setSliceQuotes((quotes) => {
       const nextQuotes = { ...quotes };
       delete nextQuotes[id];
       return nextQuotes;
     });
   }
+
+  const updatePreviewDimensions = useCallback((id: string, dimensions: QuoteDimensions) => {
+    setStlDimensions((currentDimensions) => {
+      const current = currentDimensions[id];
+
+      if (
+        current?.x === dimensions.x &&
+        current.y === dimensions.y &&
+        current.z === dimensions.z
+      ) {
+        return currentDimensions;
+      }
+
+      return {
+        ...currentDimensions,
+        [id]: dimensions,
+      };
+    });
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -432,7 +458,7 @@ export function QuoteForm({
       formData.set("shippingRemark", "");
 
       for (const item of files) {
-        const dimensions = estimateDisplayDimensions(item.file);
+        const dimensions = stlDimensions[item.id] || estimateDisplayDimensions(item.file);
         const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
         const savedUpload = quote.savedUpload;
 
@@ -538,6 +564,7 @@ export function QuoteForm({
         <section className="space-y-3">
           {fileEstimates.map(({ item, dimensions, estimate }) => {
             const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
+            const displayDimensions = stlDimensions[item.id] || dimensions;
             const filePrice = getFileDisplayPrice(quote, files.length, item.material);
             const fileSubtotal = getFileSubtotalPrice(quote, files.length, item.quantity, item.material);
 
@@ -546,20 +573,31 @@ export function QuoteForm({
               <input
                 name="fileDimensionX"
                 type="hidden"
-                value={formatDimensionFormValue(dimensions?.x)}
+                value={formatDimensionFormValue(displayDimensions?.x)}
               />
               <input
                 name="fileDimensionY"
                 type="hidden"
-                value={formatDimensionFormValue(dimensions?.y)}
+                value={formatDimensionFormValue(displayDimensions?.y)}
               />
               <input
                 name="fileDimensionZ"
                 type="hidden"
-                value={formatDimensionFormValue(dimensions?.z)}
+                value={formatDimensionFormValue(displayDimensions?.z)}
               />
-              <div className="grid gap-4 sm:grid-cols-[6.5rem_1fr]">
-                <div>
+              <div className="grid gap-4 sm:grid-cols-[9.75rem_1fr]">
+                <StlModelPreview
+                  color={item.color}
+                  dimensions={displayDimensions}
+                  file={item.file instanceof File ? item.file : undefined}
+                  filename={item.file.name || ""}
+                  filesize={item.file.size || 0}
+                  material={item.material}
+                  onDimensions={(nextDimensions) => updatePreviewDimensions(item.id, nextDimensions)}
+                  quantity={item.quantity}
+                  quoteStatus={formatSliceStatus(quote)}
+                />
+                <div className="hidden">
                   <div className="flex aspect-square items-center justify-center border border-ink/10 bg-ash text-xs font-semibold uppercase tracking-[0.16em] text-graphite">
                     占位缩略图
                   </div>

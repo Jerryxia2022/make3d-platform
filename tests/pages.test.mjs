@@ -412,6 +412,51 @@ test("quote form handles failed auto quote API responses without staying calcula
   assert.match(formSource, /已提交/);
 });
 
+test("browser STL preview renders dimensions without server thumbnail work", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const previewSource = await readSource("src/frontend/components/StlModelPreview.tsx");
+  const previewLibSource = await readSource("src/frontend/lib/stl-preview.ts");
+  const customerDetailSource = await readSource("src/app/account/orders/[id]/page.tsx");
+  const adminDetailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
+  const customerDownloadSource = await readSource("src/app/api/account/files/[id]/download/route.ts");
+
+  assert.match(previewLibSource, /import\("three"\)/);
+  assert.match(previewLibSource, /import\("three\/addons\/loaders\/STLLoader\.js"\)/);
+  assert.match(previewLibSource, /import\("three\/addons\/controls\/OrbitControls\.js"\)/);
+  assert.match(previewLibSource, /new STLLoader\(\)\.parse\(buffer\)/);
+  assert.match(previewLibSource, /MAX_AUTO_STL_PREVIEW_BYTES = 50 \* 1024 \* 1024/);
+  assert.match(previewLibSource, /shouldAutoLoadStlPreview/);
+  assert.match(previewLibSource, /value > 260/);
+  assert.match(previewLibSource, /value > 0 && value < 10/);
+  assert.match(previewLibSource, /该模型尺寸超过单台设备推荐成型范围/);
+  assert.match(previewLibSource, /该模型存在较小尺寸/);
+  assert.match(previewLibSource, /disposeRenderer/);
+  assert.doesNotMatch(previewLibSource, /headless|OpenGL|Blender|VTK/i);
+
+  assert.match(previewSource, /use client/);
+  assert.match(previewSource, /if \(!isStl \|\| !autoLoad \|\| !canvasRef\.current\)/);
+  assert.match(previewSource, /点击加载预览/);
+  assert.match(previewSource, /filesize > MAX_AUTO_STL_PREVIEW_BYTES/);
+  assert.match(previewSource, /setModalOpen\(true\)/);
+  assert.match(previewSource, /查看3D模型/);
+  assert.match(previewSource, /handleRef\.current\?\.dispose\(\)/);
+  assert.match(previewSource, /模型预览加载失败，不影响报价提交/);
+  assert.match(previewSource, /STL 文件通常不包含单位，系统默认按 mm 识别/);
+
+  assert.match(formSource, /StlModelPreview/);
+  assert.match(formSource, /stlDimensions/);
+  assert.match(formSource, /updatePreviewDimensions/);
+  assert.match(formSource, /file={item\.file instanceof File \? item\.file : undefined}/);
+  assert.match(formSource, /formatDimensionFormValue\(displayDimensions\?\.x\)/);
+
+  assert.match(customerDetailSource, /StlModelPreview/);
+  assert.match(customerDetailSource, /\/api\/account\/files\/\$\{file\.id\}\/download/);
+  assert.match(adminDetailSource, /StlModelPreview/);
+  assert.match(adminDetailSource, /\/api\/admin\/files\/\$\{file\.id\}\/download/);
+  assert.match(customerDownloadSource, /getCustomerFromRequestCookie/);
+  assert.match(customerDownloadSource, /getOrderByIdForCustomer/);
+});
+
 test("admin pages display contact fields from the matching order properties", async () => {
   const listSource = await readSource("src/app/admin/orders/page.tsx");
   const detailSource = await readSource("src/app/admin/orders/[id]/page.tsx");

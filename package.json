@@ -21,12 +21,14 @@
     "nodemailer": "^8.0.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "redis": "^5.12.1"
+    "redis": "^5.12.1",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
+    "@types/three": "^0.184.1",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.28.0",
     "eslint-config-next": "^15.3.3",
