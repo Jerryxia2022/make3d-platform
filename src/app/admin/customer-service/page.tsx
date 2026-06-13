@@ -53,6 +53,9 @@ export default async function AdminCustomerServicePage({
         </div>
 
         <form className="mt-6 grid gap-3 border border-ink/10 bg-white/90 p-4 shadow-sm lg:grid-cols-[1fr_220px_auto]" method="get">
+          <div className="border border-coral/20 bg-coral/5 px-4 py-3 text-sm leading-6 text-graphite lg:col-span-3">
+            当前公众号采用关键词服务模式，客户可发送 报价 / 订单 / 付款 / 人工 获取对应服务。发送“人工”后会在此生成客服请求。
+          </div>
           <label className="text-sm font-semibold">
             搜索客服请求
             <input

@@ -201,6 +201,25 @@ test("customer account page routes and APIs exist", async () => {
   ]);
 });
 
+test("wechat account binding explains keyword service mode", async () => {
+  const bindCardSource = await readSource("src/frontend/components/WechatBindCard.tsx");
+  const customerServiceSource = await readSource("src/app/admin/customer-service/page.tsx");
+  const menuScriptSource = await readSource("scripts/wechat-menu.mjs");
+  const readmeSource = await readSource("README.md");
+
+  assert.match(bindCardSource, /当前公众号采用关键词服务模式/);
+  assert.match(bindCardSource, /发送【报价】获取在线报价入口/);
+  assert.match(bindCardSource, /发送【订单】查看订单入口/);
+  assert.match(bindCardSource, /发送【付款】查看付款说明/);
+  assert.match(bindCardSource, /发送【人工】联系人工客服/);
+  assert.match(bindCardSource, /发送绑定码完成账号绑定/);
+  assert.match(customerServiceSource, /客户可发送 报价 \/ 订单 \/ 付款 \/ 人工 获取对应服务/);
+  assert.match(menuScriptSource, /WECHAT_MP_MENU_ENABLED/);
+  assert.match(menuScriptSource, /Wechat menu API creation is paused/);
+  assert.match(menuScriptSource, /This is non-blocking/);
+  assert.match(readmeSource, /不把 `npm run wechat:menu` 作为部署或验证必需步骤/);
+});
+
 test("quote form supports disabled guest mode and customer prefill", async () => {
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
   const quoteSource = await readSource("src/app/quote/page.tsx");

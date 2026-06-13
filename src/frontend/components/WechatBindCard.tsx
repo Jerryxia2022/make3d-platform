@@ -50,7 +50,7 @@ export function WechatBindCard({
         <div>
           <h2 className="text-xl font-bold">微信公众号绑定</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-graphite">
-            关注 Make3D 公众号后，发送绑定码即可绑定账号，绑定后可接收订单状态通知。
+            当前公众号采用关键词服务模式。关注 Make3D 公众号后，发送绑定码即可绑定账号，绑定后可接收订单状态通知。
           </p>
         </div>
         <span
@@ -65,10 +65,22 @@ export function WechatBindCard({
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_260px]">
-        <div className="grid gap-3 text-sm sm:grid-cols-3">
-          <WechatMetric label="绑定 openid" value={bound ? maskedOpenid : "-"} />
-          <WechatMetric label="订阅状态" value={bound ? (subscribed ? "已关注" : "已取消关注") : "-"} />
-          <WechatMetric label="绑定码有效期" value={expiresAt ? formatExpiresAt(expiresAt) : "-"} />
+        <div>
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <WechatMetric label="绑定 openid" value={bound ? maskedOpenid : "-"} />
+            <WechatMetric label="订阅状态" value={bound ? (subscribed ? "已关注" : "已取消关注") : "-"} />
+            <WechatMetric label="绑定码有效期" value={expiresAt ? formatExpiresAt(expiresAt) : "-"} />
+          </div>
+          <div className="mt-4 border border-ink/10 bg-white px-4 py-3 text-sm">
+            <p className="font-semibold text-ink">公众号关键词</p>
+            <ul className="mt-2 grid gap-2 leading-6 text-graphite md:grid-cols-2">
+              <li>发送【报价】获取在线报价入口</li>
+              <li>发送【订单】查看订单入口</li>
+              <li>发送【付款】查看付款说明</li>
+              <li>发送【人工】联系人工客服</li>
+              <li>发送绑定码完成账号绑定</li>
+            </ul>
+          </div>
         </div>
         <div className="border border-ink/10 bg-paper/60 p-4">
           <p className="text-xs font-semibold text-graphite">当前绑定码</p>

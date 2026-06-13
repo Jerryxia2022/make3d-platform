@@ -5,10 +5,14 @@ loadLocalEnv();
 const appUrl = (process.env.APP_URL || "https://make3d.com.cn").replace(/\/$/, "");
 const appId = (process.env.WECHAT_MP_APP_ID || "").trim();
 const appSecret = (process.env.WECHAT_MP_APP_SECRET || "").trim();
+const menuApiEnabled = process.env.WECHAT_MP_MENU_ENABLED === "true";
 
-if (!appId || !appSecret) {
-  console.error("WECHAT_MP_APP_ID and WECHAT_MP_APP_SECRET are required.");
-  process.exit(1);
+if (!menuApiEnabled) {
+  console.log(
+    "Wechat menu API creation is paused. Make3D is using keyword service mode: 报价 / 订单 / 付款 / 人工.",
+  );
+  console.log("Set WECHAT_MP_MENU_ENABLED=true only for an account with custom menu API permission.");
+  process.exit(0);
 }
 
 const menu = {
@@ -39,23 +43,34 @@ const menu = {
   ],
 };
 
-const accessToken = await getAccessToken();
-const response = await fetch(
-  `https://api.weixin.qq.com/cgi-bin/menu/create?access_token=${encodeURIComponent(accessToken)}`,
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(menu),
-  },
-);
-const result = await response.json();
+try {
+  if (!appId || !appSecret) {
+    throw new Error("WECHAT_MP_APP_ID and WECHAT_MP_APP_SECRET are required.");
+  }
 
-if (!response.ok || result.errcode) {
-  console.error(`Wechat menu update failed: ${result.errmsg || response.status}`);
-  process.exit(1);
+  const accessToken = await getAccessToken();
+  const response = await fetch(
+    `https://api.weixin.qq.com/cgi-bin/menu/create?access_token=${encodeURIComponent(accessToken)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(menu),
+    },
+  );
+  const result = await response.json();
+
+  if (!response.ok || result.errcode) {
+    throw new Error(formatWechatError("menu_create", response, result));
+  }
+
+  console.log("Wechat official account menu updated.");
+} catch (error) {
+  const message = error instanceof Error ? error.message : "unknown error";
+  console.warn(`Wechat menu update skipped: ${message}`);
+  console.warn(
+    "This is non-blocking. Current personal account mode relies on keyword replies instead of API-created menus.",
+  );
 }
-
-console.log("Wechat official account menu updated.");
 
 async function getAccessToken() {
   const url = new URL("https://api.weixin.qq.com/cgi-bin/token");
@@ -67,10 +82,16 @@ async function getAccessToken() {
   const result = await response.json();
 
   if (!response.ok || !result.access_token) {
-    throw new Error(result.errmsg || `wechat token failed: ${response.status}`);
+    throw new Error(formatWechatError("token", response, result));
   }
 
   return result.access_token;
+}
+
+function formatWechatError(step, response, result) {
+  const errcode = result?.errcode ?? response.status;
+  const errmsg = result?.errmsg || response.statusText || "wechat api failed";
+  return `${step} failed: errcode=${errcode}, errmsg=${errmsg}`;
 }
 
 function loadLocalEnv() {
