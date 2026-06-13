@@ -10,6 +10,7 @@ import { requireAdminSession } from "@/backend/nextAdmin";
 import { maskOpenid } from "@/backend/wechat";
 import { AdminCustomerServiceStatusButton } from "@/frontend/components/AdminCustomerServiceStatusButton";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminCustomerServicePage({
   searchParams,
@@ -162,5 +163,5 @@ function StatusBadge({ status }: { status: CustomerServiceRequestRecord["status"
 }
 
 function formatDate(value: string) {
-  return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }

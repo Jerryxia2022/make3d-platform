@@ -27,6 +27,7 @@ const colors = ["黑", "白", "红", "蓝"];
 const shippingMethods = ["普通快递", "顺丰快递", "西安本地跑腿"];
 const allowedExtensions = [".stl", ".step", ".stp"];
 const SLICE_MATERIAL = "PETG";
+const DEFAULT_COLOR = "白";
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const customerNamePattern = "(?:[\\u4e00-\\u9fa5]{2,}|[A-Za-z][A-Za-z\\s'-]{3,})";
@@ -96,14 +97,6 @@ export function QuoteForm({
       files.some((file) => {
         const quote = getVisibleSliceQuote(file, sliceQuotes[file.id]);
         return quote.status === "waiting" || quote.status === "calculating";
-      }),
-    [files, sliceQuotes],
-  );
-  const hasCalculatingQuotes = useMemo(
-    () =>
-      files.some((file) => {
-        const quote = getVisibleSliceQuote(file, sliceQuotes[file.id]);
-        return quote.status === "calculating";
       }),
     [files, sliceQuotes],
   );
@@ -186,8 +179,8 @@ export function QuoteForm({
     const selectedFiles = incomingFiles.map((file) => ({
       id: createQuoteFileId(file),
       file,
-      material: "PLA",
-      color: "黑",
+      material: SLICE_MATERIAL,
+      color: DEFAULT_COLOR,
       quantity: 1,
     }));
 
@@ -199,11 +192,14 @@ export function QuoteForm({
       const nextQuotes = { ...quotes };
       for (const item of selectedFiles) {
         nextQuotes[item.id] = isStlFile(item.file.name)
-          ? createUploadedQuoteState(item.material, item.quantity)
+          ? createUploadedQuoteState(SLICE_MATERIAL, item.quantity)
           : createManualQuoteState(item.quantity);
       }
       return nextQuotes;
     });
+    for (const item of selectedFiles) {
+      void runSliceForFile(item);
+    }
   }
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -215,121 +211,67 @@ export function QuoteForm({
     addFiles(event.dataTransfer.files);
   }
 
-  async function calculateOrderQuote() {
-    if (disabled) {
-      setError(guestUploadGateMessage);
+  async function runSliceForFile(item: SelectedModelFile) {
+    if (!isStlFile(item.file.name)) {
+      setSliceQuotes((quotes) => ({
+        ...quotes,
+        [item.id]: createManualQuoteState(item.quantity),
+      }));
       return;
     }
 
-    if (files.length === 0) {
-      setError("请先上传模型文件");
+    const current = sliceQuotesRef.current[item.id];
+
+    if (current && ["calculating", "success", "failed"].includes(current.status)) {
       return;
     }
 
-    if (!validateFileQuantities(files)) {
-      setError("数量必须是 1-1000 的整数");
-      return;
-    }
+    setSliceQuotes((quotes) => ({
+      ...quotes,
+      [item.id]: {
+        status: "calculating",
+        material: SLICE_MATERIAL,
+        message: "正在计算",
+        progress: 25,
+        phase: "正在准备切片任务",
+        startedAt: Date.now(),
+        elapsedSeconds: 0,
+        quantity: item.quantity,
+      },
+    }));
 
-    setError("");
-
-    for (const item of files) {
-      const current = sliceQuotesRef.current[item.id];
-
-      if (!isStlFile(item.file.name)) {
-        setSliceQuotes((quotes) => ({
-          ...quotes,
-          [item.id]: createManualQuoteState(item.quantity),
-        }));
-        continue;
-      }
-
-      if (current?.status === "success" && current.result) {
-        continue;
-      }
-
+    try {
       setSliceQuotes((quotes) => ({
         ...quotes,
         [item.id]: {
+          ...(quotes[item.id] || createUploadedQuoteState(SLICE_MATERIAL, item.quantity)),
           status: "calculating",
           material: SLICE_MATERIAL,
           message: "正在计算",
-          progress: 25,
-          phase: "正在准备切片任务",
-          startedAt: Date.now(),
-          elapsedSeconds: 0,
+          progress: 45,
+          phase: "正在调用 PrusaSlicer",
+          startedAt: quotes[item.id]?.startedAt || Date.now(),
+          elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
           quantity: item.quantity,
         },
       }));
 
-      try {
-        setSliceQuotes((quotes) => ({
-          ...quotes,
-          [item.id]: {
-            ...(quotes[item.id] || createUploadedQuoteState(SLICE_MATERIAL, item.quantity)),
-            status: "calculating",
-            material: SLICE_MATERIAL,
-            message: "正在计算",
-            progress: 45,
-            phase: "正在调用 PrusaSlicer",
-            startedAt: quotes[item.id]?.startedAt || Date.now(),
-            elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
-            quantity: item.quantity,
-          },
-        }));
+      const formData = new FormData();
+      formData.append("modelFile", item.file);
+      formData.append("material", SLICE_MATERIAL);
 
-        const formData = new FormData();
-        formData.append("modelFile", item.file);
-        formData.append("material", SLICE_MATERIAL);
+      const response = await fetch("/api/quote/slice", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await readSliceQuoteResponse(response);
+      const quoteResult = result.result;
 
-        const response = await fetch("/api/quote/slice", {
-          method: "POST",
-          body: formData,
-        });
-        const result = await readSliceQuoteResponse(response);
-        const quoteResult = result.result;
-
-        if (!response.ok || !result.success || !quoteResult) {
-          console.error("Auto quote API failed", {
-            file: item.file.name,
-            status: response.status,
-            result,
-          });
-          setSliceQuotes((quotes) => ({
-            ...quotes,
-            [item.id]: {
-              ...(quotes[item.id] || createUploadedQuoteState(SLICE_MATERIAL, item.quantity)),
-              status: "failed",
-              material: SLICE_MATERIAL,
-              message: getSliceFailureReason(result),
-              phase: "计算失败，需人工确认",
-              progress: 100,
-              quantity: item.quantity,
-            },
-          }));
-          continue;
-        }
-
-        setSliceQuotes((quotes) => ({
-          ...quotes,
-          [item.id]:
-            quotes[item.id]?.status === "failed" && quotes[item.id]?.message === "切片超时"
-              ? quotes[item.id]
-              : {
-                  status: "success",
-                  material: SLICE_MATERIAL,
-                  message: "已完成",
-                  progress: 100,
-                  phase: "报价完成",
-                  elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
-                  quantity: item.quantity,
-                  result: normalizeSliceQuoteResult(quoteResult),
-                },
-        }));
-      } catch (error) {
+      if (!response.ok || !result.success || !quoteResult) {
         console.error("Auto quote API failed", {
           file: item.file.name,
-          error,
+          status: response.status,
+          result,
         });
         setSliceQuotes((quotes) => ({
           ...quotes,
@@ -337,15 +279,50 @@ export function QuoteForm({
             ...(quotes[item.id] || createUploadedQuoteState(SLICE_MATERIAL, item.quantity)),
             status: "failed",
             material: SLICE_MATERIAL,
-            message: getSliceFailureReason({
-              error: error instanceof Error ? error.message : "Unknown auto quote error",
-            }),
+            message: getSliceFailureReason(result),
             phase: "计算失败，需人工确认",
             progress: 100,
             quantity: item.quantity,
           },
         }));
+        return;
       }
+
+      setSliceQuotes((quotes) => ({
+        ...quotes,
+        [item.id]:
+          quotes[item.id]?.status === "failed" && quotes[item.id]?.message === "切片超时"
+            ? quotes[item.id]
+            : {
+                status: "success",
+                material: SLICE_MATERIAL,
+                message: "已完成",
+                progress: 100,
+                phase: "报价完成",
+                elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
+                quantity: item.quantity,
+                result: normalizeSliceQuoteResult(quoteResult),
+              },
+      }));
+    } catch (error) {
+      console.error("Auto quote API failed", {
+        file: item.file.name,
+        error,
+      });
+      setSliceQuotes((quotes) => ({
+        ...quotes,
+        [item.id]: {
+          ...(quotes[item.id] || createUploadedQuoteState(SLICE_MATERIAL, item.quantity)),
+          status: "failed",
+          material: SLICE_MATERIAL,
+          message: getSliceFailureReason({
+            error: error instanceof Error ? error.message : "Unknown auto quote error",
+          }),
+          phase: "计算失败，需人工确认",
+          progress: 100,
+          quantity: item.quantity,
+        },
+      }));
     }
   }
 
@@ -672,25 +649,6 @@ export function QuoteForm({
         </section>
       )}
 
-      <section className="border border-ink/10 bg-white/70 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-bold">整单计算报价</h2>
-            <p className="mt-1 text-sm leading-6 text-graphite">
-              上传并设置材料、颜色、数量后点击计算。切片按 PETG 密度计算重量，之后调整材料只重算价格，不重复切片。
-            </p>
-          </div>
-          <button
-            className="shrink-0 bg-coral px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-graphite/60"
-            disabled={disabled || files.length === 0 || hasCalculatingQuotes}
-            onClick={calculateOrderQuote}
-            type="button"
-          >
-            {hasCalculatingQuotes ? "计算中..." : "计算报价"}
-          </button>
-        </div>
-      </section>
-
       <section className="border border-ink/10 bg-white/70 p-5">
         <h2 className="text-lg font-bold">收货地址信息</h2>
         <input name="wechat" type="hidden" defaultValue={customer?.wechat || ""} />
@@ -768,7 +726,7 @@ export function QuoteForm({
         <h2 className="text-lg font-bold">订单汇总</h2>
         {hasPendingQuotes ? (
           <p className="mt-3 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
-            部分文件尚未计算或正在计算，完成后将更新总价。
+            文件正在自动切片，完成后将更新总价。调整材料和颜色不会重新切片。
           </p>
         ) : null}
         {!hasPendingQuotes && hasManualQuotes ? (
@@ -812,7 +770,7 @@ export function QuoteForm({
         {isSubmitted
           ? "已提交"
           : hasPendingQuotes
-            ? "请先计算报价"
+            ? "报价计算中..."
             : isSubmitting
               ? "提交中..."
               : "提交订单"}

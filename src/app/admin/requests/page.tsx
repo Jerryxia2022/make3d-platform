@@ -8,6 +8,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 const requestTypes = [
   { label: "模型修改与打印", value: "design" },
@@ -168,5 +169,5 @@ function formatRequestType(type: ServiceRequestRecord["requestType"]) {
 }
 
 function formatDate(value: string) {
-  return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }

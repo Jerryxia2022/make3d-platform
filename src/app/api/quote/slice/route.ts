@@ -11,7 +11,8 @@ export const runtime = "nodejs";
 
 const LAYER_HEIGHT = 0.2;
 const INFILL_DENSITY = 50;
-const SLICE_MATERIAL = "PETG";
+const SLICER_BASE_MATERIAL = "PLA";
+const WEIGHT_MATERIAL = "PETG";
 const PARSE_FAILURE_MESSAGE = "计算失败，需人工确认";
 
 let sliceQueue: Promise<void> = Promise.resolve();
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get("modelFile");
-    const material = getString(formData, "material") || "PLA";
+    const material = getString(formData, "material") || WEIGHT_MATERIAL;
 
     if (!(file instanceof File) || file.size <= 0) {
       return jsonResponse({ success: false, message: "计算失败，需人工确认", error: "No file" }, 400);
@@ -81,7 +82,8 @@ export async function POST(request: Request) {
       runPrusaSlicer({
         inputFilePath: savedFile.filepath,
         gcodeFilePath,
-        material: SLICE_MATERIAL,
+        material: SLICER_BASE_MATERIAL,
+        metadataMaterial: WEIGHT_MATERIAL,
         layerHeight: LAYER_HEIGHT,
         infillDensity: INFILL_DENSITY,
         needSupport: false,

@@ -13,6 +13,7 @@ import {
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -311,7 +312,7 @@ function buildTimelineItems(order: OrderDetail, logs: OrderStatusLogRecord[]) {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }
 
 function formatOptionalDate(value?: string | null) {

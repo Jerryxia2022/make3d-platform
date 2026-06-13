@@ -8,6 +8,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminOrdersPage({
   searchParams,
@@ -178,7 +179,7 @@ function QuickStatusLinks({ activeStatus }: { activeStatus: string }) {
 }
 
 function formatDate(value: string) {
-  return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }
 
 function StatusBadge({ status }: { status: OrderRecord["status"] }) {

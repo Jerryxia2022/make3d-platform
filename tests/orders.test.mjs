@@ -11,6 +11,7 @@ import {
   createSliceJob,
   getOrderById,
   getOrderByIdForCustomer,
+  getBeijingTimestamp,
   getLatestSliceJobByOrderId,
   getPaymentSettings,
   getSliceJobsByOrderId,
@@ -405,6 +406,9 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
   const detail = getOrderById(db, order.id);
   const [listItem] = listOrders(db);
 
+  assert.match(order.orderNo, /^M3D\d{17}$/);
+  assert.match(detail.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
+  assert.match(detail.files[0].createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
   assert.equal(detail.company, null);
   assert.equal(detail.quantity, 2);
   assert.equal(detail.material, "PLA");
@@ -466,6 +470,12 @@ test("creates one order with multiple uploaded files, estimates, shipping, and p
   );
 
   db.close();
+});
+
+test("formats current timestamps as explicit Beijing time", () => {
+  const timestamp = getBeijingTimestamp(new Date("2026-06-13T12:30:45.000Z"));
+
+  assert.equal(timestamp, "2026-06-13T20:30:45+08:00");
 });
 
 test("lists and loads only orders owned by the current customer", () => {

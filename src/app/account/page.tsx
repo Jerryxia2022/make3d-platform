@@ -11,6 +11,7 @@ import { maskOpenid } from "@/backend/wechat";
 import { ChangePasswordForm } from "@/frontend/components/ChangePasswordForm";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { WechatBindCard } from "@/frontend/components/WechatBindCard";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -164,7 +165,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }
 
 function formatMoney(value?: number | null) {

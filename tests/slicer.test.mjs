@@ -56,6 +56,22 @@ test("converts PrusaSlicer filament volume in cm3 to grams", () => {
   assert.equal(metadata.filamentWeightSource, "cm3");
 });
 
+test("prefers volume-derived PETG weight over slicer gram output when volume is available", () => {
+  const metadata = parseGcodeMetadata(
+    `
+; estimated printing time = 35m 0s
+; filament used [cm3] = 12.5
+; total filament used [g] = 15.5
+`,
+    "PETG",
+  );
+
+  assert.equal(metadata.filamentWeightG, 15.875);
+  assert.equal(metadata.rawFilamentUsedG, 15.5);
+  assert.equal(metadata.materialDensity, 1.27);
+  assert.equal(metadata.filamentWeightSource, "cm3");
+});
+
 test("derives PLA weight from cm3 when PrusaSlicer reports zero total grams", () => {
   const metadata = parseGcodeMetadata(
     `

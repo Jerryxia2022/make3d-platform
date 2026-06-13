@@ -13,6 +13,7 @@ export type PrusaSlicerJobInput = {
   inputFilePath: string;
   gcodeFilePath: string;
   material: string;
+  metadataMaterial?: string;
   layerHeight?: number;
   infillDensity?: number;
   needSupport?: boolean;
@@ -93,7 +94,7 @@ export async function runPrusaSlicer(input: RunPrusaSlicerInput) {
   await spawnWithTimeout(config.bin, args, config.timeoutSeconds * 1000);
 
   const gcode = await readFile(input.gcodeFilePath, "utf8");
-  return parseGcodeMetadata(gcode, input.material);
+  return parseGcodeMetadata(gcode, input.metadataMaterial || input.material);
 }
 
 export function parseGcodeMetadata(gcode: string, material = "PLA"): GcodeMetadata {
@@ -182,20 +183,6 @@ function calculateFilamentWeight({
   rawFilamentUsedMm: number | null;
   rawTotalFilamentUsedG: number | null;
 }) {
-  if (rawTotalFilamentUsedG != null && rawTotalFilamentUsedG > 0) {
-    return {
-      filamentWeightG: rawTotalFilamentUsedG,
-      filamentWeightSource: "g" as const,
-    };
-  }
-
-  if (rawDirectFilamentUsedG != null && rawDirectFilamentUsedG > 0) {
-    return {
-      filamentWeightG: rawDirectFilamentUsedG,
-      filamentWeightSource: "g" as const,
-    };
-  }
-
   if (rawFilamentUsedCm3 != null && rawFilamentUsedCm3 > 0) {
     return {
       filamentWeightG: roundWeight(rawFilamentUsedCm3 * materialDensity),
@@ -210,6 +197,20 @@ function calculateFilamentWeight({
     return {
       filamentWeightG: roundWeight(volumeCm3 * materialDensity),
       filamentWeightSource: "mm" as const,
+    };
+  }
+
+  if (rawTotalFilamentUsedG != null && rawTotalFilamentUsedG > 0) {
+    return {
+      filamentWeightG: rawTotalFilamentUsedG,
+      filamentWeightSource: "g" as const,
+    };
+  }
+
+  if (rawDirectFilamentUsedG != null && rawDirectFilamentUsedG > 0) {
+    return {
+      filamentWeightG: rawDirectFilamentUsedG,
+      filamentWeightSource: "g" as const,
     };
   }
 

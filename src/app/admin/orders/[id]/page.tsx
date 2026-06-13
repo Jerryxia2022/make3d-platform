@@ -19,6 +19,7 @@ import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminOrderDetailPage({
   params,
@@ -398,7 +399,7 @@ function SliceJobResult({ job }: { job: SliceJobRecord }) {
 }
 
 function formatDate(value: string) {
-  return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }
 
 function formatOptionalDate(value: string | null) {

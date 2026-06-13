@@ -876,6 +876,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
 
   const firstFile = input.files[0];
   const orderNo = createOrderNo();
+  const now = getBeijingTimestamp();
 
   try {
     db.exec("BEGIN");
@@ -922,8 +923,10 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           shipping_company,
           tracking_number,
           admin_remark,
-          status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          status,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -967,6 +970,8 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.trackingNumber ?? null,
         input.adminRemark ?? null,
         "待确认",
+        now,
+        now,
       );
 
     const orderId = Number(order.lastInsertRowid);
@@ -992,8 +997,9 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         material_cost_rate,
         quantity,
         unit_price,
-        subtotal_price
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        subtotal_price,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     for (const file of input.files) {
@@ -1019,6 +1025,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         file.quantity ?? 1,
         file.unitPrice ?? null,
         file.subtotalPrice ?? null,
+        now,
       );
     }
 
@@ -1542,6 +1549,7 @@ export function updateOrderStatus(
     throw new Error("确认发货需要填写快递公司和运单号");
   }
 
+  const now = getBeijingTimestamp();
   const result = db
     .prepare(
       `UPDATE orders
@@ -1552,12 +1560,12 @@ export function updateOrderStatus(
              ELSE payment_status
            END,
            paid_at = CASE
-             WHEN ? = '已付款' THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+             WHEN ? = '已付款' THEN COALESCE(paid_at, ?)
              ELSE paid_at
            END,
            payment_method = COALESCE(?, payment_method),
            payment_confirmed_at = CASE
-             WHEN ? = '已付款' THEN COALESCE(payment_confirmed_at, CURRENT_TIMESTAMP)
+             WHEN ? = '已付款' THEN COALESCE(payment_confirmed_at, ?)
              ELSE payment_confirmed_at
            END,
            payment_confirmed_by = CASE
@@ -1570,12 +1578,12 @@ export function updateOrderStatus(
            estimated_finish_at = COALESCE(?, estimated_finish_at),
            actual_start_at = CASE
              WHEN ? IS NOT NULL THEN ?
-             WHEN ? IN ('生产中', '后处理', '已发货', '已完成') AND actual_start_at IS NULL THEN CURRENT_TIMESTAMP
+             WHEN ? IN ('生产中', '后处理', '已发货', '已完成') AND actual_start_at IS NULL THEN ?
              ELSE actual_start_at
            END,
            actual_finish_at = CASE
              WHEN ? IS NOT NULL THEN ?
-             WHEN ? = '已完成' AND actual_finish_at IS NULL THEN CURRENT_TIMESTAMP
+             WHEN ? = '已完成' AND actual_finish_at IS NULL THEN ?
              ELSE actual_finish_at
            END,
            production_note = COALESCE(?, production_note),
@@ -1584,12 +1592,12 @@ export function updateOrderStatus(
            tracking_number = COALESCE(?, tracking_number),
            shipped_at = CASE
              WHEN ? IS NOT NULL THEN ?
-             WHEN ? = '已发货' AND shipped_at IS NULL THEN CURRENT_TIMESTAMP
+             WHEN ? = '已发货' AND shipped_at IS NULL THEN ?
              ELSE shipped_at
            END,
            shipping_note = COALESCE(?, shipping_note),
            admin_remark = COALESCE(?, admin_remark),
-           updated_at = CURRENT_TIMESTAMP
+           updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -1597,8 +1605,10 @@ export function updateOrderStatus(
       status,
       status,
       status,
+      now,
       paymentMethod,
       status,
+      now,
       status,
       operator,
       paymentNote,
@@ -1608,9 +1618,11 @@ export function updateOrderStatus(
       actualStartAt,
       actualStartAt,
       status,
+      now,
       actualFinishAt,
       actualFinishAt,
       status,
+      now,
       productionNote,
       internalNote,
       shippingCompany,
@@ -1618,8 +1630,10 @@ export function updateOrderStatus(
       shippedAt,
       shippedAt,
       status,
+      now,
       shippingNote,
       adminRemark,
+      now,
       id,
     );
 
@@ -2667,19 +2681,37 @@ function createWechatBindCodeCandidate() {
   return `M3D-${String(value).padStart(6, "0")}`;
 }
 
-function createOrderNo() {
-  const now = new Date();
+export function getBeijingTimestamp(now = new Date()) {
+  const parts = getBeijingDateParts(now);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`;
+}
+
+function createOrderNo(now = new Date()) {
+  const parts = getBeijingDateParts(now);
   const timestamp = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-    String(now.getHours()).padStart(2, "0"),
-    String(now.getMinutes()).padStart(2, "0"),
-    String(now.getSeconds()).padStart(2, "0"),
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
   ].join("");
   const suffix = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
 
   return `M3D${timestamp}${suffix}`;
+}
+
+function getBeijingDateParts(now: Date) {
+  const beijing = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+
+  return {
+    year: String(beijing.getUTCFullYear()),
+    month: String(beijing.getUTCMonth() + 1).padStart(2, "0"),
+    day: String(beijing.getUTCDate()).padStart(2, "0"),
+    hour: String(beijing.getUTCHours()).padStart(2, "0"),
+    minute: String(beijing.getUTCMinutes()).padStart(2, "0"),
+    second: String(beijing.getUTCSeconds()).padStart(2, "0"),
+  };
 }
 
 function isOrderStatus(status: string): status is OrderStatus {
@@ -2754,9 +2786,10 @@ function insertStatusLog(
       from_status,
       to_status,
       operator,
-      note
-    ) VALUES (?, ?, ?, ?, ?)`,
-  ).run(orderId, fromStatus, toStatus, operator, normalizeOptionalText(note));
+      note,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(orderId, fromStatus, toStatus, operator, normalizeOptionalText(note), getBeijingTimestamp());
 }
 
 function insertServiceRequestLog(

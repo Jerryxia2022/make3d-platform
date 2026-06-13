@@ -9,6 +9,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminRequestStatusForm } from "@/frontend/components/AdminRequestStatusForm";
+import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminRequestDetailPage({
   params,
@@ -176,7 +177,7 @@ function formatRequestType(type: ServiceRequestDetail["requestType"]) {
 }
 
 function formatDate(value: string) {
-  return new Date(`${value}Z`).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingDateTime(value);
 }
 
 function formatBytes(value: number) {
