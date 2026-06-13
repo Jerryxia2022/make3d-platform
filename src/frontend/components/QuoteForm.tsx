@@ -52,6 +52,12 @@ type SliceQuoteResult = {
   basePrintPrice: number;
 };
 
+type SavedUploadInfo = {
+  filename: string;
+  filepath: string;
+  filesize: number;
+};
+
 type SliceQuoteState = {
   status: SliceQuoteStatus;
   message?: string;
@@ -62,6 +68,7 @@ type SliceQuoteState = {
   elapsedSeconds: number;
   quantity: number;
   result?: SliceQuoteResult;
+  savedUpload?: SavedUploadInfo;
 };
 
 type QuoteFormCustomer = {
@@ -191,9 +198,7 @@ export function QuoteForm({
     setSliceQuotes((quotes) => {
       const nextQuotes = { ...quotes };
       for (const item of selectedFiles) {
-        nextQuotes[item.id] = isStlFile(item.file.name)
-          ? createUploadedQuoteState(SLICE_MATERIAL, item.quantity)
-          : createManualQuoteState(item.quantity);
+        nextQuotes[item.id] = createUploadedQuoteState(SLICE_MATERIAL, item.quantity);
       }
       return nextQuotes;
     });
@@ -212,14 +217,6 @@ export function QuoteForm({
   }
 
   async function runSliceForFile(item: SelectedModelFile) {
-    if (!isStlFile(item.file.name)) {
-      setSliceQuotes((quotes) => ({
-        ...quotes,
-        [item.id]: createManualQuoteState(item.quantity),
-      }));
-      return;
-    }
-
     const current = sliceQuotesRef.current[item.id];
 
     if (current && ["calculating", "success", "failed"].includes(current.status)) {
@@ -266,6 +263,19 @@ export function QuoteForm({
       });
       const result = await readSliceQuoteResponse(response);
       const quoteResult = result.result;
+      const savedUpload = normalizeSavedUploadInfo(result.saved_upload);
+
+      if (savedUpload && !quoteResult) {
+        setSliceQuotes((quotes) => ({
+          ...quotes,
+          [item.id]: {
+            ...createManualQuoteState(item.quantity, savedUpload),
+            material: SLICE_MATERIAL,
+            message: result.message || "需人工确认",
+          },
+        }));
+        return;
+      }
 
       if (!response.ok || !result.success || !quoteResult) {
         console.error("Auto quote API failed", {
@@ -283,6 +293,7 @@ export function QuoteForm({
             phase: "计算失败，需人工确认",
             progress: 100,
             quantity: item.quantity,
+            savedUpload,
           },
         }));
         return;
@@ -302,6 +313,7 @@ export function QuoteForm({
                 elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
                 quantity: item.quantity,
                 result: normalizeSliceQuoteResult(quoteResult),
+                savedUpload,
               },
       }));
     } catch (error) {
@@ -321,6 +333,7 @@ export function QuoteForm({
           phase: "计算失败，需人工确认",
           progress: 100,
           quantity: item.quantity,
+          savedUpload: quotes[item.id]?.savedUpload,
         },
       }));
     }
@@ -409,6 +422,9 @@ export function QuoteForm({
       formData.delete("fileQuantities");
       formData.delete("fileUnitPrice");
       formData.delete("fileSubtotalPrice");
+      formData.delete("savedFilenames");
+      formData.delete("savedFilepaths");
+      formData.delete("savedFilesizes");
       formData.set("recipientName", getRequiredFormValue(formData, "customerName"));
       formData.set("phone", phone);
       formData.set("recipientPhone", phone);
@@ -418,8 +434,15 @@ export function QuoteForm({
       for (const item of files) {
         const dimensions = estimateDisplayDimensions(item.file);
         const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
+        const savedUpload = quote.savedUpload;
 
-        formData.append("modelFiles", item.file);
+        if (!savedUpload) {
+          throw new Error("文件仍在上传或保存失败，请稍后重试");
+        }
+
+        formData.append("savedFilenames", savedUpload.filename);
+        formData.append("savedFilepaths", savedUpload.filepath);
+        formData.append("savedFilesizes", String(savedUpload.filesize));
         formData.append("fileMaterials", item.material);
         formData.append("fileColors", item.color);
         formData.append("fileDimensionX", formatDimensionFormValue(dimensions?.x));
@@ -951,7 +974,7 @@ function createUploadedQuoteState(material: string, quantity = 1): SliceQuoteSta
   };
 }
 
-function createManualQuoteState(quantity = 1): SliceQuoteState {
+function createManualQuoteState(quantity = 1, savedUpload?: SavedUploadInfo): SliceQuoteState {
   return {
     status: "manual",
     message: "文件格式不支持",
@@ -959,6 +982,7 @@ function createManualQuoteState(quantity = 1): SliceQuoteState {
     phase: "需人工确认",
     elapsedSeconds: 0,
     quantity: getSafeQuantity(quantity),
+    savedUpload,
   };
 }
 
@@ -967,7 +991,7 @@ function getVisibleSliceQuote(
   quote: SliceQuoteState | undefined,
 ): SliceQuoteState {
   if (!isStlFile(item.file.name)) {
-    return createManualQuoteState(item.quantity);
+    return quote ? { ...quote, quantity: getSafeQuantity(item.quantity) } : createManualQuoteState(item.quantity);
   }
 
   return (
@@ -1099,7 +1123,13 @@ function appendSliceQuoteFormData(
 
 async function readSliceQuoteResponse(response: Response) {
   try {
-    return await response.json() as { success?: boolean; message?: string; error?: string; result?: Record<string, unknown> };
+    return await response.json() as {
+      success?: boolean;
+      message?: string;
+      error?: string;
+      result?: Record<string, unknown>;
+      saved_upload?: Record<string, unknown>;
+    };
   } catch (error) {
     console.error("Auto quote API response JSON parse failed", error);
     return {
@@ -1108,6 +1138,18 @@ async function readSliceQuoteResponse(response: Response) {
       error: `HTTP ${response.status}`,
     };
   }
+}
+
+function normalizeSavedUploadInfo(value: Record<string, unknown> | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  const filename = typeof value.filename === "string" ? value.filename : "";
+  const filepath = typeof value.filepath === "string" ? value.filepath : "";
+  const filesize = typeof value.filesize === "number" ? value.filesize : 0;
+
+  return filename && filepath && filesize > 0 ? { filename, filepath, filesize } : undefined;
 }
 
 async function readOrderSubmitResponse(response: Response) {
@@ -1237,9 +1279,19 @@ function formatMoney(value: number) {
 }
 
 function calculateLeadTimeHours(printTimeSecondsList: number[]) {
-  const totalPrintHours = printTimeSecondsList.reduce((total, seconds) => total + seconds, 0) / 3600;
-  const deviceCount = printTimeSecondsList.length > 1 ? 6 : 1;
-  return Math.ceil(totalPrintHours / deviceCount + 24);
+  const printHours = printTimeSecondsList
+    .filter((seconds) => Number.isFinite(seconds) && seconds > 0)
+    .map((seconds) => seconds / 3600);
+
+  if (printHours.length === 0) {
+    return 24;
+  }
+
+  const longestPrintHours = Math.max(...printHours);
+  const remainingPrintHours = printHours.reduce((total, hours) => total + hours, 0) - longestPrintHours;
+  const sharedRemainingHours = printHours.length > 1 ? remainingPrintHours / 6 : 0;
+
+  return Math.ceil(longestPrintHours + sharedRemainingHours + 24);
 }
 
 function getShippingFee(method: string) {

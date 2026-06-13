@@ -37,10 +37,10 @@ test("calculates exact slicer quote with fixed packaging and rounded delivery le
   assert.equal(calculateAutoLeadTimeHours([20 * 60 * 60 + 13 * 60]), 45);
 });
 
-test("calculates rounded delivery lead time for multiple files across six machines", () => {
+test("keeps the longest file on one machine and shares remaining lead time", () => {
   assert.equal(
     calculateAutoLeadTimeHours([12 * 60 * 60, 18 * 60 * 60, 6 * 60 * 60]),
-    30,
+    45,
   );
 });
 

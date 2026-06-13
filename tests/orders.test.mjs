@@ -25,6 +25,7 @@ import {
   MAX_UPLOAD_BYTES,
   isAllowedUploadFilename,
   saveUploadFile,
+  validateSavedUploadReference,
 } from "../src/backend/uploads.ts";
 import {
   consumeUploadRateLimit,
@@ -624,6 +625,36 @@ test("validates upload extensions and size, then saves accepted file", async () 
     assert.match(saved.filename, /\.stl$/);
     assert.equal(await readFile(saved.filepath, "utf8"), "solid");
     assert.equal((await stat(saved.filepath)).size, 5);
+  } finally {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("validates saved upload references stay inside upload directory", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "make3d-upload-ref-"));
+
+  try {
+    const saved = await saveUploadFile(
+      {
+        name: "quoted.stl",
+        size: 7,
+        arrayBuffer: async () => new TextEncoder().encode("solid q").buffer,
+      },
+      dir,
+    );
+
+    await assert.doesNotReject(() => validateSavedUploadReference(saved, dir));
+    await assert.rejects(
+      () =>
+        validateSavedUploadReference(
+          {
+            ...saved,
+            filepath: join(dir, "..", saved.filename),
+          },
+          dir,
+        ),
+      /文件信息无效/,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }

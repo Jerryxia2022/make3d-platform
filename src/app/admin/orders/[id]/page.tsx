@@ -40,6 +40,9 @@ export default async function AdminOrderDetailPage({
     const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
     const wechatAccount = getBoundWechatAccountByCustomerId(db, order.customerId);
     const latestWechatNotification = getLatestWechatNotificationByOrderId(db, order.id);
+    const quoteDefaultPrice = order.finalPrice ?? order.payablePrice ?? order.estimatedPrice ?? order.estimatedPriceMax;
+    const quoteDefaultLeadTime =
+      order.finalLeadTimeHours ?? order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
 
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
@@ -47,17 +50,30 @@ export default async function AdminOrderDetailPage({
           <Link className="font-semibold text-graphite" href="/admin/orders">
             返回订单列表
           </Link>
-          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">
                 {order.orderNo}
               </p>
-              <h1 className="mt-3 text-4xl font-bold">订单详情</h1>
-            </div>
-            <div className="grid gap-4 sm:min-w-80">
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h1 className="text-3xl font-bold">订单详情</h1>
+                <StatusPill status={order.status} />
+              </div>
+              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                <Detail label="自动总价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
+                <Detail label="报价默认" value={formatMoney(quoteDefaultPrice)} />
+                <Detail label="默认交期" value={formatLeadTimeHours(quoteDefaultLeadTime)} />
+                <Detail label="提交时间" value={formatDate(order.createdAt)} />
+                <Detail label="客户" value={order.customerName} />
+                <Detail label="手机" value={order.phone} />
+                <Detail label="文件数" value={`${order.files.length} 个`} />
+                <Detail label="总数量" value={String(order.quantity)} />
+              </dl>
+            </section>
+            <div className="grid gap-3">
               <AdminFinalQuoteForm
-                finalLeadTimeHours={order.finalLeadTimeHours}
-                finalPrice={order.finalPrice}
+                finalLeadTimeHours={quoteDefaultLeadTime}
+                finalPrice={quoteDefaultPrice}
                 orderId={order.id}
                 priceAdjustmentReason={order.priceAdjustmentReason}
                 productionNote={order.productionNote}
@@ -82,15 +98,14 @@ export default async function AdminOrderDetailPage({
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
               <h2 className="text-xl font-bold">订单信息</h2>
-              <dl className="mt-5 grid gap-4 text-sm">
+              <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
                 <Detail label="订单ID" value={String(order.id)} />
                 <Detail label="会员订单" value={order.customerId ? "是" : "否"} />
                 <Detail label="客户历史订单数" value={String(order.customerOrderCount)} />
-                <Detail label="提交时间" value={formatDate(order.createdAt)} />
                 <Detail label="自动报价" value={formatAutomaticPrice(order)} />
                 <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
                 <Detail label="最终交货期" value={formatLeadTimeHours(order.finalLeadTimeHours)} />
@@ -107,9 +122,9 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
               <h2 className="text-xl font-bold">客户信息</h2>
-              <dl className="mt-5 grid gap-4 text-sm">
+              <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="姓名" value={order.customerName} />
                 <Detail label="电话" value={order.phone} />
                 <Detail label="微信" value={order.wechat} />
@@ -118,9 +133,9 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
               <h2 className="text-xl font-bold">微信公众号</h2>
-              <dl className="mt-5 grid gap-4 text-sm">
+              <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
                 <Detail label="openid" value={maskOpenid(wechatAccount?.openid)} />
                 <Detail label="通知状态" value={latestWechatNotification?.sendStatus || "-"} />
@@ -135,9 +150,9 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
               <h2 className="text-xl font-bold">打印信息</h2>
-              <dl className="mt-5 grid gap-4 text-sm">
+              <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="材料" value={order.material} />
                 <Detail label="颜色" value={order.color || "-"} />
                 <Detail label="数量" value={String(order.quantity)} />

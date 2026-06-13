@@ -15,7 +15,11 @@ import { calculateAutoLeadTimeHours } from "@/backend/autoPricing";
 import { estimateFileBySize, estimateOrderSummary, getShippingEstimate } from "@/backend/estimates";
 import { notifyAdminNewOrder } from "@/backend/email";
 import { consumeUploadRateLimit, getClientIp } from "@/backend/rateLimit";
-import { saveUploadFile } from "@/backend/uploads";
+import {
+  saveUploadFile,
+  validateSavedUploadReference,
+  type SavedUpload,
+} from "@/backend/uploads";
 import { isValidMainlandPhone, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
 
 export const runtime = "nodejs";
@@ -75,11 +79,14 @@ export async function POST(request: Request) {
       (file): file is File => file instanceof File && file.size > 0,
     );
 
-    if (uploadedFiles.length === 0) {
+    const savedUploadRefs = getSavedUploadList(formData);
+    const fileCount = savedUploadRefs.length || uploadedFiles.length;
+
+    if (fileCount === 0) {
       return NextResponse.json({ error: "请上传模型文件" }, { status: 400 });
     }
 
-    if (uploadedFiles.length > MAX_FILE_COUNT) {
+    if (fileCount > MAX_FILE_COUNT) {
       return NextResponse.json({ error: "一次最多上传 5 个模型文件" }, { status: 400 });
     }
 
@@ -99,12 +106,15 @@ export async function POST(request: Request) {
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter(Boolean);
 
-    if (quantities.length !== uploadedFiles.length || quantities.some((quantity) => !isValidQuantity(quantity))) {
+    if (quantities.length !== fileCount || quantities.some((quantity) => !isValidQuantity(quantity))) {
       return NextResponse.json({ error: "数量必须是 1-1000 的整数" }, { status: 400 });
     }
 
-    const savedFiles = await Promise.all(
-      uploadedFiles.map(async (file, index) => {
+    const uploadReferences =
+      savedUploadRefs.length > 0
+        ? await Promise.all(savedUploadRefs.map((upload) => validateSavedUploadReference(upload)))
+        : await Promise.all(uploadedFiles.map((file) => saveUploadFile(file)));
+    const savedFiles = uploadReferences.map((upload, index) => {
         const material = materials[index] || "PLA";
         const quantity = quantities[index];
         const dimensions = {
@@ -112,7 +122,7 @@ export async function POST(request: Request) {
           y: dimensionYs[index],
           z: dimensionZs[index],
         };
-        const estimate = estimateFileBySize(file.size, material, dimensions);
+        const estimate = estimateFileBySize(upload.filesize, material, dimensions);
         const sliceQuote = sliceQuotes[index];
         const estimatedFilePrice =
           sliceQuote?.status === "success"
@@ -120,7 +130,7 @@ export async function POST(request: Request) {
             : estimate.priceMax;
 
         return {
-          ...(await saveUploadFile(file)),
+          ...upload,
           material,
           color: colors[index] || "黑",
           boundingBoxX: dimensions.x,
@@ -139,8 +149,7 @@ export async function POST(request: Request) {
           unitPrice: fileUnitPrices[index],
           subtotalPrice: fileSubtotalPrices[index],
         };
-      }),
-    );
+      });
     const firstFile = savedFiles[0];
     const shippingMethod = getString(formData, "shippingMethod");
     const estimate = estimateOrderSummary(savedFiles, shippingMethod);
@@ -174,7 +183,7 @@ export async function POST(request: Request) {
         : [],
     );
     const allFilesSliced =
-      successfulPrintTimes.length === uploadedFiles.length && successfulPrintTimes.length > 0;
+      successfulPrintTimes.length === fileCount && successfulPrintTimes.length > 0;
     const exactLeadTimeHours = allFilesSliced
       ? calculateAutoLeadTimeHours(successfulPrintTimes)
       : estimate.leadTimeMaxHours;
@@ -255,9 +264,11 @@ export async function POST(request: Request) {
         });
       });
 
-      await notifyAdminNewOrder({
+      void notifyAdminNewOrder({
         ...order,
         ...orderInput,
+      }).catch((error) => {
+        console.error("[make3d] admin new order email failed", error);
       });
 
       return NextResponse.json(order, { status: 201 });
@@ -294,6 +305,34 @@ function getQuantityList(formData: FormData, key: string) {
   return formData.getAll(key).map((value) => {
     const parsed = typeof value === "string" ? Number(value) : NaN;
     return isValidQuantity(parsed) ? parsed : NaN;
+  });
+}
+
+function getSavedUploadList(formData: FormData): SavedUpload[] {
+  const filenames = getStringList(formData, "savedFilenames");
+  const filepaths = getStringList(formData, "savedFilepaths");
+  const filesizes = getNumberList(formData, "savedFilesizes");
+
+  if (filenames.length === 0 && filepaths.length === 0 && filesizes.length === 0) {
+    return [];
+  }
+
+  if (filenames.length !== filepaths.length || filenames.length !== filesizes.length) {
+    throw new Error("文件信息不完整，请重新上传");
+  }
+
+  return filenames.map((filename, index) => {
+    const filesize = filesizes[index];
+
+    if (!filename || !filepaths[index] || filesize == null) {
+      throw new Error("文件信息不完整，请重新上传");
+    }
+
+    return {
+      filename,
+      filepath: filepaths[index],
+      filesize,
+    };
   });
 }
 

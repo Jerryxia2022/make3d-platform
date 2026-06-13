@@ -309,6 +309,11 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /fileQuantities/);
   assert.match(formSource, /fileUnitPrice/);
   assert.match(formSource, /fileSubtotalPrice/);
+  assert.match(formSource, /savedFilenames/);
+  assert.match(formSource, /savedFilepaths/);
+  assert.match(formSource, /savedFilesizes/);
+  assert.match(formSource, /savedUpload/);
+  assert.doesNotMatch(formSource, /formData\.append\("modelFiles", item\.file\)/);
   assert.match(formSource, /updateFileQuantity/);
   assert.match(formSource, /validateFileQuantities/);
   assert.match(formSource, /数量必须是 1-1000 的整数/);
@@ -464,6 +469,10 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   assert.match(detailSource, /AdminFinalQuoteForm/);
   assert.match(detailSource, /priceAdjustmentReason/);
   assert.match(detailSource, /finalPrice/);
+  assert.match(detailSource, /quoteDefaultPrice/);
+  assert.match(detailSource, /quoteDefaultLeadTime/);
+  assert.match(detailSource, /自动总价/);
+  assert.match(detailSource, /报价默认/);
 });
 
 test("admin order detail page shows complete order fields and per-file V2 estimate actions", async () => {
@@ -520,6 +529,9 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /请先登录后提交订单/);
   assert.match(apiSource, /customerId: customer\.id/);
   assert.match(apiSource, /formData\.getAll\("modelFiles"\)/);
+  assert.match(apiSource, /getSavedUploadList/);
+  assert.match(apiSource, /validateSavedUploadReference/);
+  assert.match(apiSource, /savedFilenames/);
   assert.match(apiSource, /formData\.getAll\("fileMaterials"\)/);
   assert.match(apiSource, /formData\.getAll\("fileColors"\)/);
   assert.match(apiSource, /getQuantityList\(formData, "fileQuantities"\)/);

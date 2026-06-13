@@ -32,6 +32,11 @@ type QuoteSliceResponse = {
     time_fee: number;
     base_print_price: number;
   };
+  saved_upload?: {
+    filename: string;
+    filepath: string;
+    filesize: number;
+  };
   error?: string;
 };
 
@@ -49,12 +54,15 @@ export async function POST(request: Request) {
       return jsonResponse({ success: false, message: "计算失败，需人工确认", error: "No file" }, 400);
     }
 
+    const savedFile = await saveUploadFile(file);
+
     if (!file.name.toLowerCase().endsWith(".stl")) {
       return jsonResponse({
-        success: false,
+        success: true,
         message: "需人工确认",
+        saved_upload: savedFile,
         error: "Only STL files support automatic slicing",
-      }, 400);
+      });
     }
 
     const slicerConfig = getPrusaSlicerConfig();
@@ -63,6 +71,7 @@ export async function POST(request: Request) {
       return jsonResponse({
         success: false,
         message: "本地未启用切片，需人工确认",
+        saved_upload: savedFile,
         error: "PrusaSlicer disabled",
       }, 400);
     }
@@ -71,11 +80,11 @@ export async function POST(request: Request) {
       return jsonResponse({
         success: false,
         message: "计算失败，需人工确认",
+        saved_upload: savedFile,
         error: `Profile not found: ${slicerConfig.profilePath}`,
       }, 400);
     }
 
-    const savedFile = await saveUploadFile(file);
     const gcodeFilePath = createQuoteGcodeFilePath(savedFile.filename);
     await mkdir(dirname(gcodeFilePath), { recursive: true });
     const metadata = await enqueueSlice(() =>
@@ -95,6 +104,7 @@ export async function POST(request: Request) {
       return jsonResponse({
         success: false,
         message: PARSE_FAILURE_MESSAGE,
+        saved_upload: savedFile,
         error: "G-code metadata parse failed",
       }, 422);
     }
@@ -121,6 +131,7 @@ export async function POST(request: Request) {
         time_fee: price.laborFee,
         base_print_price: price.estimatedPrice,
       },
+      saved_upload: savedFile,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

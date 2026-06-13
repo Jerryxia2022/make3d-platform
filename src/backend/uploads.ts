@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
 const MODEL_EXTENSIONS = [".stl", ".step", ".stp"];
@@ -68,6 +69,41 @@ export async function saveUploadFile(file: UploadLike, uploadDir = getUploadDir(
     filepath,
     filesize: file.size,
   };
+}
+
+export async function validateSavedUploadReference(
+  upload: SavedUpload,
+  uploadDir = getUploadDir(),
+) {
+  if (!isAllowedUploadFilename(upload.filename)) {
+    throw new Error("文件格式暂不支持");
+  }
+
+  if (!upload.filename || basename(upload.filename) !== upload.filename) {
+    throw new Error("文件信息无效");
+  }
+
+  if (!upload.filepath || basename(upload.filepath) !== upload.filename) {
+    throw new Error("文件信息无效");
+  }
+
+  const resolvedUploadDir = resolve(uploadDir);
+  const resolvedFilePath = resolve(upload.filepath);
+
+  if (
+    resolvedFilePath !== join(resolvedUploadDir, upload.filename) ||
+    !resolvedFilePath.startsWith(`${resolvedUploadDir}${sep}`)
+  ) {
+    throw new Error("文件信息无效");
+  }
+
+  const fileStat = await stat(resolvedFilePath);
+
+  if (!fileStat.isFile() || fileStat.size !== upload.filesize) {
+    throw new Error("文件信息无效或已失效，请重新上传");
+  }
+
+  return upload;
 }
 
 export function isAllowedRequestAttachmentFilename(filename: string) {

@@ -53,17 +53,13 @@ export function calculateAutoLeadTimeHours(
     (seconds): seconds is number =>
       typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0,
   );
-  const safeDeviceCount =
-    usablePrintTimes.length > 1 && Number.isFinite(deviceCount) && deviceCount > 0
-      ? deviceCount
-      : 1;
-  const totalPrintHours =
-    usablePrintTimes.reduce(
-      (total, seconds) => total + safePositiveNumber(seconds),
-      0,
-    ) / 3600;
+  const safeDeviceCount = Number.isFinite(deviceCount) && deviceCount > 0 ? deviceCount : 1;
+  const printHours = usablePrintTimes.map((seconds) => safePositiveNumber(seconds) / 3600);
+  const longestPrintHours = Math.max(...printHours);
+  const remainingPrintHours = printHours.reduce((total, hours) => total + hours, 0) - longestPrintHours;
+  const sharedRemainingHours = usablePrintTimes.length > 1 ? remainingPrintHours / safeDeviceCount : 0;
 
-  return Math.ceil(totalPrintHours / safeDeviceCount + DELIVERY_BUFFER_HOURS);
+  return Math.ceil(longestPrintHours + sharedRemainingHours + DELIVERY_BUFFER_HOURS);
 }
 
 export function calculateAutoOrderPrice(input: AutoOrderPriceInput) {
