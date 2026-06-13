@@ -10,6 +10,9 @@ import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function CustomerOrderConfirmPage({
   params,
 }: {

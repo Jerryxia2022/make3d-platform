@@ -123,7 +123,14 @@ export default async function AdminOrderDetailPage({
                 <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
                 <Detail label="openid" value={maskOpenid(wechatAccount?.openid)} />
                 <Detail label="通知状态" value={latestWechatNotification?.sendStatus || "-"} />
-                <Detail label="通知错误" value={latestWechatNotification?.errorMessage || "-"} />
+                <Detail
+                  label="通知错误"
+                  value={
+                    wechatAccount?.openid
+                      ? latestWechatNotification?.errorMessage || "-"
+                      : "客户未绑定公众号"
+                  }
+                />
               </dl>
             </section>
 
@@ -182,6 +189,8 @@ export default async function AdminOrderDetailPage({
               <Detail label="微信号" value={order.wechat} />
               <Detail label="订单编号" value={order.orderNo} />
               <Detail label="付款识别备注建议" value="付款时请备注：订单编号/手机号" />
+              <Detail label="付款状态" value={formatPaymentStatus(order.paymentStatus)} />
+              <Detail label="付款时间" value={formatOptionalDate(order.paidAt || order.paymentConfirmedAt)} />
               <Detail label="到账方式" value={order.paymentMethod || "-"} />
               <Detail label="确认时间" value={formatOptionalDate(order.paymentConfirmedAt)} />
               <Detail label="确认人" value={order.paymentConfirmedBy || "-"} />
@@ -449,6 +458,18 @@ function formatDimensions(file: OrderFileRecord) {
 
 function formatMoney(value: number | null) {
   return value == null ? "-" : `¥${value.toFixed(2)}`;
+}
+
+function formatPaymentStatus(value: string | null) {
+  if (value === "paid") {
+    return "已付款";
+  }
+
+  if (value === "cancelled") {
+    return "已取消";
+  }
+
+  return "未付款";
 }
 
 function formatWeight(value: number | null) {

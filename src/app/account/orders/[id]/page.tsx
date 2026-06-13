@@ -14,6 +14,9 @@ import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function CustomerOrderDetailPage({
   params,
 }: {
@@ -218,6 +221,7 @@ function PaymentStatusPanel({
       <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
         <h2 className="text-xl font-bold">生产进度</h2>
         <p className="mt-4 text-sm font-semibold text-coral">订单已付款，等待排产。</p>
+        <p className="mt-2 text-sm text-graphite">付款已确认，订单已进入生产准备。</p>
       </section>
     );
   }
@@ -318,7 +322,7 @@ function getCustomerStatusText(order: OrderDetail) {
   const textByStatus: Record<string, string> = {
     待确认: "订单已提交，正在确认最终报价。",
     待付款: "最终报价已确认，请按页面提示完成付款。",
-    已付款: "订单已付款，等待排产。",
+    已付款: "付款已确认，订单已进入生产准备。",
     排产中: "订单已进入排产，等待打印。",
     生产中: "订单正在生产中。",
     后处理: "订单正在进行后处理、检查或包装。",

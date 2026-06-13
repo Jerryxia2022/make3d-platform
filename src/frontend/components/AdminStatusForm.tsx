@@ -6,6 +6,7 @@ import { ORDER_STATUSES, type OrderStatus } from "@/backend/orderStatus";
 
 const PRINTER_OPTIONS = ["", "P1S-01", "P1S-02", "P1S-03", "P1S-04", "P1S-05", "P1S-06"];
 const SHIPPING_COMPANIES = ["", "顺丰", "圆通", "韵达", "中通", "京东", "其他"];
+const PAYMENT_METHODS = ["", "微信转账", "支付宝转账", "闲鱼付款", "淘宝付款", "其他人工沟通"];
 
 export function AdminStatusForm({
   orderId,
@@ -52,6 +53,8 @@ export function AdminStatusForm({
   const [currentShippedAt, setCurrentShippedAt] = useState(formatDateTimeInput(shippedAt));
   const [currentShippingNote, setCurrentShippingNote] = useState(shippingNote || "");
   const [currentAdminRemark, setCurrentAdminRemark] = useState(adminRemark || "");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,6 +72,8 @@ export function AdminStatusForm({
         body: JSON.stringify({
           status: nextStatus,
           note,
+          paymentMethod,
+          paymentNote,
           assignedPrinter: currentAssignedPrinter,
           estimatedStartAt: currentEstimatedStartAt,
           estimatedFinishAt: currentEstimatedFinishAt,
@@ -127,6 +132,40 @@ export function AdminStatusForm({
           ))}
         </select>
       </label>
+
+      {selectedStatus === "已付款" ? (
+        <div className="mt-4 border border-coral/20 bg-coral/5 p-3">
+          <p className="text-sm font-bold text-coral">付款同步</p>
+          <p className="mt-1 text-xs leading-5 text-graphite">
+            通过状态下拉确认已付款时，会同步付款状态、付款时间、状态日志和公众号通知。
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-sm font-semibold">
+              到账方式
+              <select
+                className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+                onChange={(event) => setPaymentMethod(event.target.value)}
+                value={paymentMethod}
+              >
+                {PAYMENT_METHODS.map((item) => (
+                  <option key={item || "empty"} value={item}>
+                    {item || "未填写"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-semibold">
+              付款备注
+              <input
+                className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+                onChange={(event) => setPaymentNote(event.target.value)}
+                placeholder="例如：微信到账 / 客户备注手机号"
+                value={paymentNote}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="text-sm font-semibold">

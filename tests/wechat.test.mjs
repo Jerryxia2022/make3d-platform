@@ -17,6 +17,7 @@ import {
   searchCustomerServiceRequests,
   updateOrderStatus,
 } from "../src/backend/database.ts";
+import { updateOrderStatusAndNotify } from "../src/backend/orderWorkflow.ts";
 import {
   buildWechatOrderStatusContent,
   handleWechatMessage,
@@ -354,6 +355,41 @@ test("missing wechat send configuration does not block order status changes", as
     assert.equal(result.reason, "wechat_config_missing");
     assert.equal(getOrderById(db, order.id).status, "生产中");
     assert.equal(notifications[0].sendStatus, "skipped");
+  } finally {
+    restoreEnv(previous);
+    db.close();
+  }
+});
+
+test("shared paid status workflow records failed wechat notification without blocking", async () => {
+  const previous = snapshotWechatEnv();
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-config-missing-paid" });
+  const order = createPayableOrder(db, customer.id);
+
+  try {
+    process.env.WECHAT_MP_ENABLED = "true";
+    delete process.env.WECHAT_MP_APP_ID;
+    delete process.env.WECHAT_MP_APP_SECRET;
+
+    const result = await updateOrderStatusAndNotify(db, order.id, {
+      status: "已付款",
+      operator: "admin",
+      paymentMethod: "线下转账",
+      paymentNote: "状态下拉确认",
+    });
+    const detail = getOrderById(db, order.id);
+    const notifications = listWechatNotificationsByOrderId(db, order.id);
+
+    assert.equal(result.updated, true);
+    assert.equal(detail.status, "已付款");
+    assert.equal(detail.paymentStatus, "paid");
+    assert.ok(detail.paidAt);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].sendStatus, "skipped");
+    assert.match(notifications[0].content, /当前状态：已付款/);
   } finally {
     restoreEnv(previous);
     db.close();

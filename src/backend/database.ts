@@ -43,6 +43,8 @@ export type OrderInput = {
   actualFinishAt?: string | null;
   internalNote?: string | null;
   paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  paidAt?: string | null;
   paymentNote?: string | null;
   shippingCompany?: string | null;
   trackingNumber?: string | null;
@@ -339,6 +341,8 @@ export type OrderRecord = {
   actualFinishAt: string | null;
   internalNote: string | null;
   paymentMethod: string | null;
+  paymentStatus: string | null;
+  paidAt: string | null;
   paymentConfirmedAt: string | null;
   paymentConfirmedBy: string | null;
   paymentNote: string | null;
@@ -350,6 +354,7 @@ export type OrderRecord = {
   fileCount: number;
   status: OrderStatus;
   createdAt: string;
+  updatedAt: string | null;
 };
 
 export type OrderDetail = OrderRecord & {
@@ -479,6 +484,8 @@ export function initDatabase(dbPath = getDatabasePath()) {
       actual_finish_at DATETIME,
       internal_note TEXT,
       payment_method TEXT,
+      payment_status TEXT NOT NULL DEFAULT 'unpaid',
+      paid_at DATETIME,
       payment_confirmed_at DATETIME,
       payment_confirmed_by TEXT,
       payment_note TEXT,
@@ -489,6 +496,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       admin_remark TEXT,
       status TEXT NOT NULL DEFAULT '待确认',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
     );
 
@@ -728,6 +736,8 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["actual_finish_at", "DATETIME"],
     ["internal_note", "TEXT"],
     ["payment_method", "TEXT"],
+    ["payment_status", "TEXT NOT NULL DEFAULT 'unpaid'"],
+    ["paid_at", "DATETIME"],
     ["payment_confirmed_at", "DATETIME"],
     ["payment_confirmed_by", "TEXT"],
     ["payment_note", "TEXT"],
@@ -736,6 +746,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["shipped_at", "DATETIME"],
     ["shipping_note", "TEXT"],
     ["admin_remark", "TEXT"],
+    ["updated_at", "DATETIME"],
   ]);
   ensureColumns(db, "order_status_logs", [["note", "TEXT"]]);
   ensureColumns(db, "payment_settings", [
@@ -849,6 +860,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["updated_at", "DATETIME"],
   ]);
   migrateLegacyOrderStatuses(db);
+  migrateOrderPaymentMetadata(db);
 
   return db;
 }
@@ -1427,6 +1439,8 @@ export type OrderStatusUpdateInput = {
   status: string;
   operator?: string;
   note?: string | null;
+  paymentMethod?: string | null;
+  paymentNote?: string | null;
   assignedPrinter?: string | null;
   estimatedStartAt?: string | null;
   estimatedFinishAt?: string | null;
@@ -1457,6 +1471,10 @@ export function updateOrderStatus(
       `SELECT
         status,
         final_price AS finalPrice,
+        payment_method AS paymentMethod,
+        payment_confirmed_at AS paymentConfirmedAt,
+        payment_status AS paymentStatus,
+        paid_at AS paidAt,
         shipping_company AS shippingCompany,
         tracking_number AS trackingNumber,
         actual_start_at AS actualStartAt,
@@ -1469,6 +1487,10 @@ export function updateOrderStatus(
     | {
         status: string;
         finalPrice: number | null;
+        paymentMethod: string | null;
+        paymentConfirmedAt: string | null;
+        paymentStatus: string | null;
+        paidAt: string | null;
         shippingCompany: string | null;
         trackingNumber: string | null;
         actualStartAt: string | null;
@@ -1501,6 +1523,10 @@ export function updateOrderStatus(
     typeof input === "string" ? null : normalizeOptionalText(input.productionNote);
   const internalNote =
     typeof input === "string" ? null : normalizeOptionalText(input.internalNote);
+  const paymentMethod =
+    typeof input === "string" ? null : normalizeOptionalText(input.paymentMethod);
+  const paymentNote =
+    typeof input === "string" ? null : normalizeOptionalText(input.paymentNote);
   const shippedAt =
     typeof input === "string" ? null : normalizeOptionalText(input.shippedAt);
   const shippingNote =
@@ -1520,6 +1546,25 @@ export function updateOrderStatus(
     .prepare(
       `UPDATE orders
        SET status = ?,
+           payment_status = CASE
+             WHEN ? = '已付款' THEN 'paid'
+             WHEN ? = '已取消' THEN 'cancelled'
+             ELSE payment_status
+           END,
+           paid_at = CASE
+             WHEN ? = '已付款' THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+             ELSE paid_at
+           END,
+           payment_method = COALESCE(?, payment_method),
+           payment_confirmed_at = CASE
+             WHEN ? = '已付款' THEN COALESCE(payment_confirmed_at, CURRENT_TIMESTAMP)
+             ELSE payment_confirmed_at
+           END,
+           payment_confirmed_by = CASE
+             WHEN ? = '已付款' THEN COALESCE(?, payment_confirmed_by)
+             ELSE payment_confirmed_by
+           END,
+           payment_note = COALESCE(?, payment_note),
            assigned_printer = COALESCE(?, assigned_printer),
            estimated_start_at = COALESCE(?, estimated_start_at),
            estimated_finish_at = COALESCE(?, estimated_finish_at),
@@ -1543,11 +1588,20 @@ export function updateOrderStatus(
              ELSE shipped_at
            END,
            shipping_note = COALESCE(?, shipping_note),
-           admin_remark = COALESCE(?, admin_remark)
+           admin_remark = COALESCE(?, admin_remark),
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
     .run(
       status,
+      status,
+      status,
+      status,
+      paymentMethod,
+      status,
+      status,
+      operator,
+      paymentNote,
       assignedPrinter,
       estimatedStartAt,
       estimatedFinishAt,
@@ -1604,7 +1658,8 @@ export function updateOrderFinalQuote(
            final_lead_time_hours = COALESCE(?, final_lead_time_hours),
            price_adjustment_reason = ?,
            production_note = COALESCE(?, production_note),
-           final_price_updated_at = CURRENT_TIMESTAMP
+           final_price_updated_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
     .run(
@@ -1651,6 +1706,10 @@ export function confirmOrderFinalQuote(
     throw new Error("已完成订单不能重新确认报价");
   }
 
+  if (["已付款", "排产中", "生产中", "后处理", "已发货"].includes(current.status)) {
+    throw new Error("已付款订单不能退回未付款状态");
+  }
+
   const finalLeadTimeHours = normalizeOptionalNonNegativeInteger(
     input.finalLeadTimeHours,
     "最终交货期必须为非负整数小时",
@@ -1663,7 +1722,9 @@ export function confirmOrderFinalQuote(
            price_adjustment_reason = ?,
            production_note = ?,
            final_price_updated_at = CURRENT_TIMESTAMP,
-           status = '待付款'
+           payment_status = 'unpaid',
+           status = '待付款',
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
     .run(
@@ -1690,53 +1751,12 @@ export function confirmOrderPayment(
     operator?: string;
   },
 ) {
-  const current = db
-    .prepare("SELECT status, final_price AS finalPrice FROM orders WHERE id = ?")
-    .get(id) as { status: string; finalPrice: number | null } | undefined;
-
-  if (!current) {
-    return false;
-  }
-
-  if (current.status === "已取消") {
-    throw new Error("已取消订单不能付款");
-  }
-
-  if (current.status === "已完成") {
-    throw new Error("已完成订单不能重新付款");
-  }
-
-  if (current.status !== "待付款") {
-    throw new Error("只有待付款订单可以确认到账");
-  }
-
-  if (current.finalPrice == null || current.finalPrice <= 0) {
-    throw new Error("没有最终报价不能确认到账");
-  }
-
-  const operator = input.operator || "admin";
-  const result = db
-    .prepare(
-      `UPDATE orders
-       SET status = '已付款',
-           payment_method = ?,
-           payment_confirmed_at = CURRENT_TIMESTAMP,
-           payment_confirmed_by = ?,
-           payment_note = ?
-       WHERE id = ?`,
-    )
-    .run(
-      normalizeOptionalText(input.paymentMethod),
-      operator,
-      normalizeOptionalText(input.paymentNote),
-      id,
-    );
-
-  if (result.changes > 0) {
-    insertStatusLog(db, id, current.status, "已付款", operator);
-  }
-
-  return result.changes > 0;
+  return updateOrderStatus(db, id, {
+    status: "已付款",
+    operator: input.operator || "admin",
+    paymentMethod: input.paymentMethod,
+    paymentNote: input.paymentNote,
+  });
 }
 
 export function getOrderStatusLogsByOrderId(
@@ -2480,6 +2500,8 @@ function orderSelectSql(suffix: string) {
     actual_finish_at AS actualFinishAt,
     internal_note AS internalNote,
     payment_method AS paymentMethod,
+    payment_status AS paymentStatus,
+    paid_at AS paidAt,
     payment_confirmed_at AS paymentConfirmedAt,
     payment_confirmed_by AS paymentConfirmedBy,
     payment_note AS paymentNote,
@@ -2490,7 +2512,8 @@ function orderSelectSql(suffix: string) {
     admin_remark AS adminRemark,
     (SELECT COUNT(*) FROM files WHERE files.order_id = orders.id) AS fileCount,
     status,
-    created_at AS createdAt
+    created_at AS createdAt,
+    updated_at AS updatedAt
   FROM orders
   ${suffix}`;
 }
@@ -2695,7 +2718,13 @@ function assertAllowedStatusUpdate(currentStatus: string, nextStatus: string, fi
   }
 
   if (nextStatus === "已付款") {
-    throw new Error("请使用确认到账按钮更新为已付款");
+    if (currentStatus !== "待付款") {
+      throw new Error("只有待付款订单可以确认到账");
+    }
+
+    if (finalPrice == null || finalPrice <= 0) {
+      throw new Error("没有最终报价不能确认到账");
+    }
   }
 
   const productionStatuses = new Set(["排产中", "生产中", "后处理", "已发货", "已完成"]);
@@ -2798,6 +2827,39 @@ function migrateLegacyOrderStatuses(db: DatabaseSync) {
   for (const [legacyStatus, nextStatus] of legacyStatusMap) {
     db.prepare("UPDATE orders SET status = ? WHERE status = ?").run(nextStatus, legacyStatus);
   }
+}
+
+function migrateOrderPaymentMetadata(db: DatabaseSync) {
+  db.prepare(
+    `UPDATE orders
+     SET payment_status = CASE
+       WHEN status IN ('已付款', '排产中', '生产中', '后处理', '已发货', '已完成')
+         OR payment_confirmed_at IS NOT NULL THEN 'paid'
+       WHEN status = '已取消' THEN 'cancelled'
+       ELSE COALESCE(NULLIF(payment_status, ''), 'unpaid')
+     END
+     WHERE payment_status IS NULL
+        OR payment_status = ''
+        OR status IN ('已付款', '排产中', '生产中', '后处理', '已发货', '已完成', '已取消')
+        OR payment_confirmed_at IS NOT NULL`,
+  ).run();
+
+  db.prepare(
+    `UPDATE orders
+     SET paid_at = COALESCE(paid_at, payment_confirmed_at, CURRENT_TIMESTAMP)
+     WHERE paid_at IS NULL
+       AND (
+         payment_status = 'paid'
+         OR status IN ('已付款', '排产中', '生产中', '后处理', '已发货', '已完成')
+         OR payment_confirmed_at IS NOT NULL
+       )`,
+  ).run();
+
+  db.prepare(
+    `UPDATE orders
+     SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+     WHERE updated_at IS NULL`,
+  ).run();
 }
 
 function ensureColumns(

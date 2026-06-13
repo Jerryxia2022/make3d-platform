@@ -103,6 +103,8 @@ test("customer account center shows profile, order history, quote history, and o
   const confirmSource = await readSource("src/app/account/orders/[id]/confirm/page.tsx");
 
   assert.match(accountSource, /listOrdersByCustomerId/);
+  assert.match(accountSource, /dynamic = "force-dynamic"/);
+  assert.match(accountSource, /revalidate = 0/);
   assert.match(accountSource, /listServiceRequestsByCustomerId/);
   assert.match(accountSource, /用户资料/);
   assert.match(accountSource, /我的订单/);
@@ -117,6 +119,8 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(accountSource, /查看付款方式/);
 
   assert.match(detailSource, /getOrderByIdForCustomer/);
+  assert.match(detailSource, /dynamic = "force-dynamic"/);
+  assert.match(detailSource, /revalidate = 0/);
   assert.match(detailSource, /redirect\("\/account\/login"\)/);
   assert.match(detailSource, /notFound\(\)/);
   assert.match(detailSource, /联系与收货信息/);
@@ -136,6 +140,7 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(detailSource, /已确认报价/);
   assert.match(detailSource, /排产中/);
   assert.match(detailSource, /后处理/);
+  assert.match(detailSource, /付款已确认，订单已进入生产准备。/);
   assert.match(detailSource, /订单已付款，等待排产。/);
   assert.match(detailSource, /订单已进入排产，等待打印。/);
   assert.match(detailSource, /订单正在生产中。/);
@@ -149,6 +154,8 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(detailSource, /请联系工作人员完成付款/);
 
   assert.match(confirmSource, /getOrderByIdForCustomer/);
+  assert.match(confirmSource, /dynamic = "force-dynamic"/);
+  assert.match(confirmSource, /revalidate = 0/);
   assert.match(confirmSource, /redirect\("\/account\/login"\)/);
   assert.match(confirmSource, /订单确认/);
   assert.match(confirmSource, /订单已提交，请等待人工确认最终价格。确认后我们会通知您付款。/);
@@ -546,8 +553,10 @@ test("customer APIs require login before quote slicing and order submission", as
 test("admin order status API records admin workflow and notifies customers", async () => {
   const source = await readSource("src/app/api/admin/orders/[id]/status/route.ts");
 
-  assert.match(source, /updateOrderStatus/);
+  assert.match(source, /updateOrderStatusAndNotify/);
   assert.match(source, /operator: "admin"/);
+  assert.match(source, /paymentMethod/);
+  assert.match(source, /paymentNote/);
   assert.match(source, /assignedPrinter/);
   assert.match(source, /estimatedStartAt/);
   assert.match(source, /actualStartAt/);
@@ -557,8 +566,7 @@ test("admin order status API records admin workflow and notifies customers", asy
   assert.match(source, /shippedAt/);
   assert.match(source, /shippingNote/);
   assert.match(source, /adminRemark/);
-  assert.match(source, /notifyCustomerOrderStatus/);
-  assert.match(source, /notifyWechatOrderStatus/);
+  assert.match(source, /wechatStatus/);
 });
 
 test("manual payment confirmation workflow pages avoid customer proof upload", async () => {
@@ -590,9 +598,10 @@ test("manual payment confirmation workflow pages avoid customer proof upload", a
   assert.match(adminFinalQuoteSource, /确认报价并通知客户/);
   assert.match(adminPaymentConfirmSource, /确认到账/);
   assert.match(adminDetailSource, /付款时请备注：订单编号\/手机号/);
-  assert.match(paymentConfirmSource, /confirmOrderPayment/);
+  assert.match(paymentConfirmSource, /updateOrderStatusAndNotify/);
+  assert.match(paymentConfirmSource, /status: "已付款"/);
   assert.match(paymentConfirmSource, /paymentNote/);
-  assert.match(paymentConfirmSource, /notifyCustomerOrderStatus/);
+  assert.match(paymentConfirmSource, /wechatStatus/);
   assert.match(finalQuoteSource, /confirmOrderFinalQuote/);
   assert.match(finalQuoteSource, /notifyCustomerOrderStatus/);
 });

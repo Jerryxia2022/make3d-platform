@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  createCustomerAccount,
   createOrderWithFile,
   getFileById,
   getOrderById,
+  getOrderByIdForCustomer,
   getOrderStatusLogsByOrderId,
   confirmOrderFinalQuote,
   confirmOrderPayment,
@@ -122,6 +124,17 @@ test("loads order detail with associated uploaded file", () => {
   db.close();
 });
 
+test("orders table tracks payment state and updated timestamp", () => {
+  const db = initDatabase(":memory:");
+  const columns = db.prepare("PRAGMA table_info(orders)").all().map((row) => row.name);
+
+  assert.ok(columns.includes("payment_status"));
+  assert.ok(columns.includes("paid_at"));
+  assert.ok(columns.includes("updated_at"));
+
+  db.close();
+});
+
 test("updates order status only to allowed values", () => {
   const db = initDatabase(":memory:");
   const order = createFixtureOrder(db);
@@ -207,6 +220,8 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
 
   const paid = getOrderById(db, order.id);
   assert.equal(paid.status, "已付款");
+  assert.equal(paid.paymentStatus, "paid");
+  assert.ok(paid.paidAt);
   assert.equal(paid.paymentMethod, "微信转账");
   assert.equal(paid.paymentConfirmedBy, "admin");
   assert.equal(paid.paymentNote, "微信到账");
@@ -227,7 +242,7 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
   updateOrderStatus(db, canceled.id, { status: "已取消", operator: "admin" });
   assert.throws(
     () => confirmOrderPayment(db, canceled.id, { paymentNote: "取消后付款", operator: "admin" }),
-    /已取消订单不能付款/,
+    /已取消订单不能继续流转/,
   );
 
   assert.equal(updateOrderStatus(db, order.id, { status: "已完成", operator: "admin" }), true);
@@ -235,6 +250,68 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
     () => updateOrderStatus(db, order.id, { status: "待付款", operator: "admin" }),
     /已完成订单不能继续流转/,
   );
+
+  db.close();
+});
+
+test("admin status dropdown can confirm payment through shared status logic", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13800000001",
+    password: "password123",
+    name: "Jerry",
+    wechat: "make3d",
+    email: "jerry@example.com",
+  });
+  const order = createOrderWithFile(db, {
+    customerId: customer.id,
+    customerName: "Jerry",
+    phone: "13800000001",
+    wechat: "make3d",
+    email: "jerry@example.com",
+    material: "PLA",
+    color: "white",
+    quantity: 1,
+    estimatedPrice: 30,
+    file: {
+      filename: "fixture.stl",
+      filepath: "/uploads/fixture.stl",
+      filesize: 128,
+    },
+  });
+
+  confirmOrderFinalQuote(db, order.id, {
+    finalPrice: 88.5,
+    finalLeadTimeHours: 72,
+    priceAdjustmentReason: "人工确认",
+    productionNote: "准备生产",
+    operator: "admin",
+  });
+
+  assert.equal(
+    updateOrderStatus(db, order.id, {
+      status: "已付款",
+      operator: "admin",
+      paymentMethod: "支付宝转账",
+      paymentNote: "状态下拉确认到账",
+      note: "后台状态下拉确认付款",
+    }),
+    true,
+  );
+
+  const detail = getOrderById(db, order.id);
+  const customerDetail = getOrderByIdForCustomer(db, order.id, customer.id);
+  const logs = getOrderStatusLogsByOrderId(db, order.id);
+
+  assert.equal(detail.status, "已付款");
+  assert.equal(detail.paymentStatus, "paid");
+  assert.ok(detail.paidAt);
+  assert.ok(detail.paymentConfirmedAt);
+  assert.equal(detail.paymentConfirmedBy, "admin");
+  assert.equal(detail.paymentMethod, "支付宝转账");
+  assert.equal(customerDetail.status, "已付款");
+  assert.equal(customerDetail.paymentStatus, "paid");
+  assert.ok(logs.some((log) => log.fromStatus === "待付款" && log.toStatus === "已付款"));
 
   db.close();
 });

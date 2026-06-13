@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { confirmOrderPayment, getOrderById, openDatabase } from "@/backend/database";
-import { notifyCustomerOrderStatus } from "@/backend/email";
+import { openDatabase } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
-import { notifyWechatOrderStatus } from "@/backend/wechat";
+import { updateOrderStatusAndNotify } from "@/backend/orderWorkflow";
 
 export const runtime = "nodejs";
 
@@ -21,21 +20,24 @@ export async function POST(
 
     try {
       const orderId = Number(id);
-      const updated = confirmOrderPayment(db, orderId, {
+      const result = await updateOrderStatusAndNotify(db, orderId, {
+        status: "已付款",
         paymentMethod: getOptionalString(body.paymentMethod),
         paymentNote: getOptionalString(body.paymentNote),
         operator: "admin",
       });
 
-      if (!updated) {
+      if (!result.updated) {
         return NextResponse.json({ error: "订单不存在" }, { status: 404 });
       }
 
-      const order = getOrderById(db, orderId);
-      await notifyCustomerOrderStatus(order);
-      await notifyWechatOrderStatus(db, order);
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        emailError: result.emailError,
+        wechatStatus: result.wechatResult?.sent
+          ? "sent"
+          : result.wechatResult?.reason || result.wechatResult?.error?.message || result.wechatError || null,
+      });
     } finally {
       db.close();
     }

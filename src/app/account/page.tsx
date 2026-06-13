@@ -14,6 +14,9 @@ import { ChangePasswordForm } from "@/frontend/components/ChangePasswordForm";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { WechatBindCard } from "@/frontend/components/WechatBindCard";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function AccountPage() {
   const customer = await getCurrentCustomer();
 
