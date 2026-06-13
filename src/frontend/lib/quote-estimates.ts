@@ -186,7 +186,7 @@ export function safeFileSize(file: QuoteFileLike | null | undefined) {
 
 function canUseApproximateDimensions(file: QuoteFileLike) {
   const filename = typeof file.name === "string" ? file.name.toLowerCase() : "";
-  return Boolean(filename && [".step", ".stp", ".3mf"].some((extension) => filename.endsWith(extension)));
+  return Boolean(filename && [".step", ".stp"].some((extension) => filename.endsWith(extension)));
 }
 
 function getSizeBucket(filesize: number | null | undefined) {
@@ -247,8 +247,6 @@ function getShippingEstimate(method: string) {
       return { label: "18 元", amount: 18, includedInAutoPrice: true };
     case "西安本地跑腿":
       return { label: "人工确认", amount: null, includedInAutoPrice: false };
-    case "到店自取":
-      return { label: "0 元", amount: 0, includedInAutoPrice: true };
     case "普通快递":
     default:
       return { label: "10 元", amount: 10, includedInAutoPrice: true };

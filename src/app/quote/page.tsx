@@ -4,7 +4,7 @@ import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import Link from "next/link";
 
-const supportedFormats = ["STL", "3MF", "STEP", "STP"];
+const supportedFormats = ["STL", "STEP", "STP"];
 
 export default async function QuotePage() {
   const customer = await getCurrentCustomer();
@@ -44,10 +44,10 @@ export default async function QuotePage() {
             <div className="border border-ink/10 bg-white/80 p-4">
               <h2 className="text-lg font-semibold">基础打印标准</h2>
               <p className="mt-3 text-sm leading-6 text-graphite">
-                默认按 0.4mm 喷嘴、0.2mm 层高、50% 填充进行预估。
+                价格计算按0.4喷嘴，0.2mm层高，50%填充率进行价格计算。
               </p>
               <p className="mt-3 text-sm leading-6 text-graphite">
-                如需特殊层高、强度、表面效果、支撑方式、分件打印等，请在备注中说明，最终由人工确认。
+                如有特别要求，例如需改变喷嘴（0.2/0.4/0.6），改变层高（0.08~0.24），打印方向，支撑方式等，请在备注中详细说明，由人工客服进行联系确认。
               </p>
             </div>
             {!customer ? (

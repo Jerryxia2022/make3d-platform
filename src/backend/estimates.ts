@@ -13,7 +13,7 @@ export type EstimateFileInput = {
   dimensions?: DimensionsMm;
 };
 
-export type ShippingMethod = "普通快递" | "顺丰快递" | "西安本地跑腿" | "到店自取" | string;
+export type ShippingMethod = "普通快递" | "顺丰快递" | "西安本地跑腿" | string;
 
 export const DEVICE_COUNT = 6;
 export const PACKAGING_FEE = 3;
@@ -94,8 +94,6 @@ export function getShippingEstimate(shippingMethod: ShippingMethod) {
       return { label: "18 元", amount: 18, includedInAutoPrice: true };
     case "西安本地跑腿":
       return { label: "人工确认", amount: null, includedInAutoPrice: false };
-    case "到店自取":
-      return { label: "0 元", amount: 0, includedInAutoPrice: true };
     case "普通快递":
     default:
       return { label: "10 元", amount: 10, includedInAutoPrice: true };

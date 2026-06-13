@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 
 const LAYER_HEIGHT = 0.2;
 const INFILL_DENSITY = 50;
+const SLICE_MATERIAL = "PETG";
 const PARSE_FAILURE_MESSAGE = "计算失败，需人工确认";
 
 let sliceQueue: Promise<void> = Promise.resolve();
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
       runPrusaSlicer({
         inputFilePath: savedFile.filepath,
         gcodeFilePath,
-        material,
+        material: SLICE_MATERIAL,
         layerHeight: LAYER_HEIGHT,
         infillDensity: INFILL_DENSITY,
         needSupport: false,

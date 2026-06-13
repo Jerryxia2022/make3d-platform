@@ -598,7 +598,7 @@ test("validates upload extensions and size, then saves accepted file", async () 
     assert.equal(isAllowedUploadFilename("part.stl"), true);
     assert.equal(isAllowedUploadFilename("part.step"), true);
     assert.equal(isAllowedUploadFilename("part.stp"), true);
-    assert.equal(isAllowedUploadFilename("part.3mf"), true);
+    assert.equal(isAllowedUploadFilename("part.3mf"), false);
     assert.equal(isAllowedUploadFilename("part.obj"), false);
 
     const saved = await saveUploadFile(

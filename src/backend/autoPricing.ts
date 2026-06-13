@@ -83,8 +83,6 @@ export function getShippingFee(shippingMethod: string) {
   switch (shippingMethod) {
     case "顺丰快递":
       return 18;
-    case "到店自取":
-      return 0;
     case "西安本地跑腿":
       return null;
     case "普通快递":

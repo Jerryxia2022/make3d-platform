@@ -47,7 +47,7 @@ test("calculates rounded delivery lead time for multiple files across six machin
 test("applies order minimum and supported shipping rules", () => {
   assert.equal(getShippingFee("普通快递"), 10);
   assert.equal(getShippingFee("顺丰快递"), 18);
-  assert.equal(getShippingFee("到店自取"), 0);
+  assert.equal(getShippingFee("到店自取"), 10);
   assert.equal(getShippingFee("西安本地跑腿"), null);
 
   const ordinary = calculateAutoOrderPrice({

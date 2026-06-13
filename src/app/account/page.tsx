@@ -2,11 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   getWechatAccountByCustomerId,
-  listServiceRequestsByCustomerId,
   listOrdersByCustomerId,
   openDatabase,
   type OrderRecord,
-  type ServiceRequestRecord,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { maskOpenid } from "@/backend/wechat";
@@ -28,7 +26,6 @@ export default async function AccountPage() {
 
   try {
     const orders = listOrdersByCustomerId(db, customer.id);
-    const serviceRequests = listServiceRequestsByCustomerId(db, customer.id);
     const wechatAccount = getWechatAccountByCustomerId(db, customer.id);
     const activeBindCode =
       wechatAccount?.bindCode &&
@@ -46,11 +43,6 @@ export default async function AccountPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Make3D 会员</p>
               <h1 className="mt-3 text-4xl font-bold">我的账户</h1>
             </div>
-            <form action="/api/account/logout?next=/" method="post">
-              <button className="border border-ink/20 px-4 py-2 text-sm font-semibold" type="submit">
-                退出登录
-              </button>
-            </form>
           </div>
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
@@ -90,26 +82,6 @@ export default async function AccountPage() {
             <OrderTable orders={orders} />
           </section>
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-xl font-bold">我的非标准需求</h2>
-                <p className="mt-2 text-sm text-graphite">模型修改、工装夹具和研发咨询需求会在这里同步状态。</p>
-              </div>
-              <Link className="border border-ink/20 bg-white px-4 py-2 text-sm font-semibold" href="/request/design">
-                提交修改需求
-              </Link>
-            </div>
-            <ServiceRequestList requests={serviceRequests} />
-          </section>
-
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
-            <h2 className="text-xl font-bold">我的历史报价</h2>
-            <p className="mt-2 text-sm text-graphite">
-              历史报价基于已提交订单保存，最终价格以人工确认为准。
-            </p>
-            <OrderTable orders={orders} compact />
-          </section>
         </section>
       </main>
     );
@@ -164,39 +136,6 @@ function OrderTable({ orders, compact = false }: { orders: OrderRecord[]; compac
   );
 }
 
-function ServiceRequestList({ requests }: { requests: ServiceRequestRecord[] }) {
-  if (requests.length === 0) {
-    return (
-      <div className="mt-5 border border-ink/10 bg-white p-5 text-sm text-graphite">
-        暂无非标准需求记录。
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-5 grid gap-4 lg:grid-cols-2">
-      {requests.map((request) => (
-        <article className="border border-ink/10 bg-white p-4 shadow-sm" key={request.id}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="font-bold">{request.projectName}</p>
-              <p className="mt-1 text-xs text-graphite">
-                {formatRequestType(request.requestType)} · {formatDate(request.createdAt)}
-              </p>
-            </div>
-            <StatusTag status={request.status} />
-          </div>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-            <CardMetric label="预算" value={request.budgetRange} />
-            <CardMetric label="交付" value={request.expectedDeliveryTime || "待评估"} />
-            <CardMetric label="附件" value={`${request.fileCount} 个`} />
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function CardMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-ink/10 bg-paper/60 px-3 py-2">
@@ -238,8 +177,4 @@ function formatLeadTime(value?: number | null) {
 
 function formatFileCount(order: OrderRecord) {
   return `${Math.max(order.fileCount || 0, 0)} 个`;
-}
-
-function formatRequestType(type: ServiceRequestRecord["requestType"]) {
-  return type === "design" ? "模型修改与打印" : "工装夹具 / 研发咨询";
 }

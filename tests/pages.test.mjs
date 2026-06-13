@@ -86,7 +86,8 @@ test("customer MVP pages and logout route exist", async () => {
   const forgotSource = await readSource("src/app/account/forgot-password/page.tsx");
 
   assert.match(accountSource, /getCurrentCustomer/);
-  assert.match(accountSource, /\/api\/account\/logout\?next=\//);
+  assert.match(accountSource, /CustomerAuthBar/);
+  assert.doesNotMatch(accountSource, /\/api\/account\/logout\?next=\//);
   assert.match(logoutSource, /createCustomerLogoutResponse/);
   assert.match(logoutSource, /isRouterPrefetch/);
   assert.match(logoutSource, /status: 204/);
@@ -97,7 +98,7 @@ test("customer MVP pages and logout route exist", async () => {
   assert.match(forgotSource, /IfAccountExistsMessage/);
 });
 
-test("customer account center shows profile, order history, quote history, and owned order detail", async () => {
+test("customer account center shows profile, compact orders, and owned order detail", async () => {
   const accountSource = await readSource("src/app/account/page.tsx");
   const detailSource = await readSource("src/app/account/orders/[id]/page.tsx");
   const confirmSource = await readSource("src/app/account/orders/[id]/confirm/page.tsx");
@@ -105,11 +106,10 @@ test("customer account center shows profile, order history, quote history, and o
   assert.match(accountSource, /listOrdersByCustomerId/);
   assert.match(accountSource, /dynamic = "force-dynamic"/);
   assert.match(accountSource, /revalidate = 0/);
-  assert.match(accountSource, /listServiceRequestsByCustomerId/);
   assert.match(accountSource, /用户资料/);
   assert.match(accountSource, /我的订单/);
-  assert.match(accountSource, /我的非标准需求/);
-  assert.match(accountSource, /我的历史报价/);
+  assert.doesNotMatch(accountSource, /我的非标准需求/);
+  assert.doesNotMatch(accountSource, /我的历史报价/);
   assert.match(accountSource, /修改密码/);
   assert.match(accountSource, /ChangePasswordForm/);
   assert.match(accountSource, /\/account\/orders\/\$\{order\.id\}/);
@@ -174,8 +174,9 @@ test("quote page shows FDM guidance instead of pricing explanation", async () =>
   assert.doesNotMatch(source, /QuoteLoginPrompt/);
 
   assert.match(source, /FDM 是通过热熔材料逐层堆叠成型的3D打印工艺/);
-  assert.match(source, /默认按 0\.4mm 喷嘴、0\.2mm 层高、50% 填充进行预估/);
-  assert.match(source, /如需特殊层高、强度、表面效果、支撑方式、分件打印等/);
+  assert.match(source, /价格计算按0\.4喷嘴，0\.2mm层高，50%填充率进行价格计算/);
+  assert.match(source, /如有特别要求，例如需改变喷嘴/);
+  assert.doesNotMatch(source, /3MF/);
   assert.doesNotMatch(source, /价格和计费说明/);
   assert.doesNotMatch(source, /材料费/);
 });
@@ -256,7 +257,7 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(formSource, /xl:sticky xl:top-6/);
   assert.match(formSource, /if \(disabled\) \{/);
   assert.match(formSource, /disabled={disabled}/);
-  assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes \|\| disabled}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled}/);
   assert.match(formSource, /defaultValue={customer\?\.name \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.phone \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.wechat \|\| ""}/);
@@ -269,7 +270,7 @@ test("quote form exposes merged contact and shipping fields with customer valida
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
   const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
 
-  assert.match(formSource, /联系与收货信息/);
+  assert.match(formSource, /收货地址信息/);
   assert.match(formSource, /name="customerName"/);
   assert.match(formSource, /pattern={customerNamePattern}/);
   assert.match(formSource, /至少2个汉字，或至少4个英文字母/);
@@ -279,9 +280,9 @@ test("quote form exposes merged contact and shipping fields with customer valida
   assert.match(formSource, /pattern={mainlandPhoneHtmlPattern}/);
   assert.match(formSource, /title={mainlandPhoneErrorMessage}/);
   assert.match(formSource, /isValidMainlandPhone\(phone\)/);
-  assert.match(formSource, /微信很重要，请填写常用微信，方便确认报价和生产细节。/);
   assert.match(formSource, /name="wechat"/);
   assert.match(formSource, /name="email"/);
+  assert.match(formSource, /type="hidden"/);
   assert.match(formSource, /name="shippingMethod"/);
   assert.match(formSource, /name="addressDetail"/);
   assert.match(formSource, /name="remark"/);
@@ -333,9 +334,13 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /文件格式不支持/);
   assert.match(formSource, /切片配置缺失/);
   assert.match(formSource, /服务器繁忙/);
-  assert.match(formSource, /部分文件仍在计算，报价完成后将自动更新总价。/);
-  assert.match(formSource, /请等待报价完成后提交/);
-  assert.match(formSource, /disabled={isSubmitting \|\| hasPendingQuotes \|\| disabled}/);
+  assert.match(formSource, /整单计算报价/);
+  assert.match(formSource, /切片按 PETG 密度计算重量/);
+  assert.match(formSource, /calculateOrderQuote/);
+  assert.match(formSource, /SLICE_MATERIAL = "PETG"/);
+  assert.match(formSource, /部分文件尚未计算或正在计算，完成后将更新总价。/);
+  assert.match(formSource, /请先计算报价/);
+  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled}/);
   assert.match(formSource, /等待计算/);
   assert.match(formSource, /正在计算/);
   assert.match(formSource, /已完成/);
@@ -354,12 +359,13 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /{formatDimensions\(dimensions\)}/);
   assert.match(estimateSource, /模型最大外形尺寸约：/);
   assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准。/);
-  assert.match(formSource, /单件打印价/);
-  assert.match(formSource, /耗材重量/);
-  assert.match(formSource, /材料费/);
-  assert.match(formSource, /工时费/);
+  assert.match(formSource, /打印单价/);
+  assert.match(formSource, /报价状态/);
+  assert.doesNotMatch(formSource, /耗材重量/);
+  assert.doesNotMatch(formSource, /材料费/);
+  assert.doesNotMatch(formSource, /工时费/);
   assert.doesNotMatch(formSource, /预估价格区间/);
-  assert.match(formSource, /打印时间/);
+  assert.doesNotMatch(formSource, /打印时间/);
   assert.match(formSource, /如需加急，请在备注中说明，加急可能产生额外费用。/);
   assert.match(formSource, /打印费合计/);
   assert.match(formSource, /应付总价/);
@@ -371,6 +377,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /文件小计/);
   assert.match(formSource, /getFileSubtotalPrice/);
   assert.match(formSource, /quote\.result\.printTimeSeconds \* quote\.quantity/);
+  assert.match(formSource, /getMaterialRate\(material\)/);
 });
 
 test("quote form handles failed auto quote API responses without staying calculating", async () => {
@@ -378,8 +385,7 @@ test("quote form handles failed auto quote API responses without staying calcula
 
   assert.match(formSource, /sliceQuotesRef/);
   assert.match(formSource, /sliceQuotesRef\.current = sliceQuotes/);
-  assert.match(formSource, /\}, \[files, sliceRequestKey\]\)/);
-  assert.doesNotMatch(formSource, /\}, \[files, sliceQuotes, sliceRequestKey\]\)/);
+  assert.doesNotMatch(formSource, /sliceRequestKey/);
   assert.match(formSource, /const quoteResult = result\.result/);
   assert.match(formSource, /if \(!response\.ok \|\| !result\.success \|\| !quoteResult\)/);
   assert.match(formSource, /console\.error\("Auto quote API failed"/);
@@ -394,6 +400,8 @@ test("quote form handles failed auto quote API responses without staying calcula
   assert.match(formSource, /文件未保存成功/);
   assert.match(formSource, /文件格式暂不支持/);
   assert.match(formSource, /部分文件需人工确认/);
+  assert.match(formSource, /订单提交失败，网络或服务器暂时无响应，请检查网络后重试。/);
+  assert.match(formSource, /已提交/);
 });
 
 test("admin pages display contact fields from the matching order properties", async () => {

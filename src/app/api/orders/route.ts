@@ -24,7 +24,6 @@ const MAX_FILE_COUNT = 5;
 const requiredFields = [
   "customerName",
   "phone",
-  "wechat",
   "shippingMethod",
   "recipientName",
   "recipientPhone",
@@ -197,8 +196,8 @@ export async function POST(request: Request) {
         customerId: customer.id,
         customerName: getString(formData, "customerName"),
         phone,
-        wechat: getString(formData, "wechat"),
-        email: getString(formData, "email"),
+        wechat: getString(formData, "wechat") || persistedCustomer.wechat,
+        email: getString(formData, "email") || persistedCustomer.email || "",
         company: "",
         material: firstFile.material,
         color: firstFile.color,

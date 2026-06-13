@@ -97,8 +97,8 @@ test("returns V2 shipping estimates for supported shipping methods", () => {
     includedInAutoPrice: false,
   });
   assert.deepEqual(getShippingEstimate("到店自取"), {
-    label: "0 元",
-    amount: 0,
+    label: "10 元",
+    amount: 10,
     includedInAutoPrice: true,
   });
 });

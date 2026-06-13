@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-const MODEL_EXTENSIONS = [".stl", ".step", ".stp", ".3mf"];
+const MODEL_EXTENSIONS = [".stl", ".step", ".stp"];
 const REQUEST_ATTACHMENT_EXTENSIONS = [
   ...MODEL_EXTENSIONS,
   ".pdf",
@@ -43,7 +43,7 @@ export function isAllowedUploadFilename(filename: string) {
 
 export async function saveUploadFile(file: UploadLike, uploadDir = getUploadDir()): Promise<SavedUpload> {
   if (!isAllowedUploadFilename(file.name)) {
-    throw new Error("仅支持 STL、STEP、STP、3MF 文件");
+    throw new Error("仅支持 STL、STEP、STP 文件");
   }
 
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -79,7 +79,7 @@ export async function saveRequestAttachmentFile(
   uploadDir = getUploadDir(),
 ): Promise<SavedUpload> {
   if (!isAllowedRequestAttachmentFilename(file.name)) {
-    throw new Error("仅支持 STL、STEP、STP、3MF、PDF、JPG、PNG、DXF、DWG、ZIP 文件");
+    throw new Error("仅支持 STL、STEP、STP、PDF、JPG、PNG、DXF、DWG、ZIP 文件");
   }
 
   return saveFile(file, uploadDir);

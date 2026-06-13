@@ -3,7 +3,7 @@ import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { ServiceRequestForm } from "@/frontend/components/ServiceRequestForm";
 
-const fitItems = ["已有 STL/STEP/3MF 模型需要改尺寸", "需要拆件、加孔、加厚或优化打印方向", "模型能打开，但打印前需要结构确认"];
+const fitItems = ["已有 STL/STEP/STP 模型需要改尺寸", "需要拆件、加孔、加厚或优化打印方向", "模型能打开，但打印前需要结构确认"];
 const unfitItems = ["完整新产品研发", "没有任何尺寸或目标说明的开放需求", "需要量产模具或大批量生产"];
 
 export default async function DesignRequestPage() {
