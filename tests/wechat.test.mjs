@@ -21,6 +21,7 @@ import {
   buildWechatOrderStatusContent,
   handleWechatMessage,
   notifyWechatOrderStatus,
+  verifyWechatServerRequest,
   verifyWechatSignature,
 } from "../src/backend/wechat.ts";
 
@@ -32,13 +33,54 @@ test("wechat callback GET verification uses sha1 signature and returns echostr",
   const token = "make3d-token";
   const timestamp = "1718000000";
   const nonce = "nonce-value";
+  const echostr = "test_echo";
   const signature = signWechat(token, timestamp, nonce);
   const routeSource = await readSource("src/app/api/wechat/callback/route.ts");
+  const result = verifyWechatServerRequest(
+    `https://make3d.com.cn/api/wechat/callback?signature=${signature}&timestamp=${timestamp}&nonce=${nonce}&echostr=${echostr}`,
+    token,
+  );
 
   assert.equal(verifyWechatSignature(token, timestamp, nonce, signature), true);
   assert.equal(verifyWechatSignature(token, timestamp, nonce, "bad"), false);
-  assert.match(routeSource, /searchParams\.get\("echostr"\)/);
+  assert.equal(result.status, 200);
+  assert.equal(result.body, echostr);
+  assert.equal(result.contentType, "text/plain; charset=utf-8");
+  assert.equal(result.diagnostics.signatureVerified, true);
+  assert.match(routeSource, /verifyWechatServerRequest/);
+  assert.match(routeSource, /console\.info/);
+  assert.match(routeSource, /result\.body/);
+  assert.match(routeSource, /result\.status/);
   assert.match(routeSource, /verifyWechatSignature/);
+});
+
+test("wechat callback GET verification rejects token mismatch", () => {
+  const timestamp = "1718000000";
+  const nonce = "nonce-value";
+  const signature = signWechat("correct-token", timestamp, nonce);
+  const result = verifyWechatServerRequest(
+    `https://make3d.com.cn/api/wechat/callback?signature=${signature}&timestamp=${timestamp}&nonce=${nonce}&echostr=test_echo`,
+    "wrong-token",
+  );
+
+  assert.equal(result.status, 403);
+  assert.equal(result.body, "invalid signature");
+  assert.equal(result.diagnostics.signatureVerified, false);
+});
+
+test("wechat callback GET verification rejects missing echostr", () => {
+  const token = "make3d-token";
+  const timestamp = "1718000000";
+  const nonce = "nonce-value";
+  const signature = signWechat(token, timestamp, nonce);
+  const result = verifyWechatServerRequest(
+    `https://make3d.com.cn/api/wechat/callback?signature=${signature}&timestamp=${timestamp}&nonce=${nonce}`,
+    token,
+  );
+
+  assert.equal(result.status, 400);
+  assert.equal(result.body, "missing echostr");
+  assert.equal(result.diagnostics.hasEchostr, false);
 });
 
 test("wechat subscribe event replies with onboarding guidance", async () => {

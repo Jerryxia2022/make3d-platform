@@ -5,32 +5,21 @@ import {
   handleWechatMessage,
   hasWechatCallbackConfig,
   isWechatMpEnabled,
+  verifyWechatServerRequest,
   verifyWechatSignature,
 } from "@/backend/wechat";
 
 export const runtime = "nodejs";
 
 export function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
   const config = getWechatMpConfig();
+  const result = verifyWechatServerRequest(request.url, config.token);
 
-  if (!hasWechatCallbackConfig()) {
-    return new Response("wechat token is not configured", { status: 400 });
-  }
+  console.info("[make3d] wechat callback GET verification", result.diagnostics);
 
-  const verified = verifyWechatSignature(
-    config.token,
-    searchParams.get("timestamp"),
-    searchParams.get("nonce"),
-    searchParams.get("signature"),
-  );
-
-  if (!verified) {
-    return new Response("invalid signature", { status: 403 });
-  }
-
-  return new Response(searchParams.get("echostr") || "", {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  return new Response(result.body, {
+    headers: { "Content-Type": result.contentType },
+    status: result.status,
   });
 }
 

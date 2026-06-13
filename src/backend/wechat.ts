@@ -34,6 +34,23 @@ export type WechatNotifyResult = {
   error?: Error;
 };
 
+export type WechatVerificationDiagnostics = {
+  receivedGet: boolean;
+  hasTimestamp: boolean;
+  hasNonce: boolean;
+  hasEchostr: boolean;
+  hasSignature: boolean;
+  tokenConfigured: boolean;
+  signatureVerified: boolean;
+};
+
+export type WechatVerificationResult = {
+  body: string;
+  contentType: string;
+  diagnostics: WechatVerificationDiagnostics;
+  status: number;
+};
+
 const BIND_CODE_PATTERN = /^M3D-\d{6}$/i;
 const WECHAT_ORDER_NOTIFY_STATUSES = new Set(["待付款", "已付款", "生产中", "已发货", "已完成"]);
 
@@ -88,6 +105,61 @@ export function verifyWechatSignature(
     expectedBuffer.length === actualBuffer.length &&
     timingSafeEqual(expectedBuffer, actualBuffer)
   );
+}
+
+export function verifyWechatServerRequest(
+  url: string | URL,
+  token = getWechatMpConfig().token,
+): WechatVerificationResult {
+  const { searchParams } = new URL(String(url));
+  const signature = searchParams.get("signature");
+  const timestamp = searchParams.get("timestamp");
+  const nonce = searchParams.get("nonce");
+  const echostr = searchParams.get("echostr");
+  const signatureVerified = verifyWechatSignature(token, timestamp, nonce, signature);
+  const diagnostics = {
+    receivedGet: true,
+    hasTimestamp: Boolean(timestamp),
+    hasNonce: Boolean(nonce),
+    hasEchostr: Boolean(echostr),
+    hasSignature: Boolean(signature),
+    tokenConfigured: Boolean(token),
+    signatureVerified,
+  };
+
+  if (!token) {
+    return {
+      body: "wechat token is not configured",
+      contentType: "text/plain; charset=utf-8",
+      diagnostics,
+      status: 400,
+    };
+  }
+
+  if (!echostr) {
+    return {
+      body: "missing echostr",
+      contentType: "text/plain; charset=utf-8",
+      diagnostics,
+      status: 400,
+    };
+  }
+
+  if (!signatureVerified) {
+    return {
+      body: "invalid signature",
+      contentType: "text/plain; charset=utf-8",
+      diagnostics,
+      status: 403,
+    };
+  }
+
+  return {
+    body: echostr,
+    contentType: "text/plain; charset=utf-8",
+    diagnostics,
+    status: 200,
+  };
 }
 
 export function parseWechatXml(xml: string): WechatInboundMessage {
