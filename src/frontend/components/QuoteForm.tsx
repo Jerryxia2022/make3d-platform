@@ -14,6 +14,7 @@ import {
   getSafeQuantity,
   safeFileSize,
   type QuoteDimensions,
+  type QuoteFileLike,
   type SelectedQuoteFile,
 } from "@/frontend/lib/quote-estimates";
 import {
@@ -35,7 +36,9 @@ const customerNamePattern = "(?:[\\u4e00-\\u9fa5]{2,}|[A-Za-z][A-Za-z\\s'-]{3,})
 const guestUploadGateMessage = "请先登录后使用在线上传和自动报价功能。";
 
 type SelectedModelFile = SelectedQuoteFile & {
-  file: File;
+  file: File | QuoteFileLike;
+  draftFileId?: number;
+  fileUrl?: string;
 };
 
 type SliceQuoteStatus = "waiting" | "calculating" | "success" | "failed" | "manual";
@@ -57,6 +60,40 @@ type SavedUploadInfo = {
   filename: string;
   filepath: string;
   filesize: number;
+};
+
+type QuoteDraftFile = {
+  id: number;
+  originalFilename: string;
+  filename: string;
+  filepath: string;
+  filesize: number;
+  material: string | null;
+  color: string | null;
+  quantity: number;
+  boundingBoxX: number | null;
+  boundingBoxY: number | null;
+  boundingBoxZ: number | null;
+  sliceStatus: SliceQuoteStatus;
+  errorMessage: string | null;
+  filamentWeightG: number | null;
+  printTimeSeconds: number | null;
+  rawFilamentUsedMm: number | null;
+  rawFilamentUsedCm3: number | null;
+  rawFilamentUsedG: number | null;
+  filamentWeightSource: string | null;
+  materialDensity: number | null;
+  materialFee: number | null;
+  timeFee: number | null;
+  basePrintPrice: number | null;
+};
+
+type QuoteDraftResponse = {
+  draft?: {
+    id: number;
+    expiresAt: number;
+    files: QuoteDraftFile[];
+  } | null;
 };
 
 type SliceQuoteState = {
@@ -91,6 +128,8 @@ export function QuoteForm({
   const [files, setFiles] = useState<SelectedModelFile[]>([]);
   const [stlDimensions, setStlDimensions] = useState<Record<string, QuoteDimensions>>({});
   const [sliceQuotes, setSliceQuotes] = useState<Record<string, SliceQuoteState>>({});
+  const filesRef = useRef<SelectedModelFile[]>([]);
+  const stlDimensionsRef = useRef<Record<string, QuoteDimensions>>({});
   const sliceQuotesRef = useRef<Record<string, SliceQuoteState>>({});
   const [shippingMethod, setShippingMethod] = useState("普通快递");
   const [error, setError] = useState("");
@@ -120,6 +159,39 @@ export function QuoteForm({
   useEffect(() => {
     sliceQuotesRef.current = sliceQuotes;
   }, [sliceQuotes]);
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  useEffect(() => {
+    stlDimensionsRef.current = stlDimensions;
+  }, [stlDimensions]);
+
+  useEffect(() => {
+    if (disabled) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch("/api/quote/draft", { credentials: "same-origin", cache: "no-store" })
+      .then((response) => (response.ok ? response.json() as Promise<QuoteDraftResponse> : { draft: null }))
+      .then((data) => {
+        if (cancelled || filesRef.current.length > 0 || !data.draft?.files?.length) {
+          return;
+        }
+
+        restoreQuoteDraft(data.draft.files);
+      })
+      .catch((error) => {
+        console.error("Quote draft restore failed", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [disabled]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -163,6 +235,33 @@ export function QuoteForm({
 
     return () => window.clearInterval(timer);
   }, []);
+
+  function restoreQuoteDraft(draftFiles: QuoteDraftFile[]) {
+    const restoredFiles = draftFiles.map(createDraftModelFile);
+    const restoredQuotes: Record<string, SliceQuoteState> = {};
+    const restoredDimensions: Record<string, QuoteDimensions> = {};
+
+    for (const draftFile of draftFiles) {
+      const id = createDraftModelFileId(draftFile.id);
+      restoredQuotes[id] = createDraftQuoteState(draftFile);
+
+      if (
+        typeof draftFile.boundingBoxX === "number" &&
+        typeof draftFile.boundingBoxY === "number" &&
+        typeof draftFile.boundingBoxZ === "number"
+      ) {
+        restoredDimensions[id] = {
+          x: draftFile.boundingBoxX,
+          y: draftFile.boundingBoxY,
+          z: draftFile.boundingBoxZ,
+        };
+      }
+    }
+
+    setFiles(restoredFiles);
+    setSliceQuotes(restoredQuotes);
+    setStlDimensions(restoredDimensions);
+  }
 
   function addFiles(nextFiles: FileList | File[]) {
     if (disabled) {
@@ -218,7 +317,40 @@ export function QuoteForm({
     addFiles(event.dataTransfer.files);
   }
 
+  function rememberDraftFile(id: string, draftFileId: number | undefined) {
+    if (!draftFileId) {
+      return;
+    }
+
+    setFiles((currentFiles) =>
+      currentFiles.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              draftFileId,
+              fileUrl: `/api/quote/draft/files/${draftFileId}/download`,
+            }
+          : item,
+      ),
+    );
+
+    const currentFile = filesRef.current.find((item) => item.id === id);
+    const dimensions = stlDimensionsRef.current[id];
+    void updateQuoteDraftFile(draftFileId, {
+      material: currentFile?.material,
+      color: currentFile?.color,
+      quantity: currentFile?.quantity,
+      boundingBoxX: dimensions?.x,
+      boundingBoxY: dimensions?.y,
+      boundingBoxZ: dimensions?.z,
+    });
+  }
+
   async function runSliceForFile(item: SelectedModelFile) {
+    if (!(item.file instanceof File)) {
+      return;
+    }
+
     const current = sliceQuotesRef.current[item.id];
 
     if (current && ["calculating", "success", "failed"].includes(current.status)) {
@@ -258,6 +390,8 @@ export function QuoteForm({
       const formData = new FormData();
       formData.append("modelFile", item.file);
       formData.append("material", SLICE_MATERIAL);
+      formData.append("color", item.color);
+      formData.append("quantity", String(item.quantity));
 
       const response = await fetch("/api/quote/slice", {
         method: "POST",
@@ -266,6 +400,9 @@ export function QuoteForm({
       const result = await readSliceQuoteResponse(response);
       const quoteResult = result.result;
       const savedUpload = normalizeSavedUploadInfo(result.saved_upload);
+      const draftFileId = normalizeDraftFileId(result.draft_file_id);
+
+      rememberDraftFile(item.id, draftFileId);
 
       if (savedUpload && !quoteResult) {
         setSliceQuotes((quotes) => ({
@@ -342,9 +479,15 @@ export function QuoteForm({
   }
 
   function updateFileOption(id: string, option: "material" | "color", value: string) {
+    const currentFile = filesRef.current.find((item) => item.id === id);
+
     setFiles((currentFiles) =>
       currentFiles.map((item) => (item.id === id ? { ...item, [option]: value } : item)),
     );
+
+    if (currentFile?.draftFileId) {
+      void updateQuoteDraftFile(currentFile.draftFileId, { [option]: value });
+    }
   }
 
   function updateFileQuantity(id: string, value: string) {
@@ -356,12 +499,20 @@ export function QuoteForm({
     }
 
     setError("");
+    const currentFile = filesRef.current.find((item) => item.id === id);
+
     setFiles((currentFiles) =>
       currentFiles.map((item) => (item.id === id ? { ...item, quantity } : item)),
     );
+
+    if (currentFile?.draftFileId) {
+      void updateQuoteDraftFile(currentFile.draftFileId, { quantity });
+    }
   }
 
   function removeFile(id: string) {
+    const currentFile = filesRef.current.find((item) => item.id === id);
+
     setFiles((currentFiles) => currentFiles.filter((item) => item.id !== id));
     setStlDimensions((dimensions) => {
       const nextDimensions = { ...dimensions };
@@ -373,9 +524,15 @@ export function QuoteForm({
       delete nextQuotes[id];
       return nextQuotes;
     });
+
+    if (currentFile?.draftFileId) {
+      void deleteQuoteDraftFile(currentFile.draftFileId);
+    }
   }
 
   const updatePreviewDimensions = useCallback((id: string, dimensions: QuoteDimensions) => {
+    const currentFile = filesRef.current.find((item) => item.id === id);
+
     setStlDimensions((currentDimensions) => {
       const current = currentDimensions[id];
 
@@ -392,6 +549,14 @@ export function QuoteForm({
         [id]: dimensions,
       };
     });
+
+    if (currentFile?.draftFileId) {
+      void updateQuoteDraftFile(currentFile.draftFileId, {
+        boundingBoxX: dimensions.x,
+        boundingBoxY: dimensions.y,
+        boundingBoxZ: dimensions.z,
+      });
+    }
   }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -590,6 +755,7 @@ export function QuoteForm({
                   color={item.color}
                   dimensions={displayDimensions}
                   file={item.file instanceof File ? item.file : undefined}
+                  fileUrl={item.fileUrl}
                   filename={item.file.name || ""}
                   filesize={item.file.size || 0}
                   material={item.material}
@@ -1024,6 +1190,80 @@ function createManualQuoteState(quantity = 1, savedUpload?: SavedUploadInfo): Sl
   };
 }
 
+function createDraftModelFile(draftFile: QuoteDraftFile): SelectedModelFile {
+  const displayName = draftFile.originalFilename || draftFile.filename;
+
+  return {
+    id: createDraftModelFileId(draftFile.id),
+    draftFileId: draftFile.id,
+    fileUrl: `/api/quote/draft/files/${draftFile.id}/download`,
+    file: {
+      name: displayName,
+      size: draftFile.filesize,
+      lastModified: Date.now(),
+    },
+    material: draftFile.material || SLICE_MATERIAL,
+    color: draftFile.color || DEFAULT_COLOR,
+    quantity: getSafeQuantity(draftFile.quantity),
+  };
+}
+
+function createDraftQuoteState(draftFile: QuoteDraftFile): SliceQuoteState {
+  const savedUpload = {
+    filename: draftFile.filename,
+    filepath: draftFile.filepath,
+    filesize: draftFile.filesize,
+  };
+  const baseState = {
+    material: draftFile.material || SLICE_MATERIAL,
+    progress: 100,
+    elapsedSeconds: 0,
+    quantity: getSafeQuantity(draftFile.quantity),
+    savedUpload,
+  };
+
+  if (draftFile.sliceStatus === "success" && draftFile.filamentWeightG != null && draftFile.printTimeSeconds != null) {
+    return {
+      ...baseState,
+      status: "success",
+      message: "已恢复草稿报价",
+      phase: "已恢复切片结果",
+      result: {
+        filamentWeightG: draftFile.filamentWeightG,
+        printTimeSeconds: draftFile.printTimeSeconds,
+        rawFilamentUsedMm: draftFile.rawFilamentUsedMm,
+        rawFilamentUsedCm3: draftFile.rawFilamentUsedCm3,
+        rawFilamentUsedG: draftFile.rawFilamentUsedG,
+        filamentWeightSource: draftFile.filamentWeightSource,
+        materialDensity: draftFile.materialDensity,
+        materialFee: draftFile.materialFee || 0,
+        timeFee: draftFile.timeFee || 0,
+        basePrintPrice: draftFile.basePrintPrice || 0,
+      },
+    };
+  }
+
+  if (draftFile.sliceStatus === "failed") {
+    return {
+      ...baseState,
+      status: "failed",
+      message: draftFile.errorMessage || "计算失败，需人工确认",
+      phase: "已恢复草稿，需人工确认",
+    };
+  }
+
+  return {
+    ...createManualQuoteState(draftFile.quantity, savedUpload),
+    material: draftFile.material || SLICE_MATERIAL,
+    message: draftFile.errorMessage || "需人工确认",
+    phase: "已恢复草稿，需人工确认",
+  };
+}
+
+function createDraftModelFileId(id: number) {
+  return `draft-${id}`;
+}
+
 function getVisibleSliceQuote(
   item: SelectedQuoteFile,
   quote: SliceQuoteState | undefined,
@@ -1167,6 +1407,7 @@ async function readSliceQuoteResponse(response: Response) {
       error?: string;
       result?: Record<string, unknown>;
       saved_upload?: Record<string, unknown>;
+      draft_file_id?: unknown;
     };
   } catch (error) {
     console.error("Auto quote API response JSON parse failed", error);
@@ -1188,6 +1429,46 @@ function normalizeSavedUploadInfo(value: Record<string, unknown> | undefined) {
   const filesize = typeof value.filesize === "number" ? value.filesize : 0;
 
   return filename && filepath && filesize > 0 ? { filename, filepath, filesize } : undefined;
+}
+
+function normalizeDraftFileId(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+async function updateQuoteDraftFile(
+  draftFileId: number,
+  input: {
+    material?: string;
+    color?: string;
+    quantity?: number;
+    boundingBoxX?: number | null;
+    boundingBoxY?: number | null;
+    boundingBoxZ?: number | null;
+  },
+) {
+  try {
+    await fetch(`/api/quote/draft/files/${draftFileId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    console.error("Quote draft update failed", error);
+  }
+}
+
+async function deleteQuoteDraftFile(draftFileId: number) {
+  try {
+    await fetch(`/api/quote/draft/files/${draftFileId}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+  } catch (error) {
+    console.error("Quote draft delete failed", error);
+  }
 }
 
 async function readOrderSubmitResponse(response: Response) {

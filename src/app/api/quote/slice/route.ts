@@ -4,8 +4,9 @@ import { dirname, join } from "node:path";
 import { NextResponse } from "next/server";
 import { calculateAutoFilePrice } from "@/backend/autoPricing";
 import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
+import { addQuoteDraftFile, openDatabase } from "@/backend/database";
 import { getPrusaSlicerConfig, runPrusaSlicer } from "@/backend/slicer";
-import { saveUploadFile } from "@/backend/uploads";
+import { saveUploadFile, type SavedUpload } from "@/backend/uploads";
 
 export const runtime = "nodejs";
 
@@ -37,18 +38,23 @@ type QuoteSliceResponse = {
     filepath: string;
     filesize: number;
   };
+  draft_file_id?: number;
   error?: string;
 };
 
 export async function POST(request: Request) {
   try {
-    if (!getCustomerFromRequestCookie(request)) {
+    const customer = getCustomerFromRequestCookie(request);
+
+    if (!customer) {
       return jsonResponse({ success: false, message: "请先登录后使用自动报价", error: "Unauthorized" }, 401);
     }
 
     const formData = await request.formData();
     const file = formData.get("modelFile");
     const material = getString(formData, "material") || WEIGHT_MATERIAL;
+    const color = getString(formData, "color") || "白";
+    const quantity = getQuantity(formData, "quantity");
 
     if (!(file instanceof File) || file.size <= 0) {
       return jsonResponse({ success: false, message: "计算失败，需人工确认", error: "No file" }, 400);
@@ -57,10 +63,22 @@ export async function POST(request: Request) {
     const savedFile = await saveUploadFile(file);
 
     if (!file.name.toLowerCase().endsWith(".stl")) {
+      const draftFileId = saveQuoteDraftFile({
+        customerId: customer.customerId,
+        originalFilename: file.name,
+        savedFile,
+        material,
+        color,
+        quantity,
+        sliceStatus: "manual",
+        errorMessage: "Only STL files support automatic slicing",
+      });
+
       return jsonResponse({
         success: true,
         message: "需人工确认",
         saved_upload: savedFile,
+        draft_file_id: draftFileId,
         error: "Only STL files support automatic slicing",
       });
     }
@@ -68,19 +86,43 @@ export async function POST(request: Request) {
     const slicerConfig = getPrusaSlicerConfig();
 
     if (!slicerConfig.enabled) {
+      const draftFileId = saveQuoteDraftFile({
+        customerId: customer.customerId,
+        originalFilename: file.name,
+        savedFile,
+        material,
+        color,
+        quantity,
+        sliceStatus: "failed",
+        errorMessage: "PrusaSlicer disabled",
+      });
+
       return jsonResponse({
         success: false,
         message: "本地未启用切片，需人工确认",
         saved_upload: savedFile,
+        draft_file_id: draftFileId,
         error: "PrusaSlicer disabled",
       }, 400);
     }
 
     if (!(await fileExists(slicerConfig.profilePath))) {
+      const draftFileId = saveQuoteDraftFile({
+        customerId: customer.customerId,
+        originalFilename: file.name,
+        savedFile,
+        material,
+        color,
+        quantity,
+        sliceStatus: "failed",
+        errorMessage: `Profile not found: ${slicerConfig.profilePath}`,
+      });
+
       return jsonResponse({
         success: false,
         message: "计算失败，需人工确认",
         saved_upload: savedFile,
+        draft_file_id: draftFileId,
         error: `Profile not found: ${slicerConfig.profilePath}`,
       }, 400);
     }
@@ -101,10 +143,22 @@ export async function POST(request: Request) {
     );
 
     if (metadata.filamentWeightG == null || metadata.printTimeSeconds == null) {
+      const draftFileId = saveQuoteDraftFile({
+        customerId: customer.customerId,
+        originalFilename: file.name,
+        savedFile,
+        material,
+        color,
+        quantity,
+        sliceStatus: "failed",
+        errorMessage: "G-code metadata parse failed",
+      });
+
       return jsonResponse({
         success: false,
         message: PARSE_FAILURE_MESSAGE,
         saved_upload: savedFile,
+        draft_file_id: draftFileId,
         error: "G-code metadata parse failed",
       }, 422);
     }
@@ -114,6 +168,25 @@ export async function POST(request: Request) {
       filamentWeightG: metadata.filamentWeightG,
       printTimeSeconds: metadata.printTimeSeconds,
       packagingFee: 0,
+    });
+    const draftFileId = saveQuoteDraftFile({
+      customerId: customer.customerId,
+      originalFilename: file.name,
+      savedFile,
+      material,
+      color,
+      quantity,
+      sliceStatus: "success",
+      filamentWeightG: metadata.filamentWeightG,
+      printTimeSeconds: metadata.printTimeSeconds,
+      rawFilamentUsedMm: metadata.rawFilamentUsedMm,
+      rawFilamentUsedCm3: metadata.rawFilamentUsedCm3,
+      rawFilamentUsedG: metadata.rawFilamentUsedG,
+      filamentWeightSource: metadata.filamentWeightSource,
+      materialDensity: metadata.materialDensity,
+      materialFee: price.materialFee,
+      timeFee: price.laborFee,
+      basePrintPrice: price.estimatedPrice,
     });
 
     return jsonResponse({
@@ -132,6 +205,7 @@ export async function POST(request: Request) {
         base_print_price: price.estimatedPrice,
       },
       saved_upload: savedFile,
+      draft_file_id: draftFileId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -163,6 +237,66 @@ function createQuoteGcodeFilePath(filename: string) {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getQuantity(formData: FormData, key: string) {
+  const parsed = Number(getString(formData, key));
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 1000 ? parsed : 1;
+}
+
+function saveQuoteDraftFile(input: {
+  customerId: number;
+  originalFilename: string;
+  savedFile: SavedUpload;
+  material: string;
+  color: string;
+  quantity: number;
+  sliceStatus: string;
+  errorMessage?: string | null;
+  filamentWeightG?: number | null;
+  printTimeSeconds?: number | null;
+  rawFilamentUsedMm?: number | null;
+  rawFilamentUsedCm3?: number | null;
+  rawFilamentUsedG?: number | null;
+  filamentWeightSource?: string | null;
+  materialDensity?: number | null;
+  materialFee?: number | null;
+  timeFee?: number | null;
+  basePrintPrice?: number | null;
+}) {
+  const db = openDatabase();
+
+  try {
+    const draftFile = addQuoteDraftFile(db, {
+      customerId: input.customerId,
+      originalFilename: input.originalFilename,
+      filename: input.savedFile.filename,
+      filepath: input.savedFile.filepath,
+      filesize: input.savedFile.filesize,
+      material: input.material,
+      color: input.color,
+      quantity: input.quantity,
+      sliceStatus: input.sliceStatus,
+      errorMessage: input.errorMessage,
+      filamentWeightG: input.filamentWeightG,
+      printTimeSeconds: input.printTimeSeconds,
+      rawFilamentUsedMm: input.rawFilamentUsedMm,
+      rawFilamentUsedCm3: input.rawFilamentUsedCm3,
+      rawFilamentUsedG: input.rawFilamentUsedG,
+      filamentWeightSource: input.filamentWeightSource,
+      materialDensity: input.materialDensity,
+      materialFee: input.materialFee,
+      timeFee: input.timeFee,
+      basePrintPrice: input.basePrintPrice,
+    });
+
+    return draftFile.id;
+  } catch (error) {
+    console.error("[make3d] quote draft save failed", error);
+    return undefined;
+  } finally {
+    db.close();
+  }
 }
 
 function jsonResponse(body: QuoteSliceResponse, status = 200) {

@@ -388,6 +388,52 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /getMaterialRate\(material\)/);
 });
 
+test("quote form restores active drafts without re-slicing saved results", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
+  const databaseSource = await readSource("src/backend/database.ts");
+  const sliceSource = await readSource("src/app/api/quote/slice/route.ts");
+  const draftSource = await readSource("src/app/api/quote/draft/route.ts");
+  const draftFileSource = await readSource("src/app/api/quote/draft/files/[id]/route.ts");
+  const draftDownloadSource = await readSource("src/app/api/quote/draft/files/[id]/download/route.ts");
+  const orderSource = await readSource("src/app/api/orders/route.ts");
+
+  assert.match(databaseSource, /QUOTE_DRAFT_TTL_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(databaseSource, /CREATE TABLE IF NOT EXISTS quote_drafts/);
+  assert.match(databaseSource, /CREATE TABLE IF NOT EXISTS quote_draft_files/);
+  assert.match(databaseSource, /getActiveQuoteDraft/);
+  assert.match(databaseSource, /addQuoteDraftFile/);
+  assert.match(databaseSource, /markActiveQuoteDraftSubmitted/);
+  assert.match(estimateSource, /export function estimateFiles<T extends SelectedQuoteFile>/);
+
+  assert.match(formSource, /fetch\("\/api\/quote\/draft", \{ credentials: "same-origin", cache: "no-store" \}\)/);
+  assert.match(formSource, /restoreQuoteDraft\(data\.draft\.files\)/);
+  assert.match(formSource, /createDraftModelFile/);
+  assert.match(formSource, /createDraftQuoteState/);
+  assert.match(formSource, /fileUrl: `\/api\/quote\/draft\/files\/\$\{draftFile\.id\}\/download`/);
+  assert.match(formSource, /if \(!\(item\.file instanceof File\)\) \{/);
+  assert.match(formSource, /rememberDraftFile\(item\.id, draftFileId\)/);
+  assert.match(formSource, /draft_file_id/);
+  assert.match(formSource, /updateQuoteDraftFile\(currentFile\.draftFileId/);
+  assert.match(formSource, /deleteQuoteDraftFile\(currentFile\.draftFileId\)/);
+  assert.match(formSource, /updatePreviewDimensions/);
+  assert.match(formSource, /fileUrl={item\.fileUrl}/);
+
+  assert.match(sliceSource, /addQuoteDraftFile/);
+  assert.match(sliceSource, /material = getString\(formData, "material"\) \|\| WEIGHT_MATERIAL/);
+  assert.match(sliceSource, /color = getString\(formData, "color"\) \|\|/);
+  assert.match(sliceSource, /quantity = getQuantity\(formData, "quantity"\)/);
+  assert.match(sliceSource, /draft_file_id: draftFileId/);
+
+  assert.match(draftSource, /getActiveQuoteDraft/);
+  assert.match(draftSource, /getCustomerFromRequestCookie/);
+  assert.match(draftFileSource, /updateQuoteDraftFile/);
+  assert.match(draftFileSource, /deleteQuoteDraftFile/);
+  assert.match(draftDownloadSource, /getQuoteDraftFileForCustomer/);
+  assert.match(draftDownloadSource, /readFile/);
+  assert.match(orderSource, /markActiveQuoteDraftSubmitted\(db, customer\.id\)/);
+});
+
 test("quote form handles failed auto quote API responses without staying calculating", async () => {
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
 

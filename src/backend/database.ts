@@ -77,6 +77,85 @@ export type OrderFileInput = {
   subtotalPrice?: number | null;
 };
 
+export const QUOTE_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+export type QuoteDraftFileInput = {
+  customerId: number;
+  originalFilename: string;
+  filename: string;
+  filepath: string;
+  filesize: number;
+  material: string;
+  color: string;
+  quantity: number;
+  boundingBoxX?: number | null;
+  boundingBoxY?: number | null;
+  boundingBoxZ?: number | null;
+  sliceStatus: string;
+  errorMessage?: string | null;
+  filamentWeightG?: number | null;
+  printTimeSeconds?: number | null;
+  rawFilamentUsedMm?: number | null;
+  rawFilamentUsedCm3?: number | null;
+  rawFilamentUsedG?: number | null;
+  filamentWeightSource?: string | null;
+  materialDensity?: number | null;
+  materialFee?: number | null;
+  timeFee?: number | null;
+  basePrintPrice?: number | null;
+};
+
+export type QuoteDraftFileUpdateInput = {
+  material?: string | null;
+  color?: string | null;
+  quantity?: number | null;
+  boundingBoxX?: number | null;
+  boundingBoxY?: number | null;
+  boundingBoxZ?: number | null;
+};
+
+export type QuoteDraftRecord = {
+  id: number;
+  customerId: number;
+  status: string;
+  expiresAt: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuoteDraftFileRecord = {
+  id: number;
+  draftId: number;
+  originalFilename: string;
+  filename: string;
+  filepath: string;
+  filesize: number;
+  material: string | null;
+  color: string | null;
+  quantity: number;
+  boundingBoxX: number | null;
+  boundingBoxY: number | null;
+  boundingBoxZ: number | null;
+  sliceStatus: string;
+  errorMessage: string | null;
+  filamentWeightG: number | null;
+  printTimeSeconds: number | null;
+  rawFilamentUsedMm: number | null;
+  rawFilamentUsedCm3: number | null;
+  rawFilamentUsedG: number | null;
+  filamentWeightSource: string | null;
+  materialDensity: number | null;
+  materialFee: number | null;
+  timeFee: number | null;
+  basePrintPrice: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuoteDraftDetail = QuoteDraftRecord & {
+  files: QuoteDraftFileRecord[];
+};
+
 export type SingleFileOrderInput = Omit<OrderInput, "files"> & {
   material: string;
   file: {
@@ -647,6 +726,46 @@ export function initDatabase(dbPath = getDatabasePath()) {
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS quote_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      expires_at INTEGER NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS quote_draft_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      draft_id INTEGER NOT NULL,
+      original_filename TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      filepath TEXT NOT NULL,
+      filesize INTEGER NOT NULL,
+      material TEXT,
+      color TEXT,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      bounding_box_x REAL,
+      bounding_box_y REAL,
+      bounding_box_z REAL,
+      slice_status TEXT NOT NULL DEFAULT 'manual',
+      error_message TEXT,
+      filament_weight_g REAL,
+      print_time_seconds INTEGER,
+      raw_filament_used_mm REAL,
+      raw_filament_used_cm3 REAL,
+      raw_filament_used_g REAL,
+      filament_weight_source TEXT,
+      material_density REAL,
+      material_fee REAL,
+      time_fee REAL,
+      base_print_price REAL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (draft_id) REFERENCES quote_drafts(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
@@ -813,6 +932,44 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["created_at", "DATETIME"],
     ["updated_at", "DATETIME"],
   ]);
+  ensureColumns(db, "quote_drafts", [
+    ["customer_id", "INTEGER"],
+    ["status", "TEXT NOT NULL DEFAULT 'active'"],
+    ["expires_at", "INTEGER"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "quote_draft_files", [
+    ["draft_id", "INTEGER"],
+    ["original_filename", "TEXT"],
+    ["filename", "TEXT"],
+    ["filepath", "TEXT"],
+    ["filesize", "INTEGER"],
+    ["material", "TEXT"],
+    ["color", "TEXT"],
+    ["quantity", "INTEGER NOT NULL DEFAULT 1"],
+    ["bounding_box_x", "REAL"],
+    ["bounding_box_y", "REAL"],
+    ["bounding_box_z", "REAL"],
+    ["slice_status", "TEXT NOT NULL DEFAULT 'manual'"],
+    ["error_message", "TEXT"],
+    ["filament_weight_g", "REAL"],
+    ["print_time_seconds", "INTEGER"],
+    ["raw_filament_used_mm", "REAL"],
+    ["raw_filament_used_cm3", "REAL"],
+    ["raw_filament_used_g", "REAL"],
+    ["filament_weight_source", "TEXT"],
+    ["material_density", "REAL"],
+    ["material_fee", "REAL"],
+    ["time_fee", "REAL"],
+    ["base_print_price", "REAL"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_quote_drafts_customer_status ON quote_drafts(customer_id, status, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_quote_draft_files_draft ON quote_draft_files(draft_id);
+  `);
   ensureColumns(db, "files", [
     ["bounding_box_x", "REAL"],
     ["bounding_box_y", "REAL"],
@@ -867,6 +1024,275 @@ export function initDatabase(dbPath = getDatabasePath()) {
 
 export function openDatabase() {
   return initDatabase();
+}
+
+export function getActiveQuoteDraft(
+  db: DatabaseSync,
+  customerId: number,
+  now = Date.now(),
+): QuoteDraftDetail | null {
+  expireQuoteDrafts(db, customerId, now);
+  const draft = getActiveQuoteDraftRecord(db, customerId, now);
+
+  return draft ? loadQuoteDraftDetail(db, draft) : null;
+}
+
+export function addQuoteDraftFile(
+  db: DatabaseSync,
+  input: QuoteDraftFileInput,
+  now = Date.now(),
+): QuoteDraftFileRecord {
+  const draft = getOrCreateActiveQuoteDraft(db, input.customerId, now);
+  const timestamp = getBeijingTimestamp();
+
+  const result = db
+    .prepare(
+      `INSERT INTO quote_draft_files (
+        draft_id,
+        original_filename,
+        filename,
+        filepath,
+        filesize,
+        material,
+        color,
+        quantity,
+        bounding_box_x,
+        bounding_box_y,
+        bounding_box_z,
+        slice_status,
+        error_message,
+        filament_weight_g,
+        print_time_seconds,
+        raw_filament_used_mm,
+        raw_filament_used_cm3,
+        raw_filament_used_g,
+        filament_weight_source,
+        material_density,
+        material_fee,
+        time_fee,
+        base_print_price,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      draft.id,
+      input.originalFilename,
+      input.filename,
+      input.filepath,
+      input.filesize,
+      input.material,
+      input.color,
+      input.quantity,
+      input.boundingBoxX ?? null,
+      input.boundingBoxY ?? null,
+      input.boundingBoxZ ?? null,
+      input.sliceStatus,
+      input.errorMessage ?? null,
+      input.filamentWeightG ?? null,
+      input.printTimeSeconds ?? null,
+      input.rawFilamentUsedMm ?? null,
+      input.rawFilamentUsedCm3 ?? null,
+      input.rawFilamentUsedG ?? null,
+      input.filamentWeightSource ?? null,
+      input.materialDensity ?? null,
+      input.materialFee ?? null,
+      input.timeFee ?? null,
+      input.basePrintPrice ?? null,
+      timestamp,
+      timestamp,
+    );
+
+  touchQuoteDraft(db, draft.id, now);
+  return getQuoteDraftFileById(db, Number(result.lastInsertRowid));
+}
+
+export function updateQuoteDraftFile(
+  db: DatabaseSync,
+  customerId: number,
+  fileId: number,
+  input: QuoteDraftFileUpdateInput,
+  now = Date.now(),
+) {
+  const file = getQuoteDraftFileForCustomer(db, customerId, fileId, now);
+  const timestamp = getBeijingTimestamp();
+  const result = db
+    .prepare(
+      `UPDATE quote_draft_files
+       SET material = COALESCE(?, material),
+           color = COALESCE(?, color),
+           quantity = COALESCE(?, quantity),
+           bounding_box_x = COALESCE(?, bounding_box_x),
+           bounding_box_y = COALESCE(?, bounding_box_y),
+           bounding_box_z = COALESCE(?, bounding_box_z),
+           updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      normalizeOptionalText(input.material ?? undefined),
+      normalizeOptionalText(input.color ?? undefined),
+      input.quantity ?? null,
+      input.boundingBoxX ?? null,
+      input.boundingBoxY ?? null,
+      input.boundingBoxZ ?? null,
+      timestamp,
+      file.id,
+    );
+
+  touchQuoteDraft(db, file.draftId, now);
+  return result.changes > 0;
+}
+
+export function deleteQuoteDraftFile(
+  db: DatabaseSync,
+  customerId: number,
+  fileId: number,
+  now = Date.now(),
+) {
+  const file = getQuoteDraftFileForCustomer(db, customerId, fileId, now);
+  const result = db.prepare("DELETE FROM quote_draft_files WHERE id = ?").run(file.id);
+  touchQuoteDraft(db, file.draftId, now);
+
+  return result.changes > 0;
+}
+
+export function getQuoteDraftFileForCustomer(
+  db: DatabaseSync,
+  customerId: number,
+  fileId: number,
+  now = Date.now(),
+) {
+  expireQuoteDrafts(db, customerId, now);
+  const file = db
+    .prepare(
+      quoteDraftFileSelectSql(
+        `JOIN quote_drafts ON quote_drafts.id = quote_draft_files.draft_id
+         WHERE quote_draft_files.id = ?
+           AND quote_drafts.customer_id = ?
+           AND quote_drafts.status = 'active'
+           AND quote_drafts.expires_at > ?`,
+      ),
+    )
+    .get(fileId, customerId, now);
+
+  if (!file) {
+    throw new Error("草稿文件不存在或已过期");
+  }
+
+  return normalizeQuoteDraftFileRecord(file) as QuoteDraftFileRecord;
+}
+
+export function markActiveQuoteDraftSubmitted(
+  db: DatabaseSync,
+  customerId: number,
+  now = Date.now(),
+) {
+  expireQuoteDrafts(db, customerId, now);
+  db.prepare(
+    `UPDATE quote_drafts
+     SET status = 'submitted',
+         updated_at = ?
+     WHERE customer_id = ?
+       AND status = 'active'
+       AND expires_at > ?`,
+  ).run(getBeijingTimestamp(), customerId, now);
+}
+
+function getOrCreateActiveQuoteDraft(db: DatabaseSync, customerId: number, now: number) {
+  expireQuoteDrafts(db, customerId, now);
+  const active = getActiveQuoteDraftRecord(db, customerId, now);
+
+  if (active) {
+    return active;
+  }
+
+  const timestamp = getBeijingTimestamp();
+  const result = db
+    .prepare(
+      `INSERT INTO quote_drafts (
+        customer_id,
+        status,
+        expires_at,
+        created_at,
+        updated_at
+      ) VALUES (?, 'active', ?, ?, ?)`,
+    )
+    .run(customerId, now + QUOTE_DRAFT_TTL_MS, timestamp, timestamp);
+
+  return {
+    id: Number(result.lastInsertRowid),
+    customerId,
+    status: "active",
+    expiresAt: now + QUOTE_DRAFT_TTL_MS,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  } satisfies QuoteDraftRecord;
+}
+
+function getActiveQuoteDraftRecord(db: DatabaseSync, customerId: number, now: number) {
+  const draft = db
+    .prepare(
+      `SELECT
+        id,
+        customer_id AS customerId,
+        status,
+        expires_at AS expiresAt,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM quote_drafts
+      WHERE customer_id = ?
+        AND status = 'active'
+        AND expires_at > ?
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 1`,
+    )
+    .get(customerId, now);
+
+  return draft ? normalizeQuoteDraftRecord(draft) : null;
+}
+
+function loadQuoteDraftDetail(db: DatabaseSync, draft: QuoteDraftRecord): QuoteDraftDetail {
+  const files = db
+    .prepare(quoteDraftFileSelectSql("WHERE draft_id = ? ORDER BY created_at ASC, id ASC"))
+    .all(draft.id)
+    .map(normalizeQuoteDraftFileRecord) as QuoteDraftFileRecord[];
+
+  return {
+    ...draft,
+    files,
+  };
+}
+
+function getQuoteDraftFileById(db: DatabaseSync, id: number) {
+  const file = db
+    .prepare(quoteDraftFileSelectSql("WHERE id = ?"))
+    .get(id);
+
+  if (!file) {
+    throw new Error("草稿文件不存在");
+  }
+
+  return normalizeQuoteDraftFileRecord(file) as QuoteDraftFileRecord;
+}
+
+function expireQuoteDrafts(db: DatabaseSync, customerId: number, now: number) {
+  db.prepare(
+    `UPDATE quote_drafts
+     SET status = 'expired',
+         updated_at = ?
+     WHERE customer_id = ?
+       AND status = 'active'
+       AND expires_at <= ?`,
+  ).run(getBeijingTimestamp(), customerId, now);
+}
+
+function touchQuoteDraft(db: DatabaseSync, draftId: number, now: number) {
+  db.prepare(
+    `UPDATE quote_drafts
+     SET expires_at = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  ).run(now + QUOTE_DRAFT_TTL_MS, getBeijingTimestamp(), draftId);
 }
 
 export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): CreatedOrder {
@@ -2532,6 +2958,38 @@ function orderSelectSql(suffix: string) {
   ${suffix}`;
 }
 
+function quoteDraftFileSelectSql(suffix: string) {
+  return `SELECT
+    quote_draft_files.id,
+    quote_draft_files.draft_id AS draftId,
+    quote_draft_files.original_filename AS originalFilename,
+    quote_draft_files.filename,
+    quote_draft_files.filepath,
+    quote_draft_files.filesize,
+    quote_draft_files.material,
+    quote_draft_files.color,
+    quote_draft_files.quantity,
+    quote_draft_files.bounding_box_x AS boundingBoxX,
+    quote_draft_files.bounding_box_y AS boundingBoxY,
+    quote_draft_files.bounding_box_z AS boundingBoxZ,
+    quote_draft_files.slice_status AS sliceStatus,
+    quote_draft_files.error_message AS errorMessage,
+    quote_draft_files.filament_weight_g AS filamentWeightG,
+    quote_draft_files.print_time_seconds AS printTimeSeconds,
+    quote_draft_files.raw_filament_used_mm AS rawFilamentUsedMm,
+    quote_draft_files.raw_filament_used_cm3 AS rawFilamentUsedCm3,
+    quote_draft_files.raw_filament_used_g AS rawFilamentUsedG,
+    quote_draft_files.filament_weight_source AS filamentWeightSource,
+    quote_draft_files.material_density AS materialDensity,
+    quote_draft_files.material_fee AS materialFee,
+    quote_draft_files.time_fee AS timeFee,
+    quote_draft_files.base_print_price AS basePrintPrice,
+    quote_draft_files.created_at AS createdAt,
+    quote_draft_files.updated_at AS updatedAt
+  FROM quote_draft_files
+  ${suffix}`;
+}
+
 function sliceJobSelectSql(suffix: string) {
   return `SELECT
     id,
@@ -2647,6 +3105,14 @@ function normalizeFileRecord(file: unknown) {
     ...record,
     requiresManualConfirmation: Boolean(record.requiresManualConfirmation),
   } as OrderFileRecord;
+}
+
+function normalizeQuoteDraftRecord(draft: unknown) {
+  return draft as QuoteDraftRecord;
+}
+
+function normalizeQuoteDraftFileRecord(file: unknown) {
+  return file as QuoteDraftFileRecord;
 }
 
 function normalizeSliceJobRecord(job: unknown) {

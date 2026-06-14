@@ -4,6 +4,7 @@ import {
   createSliceJob,
   getCustomerById,
   getOrderById,
+  markActiveQuoteDraftSubmitted,
   openDatabase,
   updateSliceJobSuccess,
 } from "@/backend/database";
@@ -263,6 +264,7 @@ export async function POST(request: Request) {
           estimatedPrice: savedFilesWithPackaging[index].estimatedPriceMax || 0,
         });
       });
+      markActiveQuoteDraftSubmitted(db, customer.id);
 
       void notifyAdminNewOrder({
         ...order,

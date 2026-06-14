@@ -5,10 +5,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  QUOTE_DRAFT_TTL_MS,
+  addQuoteDraftFile,
   createOrderWithFile,
   createCustomerAccount,
   createOrderWithFiles,
   createSliceJob,
+  deleteQuoteDraftFile,
+  getActiveQuoteDraft,
   getOrderById,
   getOrderByIdForCustomer,
   getBeijingTimestamp,
@@ -18,6 +22,8 @@ import {
   initDatabase,
   listOrders,
   listOrdersByCustomerId,
+  markActiveQuoteDraftSubmitted,
+  updateQuoteDraftFile,
   updateSliceJobFailure,
   updateSliceJobSuccess,
 } from "../src/backend/database.ts";
@@ -36,12 +42,19 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'quote_drafts', 'quote_draft_files') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
 
-  assert.deepEqual(tables, ["files", "orders", "payment_settings", "slice_jobs"]);
+  assert.deepEqual(tables, [
+    "files",
+    "orders",
+    "payment_settings",
+    "quote_draft_files",
+    "quote_drafts",
+    "slice_jobs",
+  ]);
 
   const fileColumns = db.prepare("PRAGMA table_info(files)").all().map((row) => row.name);
   for (const column of [
@@ -150,6 +163,34 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "updated_at",
   ]) {
     assert.equal(sliceJobColumns.includes(column), true);
+  }
+
+  const quoteDraftColumns = db.prepare("PRAGMA table_info(quote_drafts)").all().map((row) => row.name);
+  for (const column of ["customer_id", "status", "expires_at", "created_at", "updated_at"]) {
+    assert.equal(quoteDraftColumns.includes(column), true);
+  }
+
+  const quoteDraftFileColumns = db.prepare("PRAGMA table_info(quote_draft_files)").all().map((row) => row.name);
+  for (const column of [
+    "draft_id",
+    "original_filename",
+    "filename",
+    "filepath",
+    "filesize",
+    "material",
+    "color",
+    "quantity",
+    "bounding_box_x",
+    "bounding_box_y",
+    "bounding_box_z",
+    "slice_status",
+    "filament_weight_g",
+    "print_time_seconds",
+    "material_fee",
+    "time_fee",
+    "base_print_price",
+  ]) {
+    assert.equal(quoteDraftFileColumns.includes(column), true);
   }
 
   db.close();
@@ -276,6 +317,146 @@ test("saves failed PrusaSlicer quote parsing with clear error message", () => {
     latest?.errorMessage,
     "切片完成，但未解析到重量/时间，请检查 G-code 输出格式。",
   );
+
+  db.close();
+});
+
+test("keeps quote drafts for 24 hours and restores saved slice results", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13800000001",
+    password: "password123",
+    name: "Draft User",
+    wechat: "draft-user",
+    email: "draft@example.com",
+  });
+  const now = Date.UTC(2026, 5, 14, 8, 0, 0);
+
+  const file = addQuoteDraftFile(
+    db,
+    {
+      customerId: customer.id,
+      originalFilename: "fixture.stl",
+      filename: "saved-fixture.stl",
+      filepath: "/uploads/saved-fixture.stl",
+      filesize: 2048,
+      material: "PETG",
+      color: "white",
+      quantity: 2,
+      boundingBoxX: 120.35,
+      boundingBoxY: 80.2,
+      boundingBoxZ: 35.1,
+      sliceStatus: "success",
+      filamentWeightG: 42.5,
+      printTimeSeconds: 7200,
+      rawFilamentUsedMm: null,
+      rawFilamentUsedCm3: 34.2,
+      rawFilamentUsedG: 42.5,
+      filamentWeightSource: "g",
+      materialDensity: 1.27,
+      materialFee: 10.63,
+      timeFee: 12,
+      basePrintPrice: 22.63,
+    },
+    now,
+  );
+
+  let draft = getActiveQuoteDraft(db, customer.id, now + 1000);
+
+  assert.equal(draft?.status, "active");
+  assert.equal(draft?.files.length, 1);
+  assert.equal(draft?.files[0].id, file.id);
+  assert.equal(draft?.files[0].sliceStatus, "success");
+  assert.equal(draft?.files[0].filamentWeightG, 42.5);
+  assert.equal(draft?.files[0].printTimeSeconds, 7200);
+  assert.equal(draft?.files[0].boundingBoxX, 120.35);
+
+  updateQuoteDraftFile(
+    db,
+    customer.id,
+    file.id,
+    {
+      material: "ABS",
+      color: "black",
+      quantity: 4,
+      boundingBoxX: 121,
+      boundingBoxY: 81,
+      boundingBoxZ: 36,
+    },
+    now + 2000,
+  );
+  draft = getActiveQuoteDraft(db, customer.id, now + 3000);
+
+  assert.equal(draft?.files[0].material, "ABS");
+  assert.equal(draft?.files[0].color, "black");
+  assert.equal(draft?.files[0].quantity, 4);
+  assert.equal(draft?.files[0].filamentWeightG, 42.5);
+  assert.equal(draft?.files[0].boundingBoxX, 121);
+  assert.equal(draft?.expiresAt, now + 2000 + QUOTE_DRAFT_TTL_MS);
+
+  assert.equal(getActiveQuoteDraft(db, customer.id, now + 2000 + QUOTE_DRAFT_TTL_MS + 1), null);
+
+  db.close();
+});
+
+test("removes quote draft files and clears active draft after order submit", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13800000002",
+    password: "password123",
+    name: "Submit User",
+    wechat: "submit-user",
+    email: "submit@example.com",
+  });
+  const now = Date.UTC(2026, 5, 14, 9, 0, 0);
+  const first = addQuoteDraftFile(
+    db,
+    {
+      customerId: customer.id,
+      originalFilename: "first.stl",
+      filename: "first-saved.stl",
+      filepath: "/uploads/first-saved.stl",
+      filesize: 1024,
+      material: "PETG",
+      color: "white",
+      quantity: 1,
+      sliceStatus: "success",
+      filamentWeightG: 12,
+      printTimeSeconds: 1800,
+      materialFee: 3,
+      timeFee: 4,
+      basePrintPrice: 7,
+    },
+    now,
+  );
+
+  assert.equal(deleteQuoteDraftFile(db, customer.id, first.id, now + 1000), true);
+  assert.equal(getActiveQuoteDraft(db, customer.id, now + 2000)?.files.length, 0);
+
+  addQuoteDraftFile(
+    db,
+    {
+      customerId: customer.id,
+      originalFilename: "second.stl",
+      filename: "second-saved.stl",
+      filepath: "/uploads/second-saved.stl",
+      filesize: 2048,
+      material: "PETG",
+      color: "white",
+      quantity: 1,
+      sliceStatus: "success",
+      filamentWeightG: 18,
+      printTimeSeconds: 2400,
+      materialFee: 4,
+      timeFee: 5,
+      basePrintPrice: 9,
+    },
+    now + 3000,
+  );
+
+  assert.equal(getActiveQuoteDraft(db, customer.id, now + 4000)?.files.length, 1);
+  markActiveQuoteDraftSubmitted(db, customer.id, now + 5000);
+  assert.equal(getActiveQuoteDraft(db, customer.id, now + 6000), null);
 
   db.close();
 });
