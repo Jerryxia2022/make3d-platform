@@ -28,6 +28,13 @@ export type OrderInput = {
   recipientPhone?: string;
   addressRegion?: string;
   addressDetail?: string;
+  shippingProvince?: string | null;
+  shippingCity?: string | null;
+  shippingDistrict?: string | null;
+  shippingDetailAddress?: string | null;
+  shippingPostalCode?: string | null;
+  shippingLabel?: string | null;
+  shippingAddressSnapshot?: string | null;
   shippingRemark?: string;
   printFeeTotal?: number;
   payablePrice?: number;
@@ -154,6 +161,30 @@ export type QuoteDraftFileRecord = {
 
 export type QuoteDraftDetail = QuoteDraftRecord & {
   files: QuoteDraftFileRecord[];
+};
+
+export const CUSTOMER_ADDRESS_LIMIT = 5;
+
+export type CustomerAddressInput = {
+  recipientName: string;
+  phone: string;
+  province: string;
+  city: string;
+  district: string;
+  detailAddress: string;
+  postalCode?: string | null;
+  label?: string | null;
+  isDefault?: boolean;
+};
+
+export type CustomerAddressRecord = CustomerAddressInput & {
+  id: number;
+  customerId: number;
+  postalCode: string | null;
+  label: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SingleFileOrderInput = Omit<OrderInput, "files"> & {
@@ -404,6 +435,13 @@ export type OrderRecord = {
   recipientPhone: string | null;
   addressRegion: string | null;
   addressDetail: string | null;
+  shippingProvince: string | null;
+  shippingCity: string | null;
+  shippingDistrict: string | null;
+  shippingDetailAddress: string | null;
+  shippingPostalCode: string | null;
+  shippingLabel: string | null;
+  shippingAddressSnapshot: string | null;
   shippingRemark: string | null;
   printFeeTotal: number | null;
   payablePrice: number | null;
@@ -547,6 +585,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
       recipient_phone TEXT,
       address_region TEXT,
       address_detail TEXT,
+      shipping_province TEXT,
+      shipping_city TEXT,
+      shipping_district TEXT,
+      shipping_detail_address TEXT,
+      shipping_postal_code TEXT,
+      shipping_label TEXT,
+      shipping_address_snapshot TEXT,
       shipping_remark TEXT,
       print_fee_total REAL,
       payable_price REAL,
@@ -588,6 +633,23 @@ export function initDatabase(dbPath = getDatabasePath()) {
       email TEXT,
       default_address TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_addresses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      recipient_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      province TEXT NOT NULL,
+      city TEXT NOT NULL,
+      district TEXT NOT NULL,
+      detail_address TEXT NOT NULL,
+      postal_code TEXT,
+      label TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -839,6 +901,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["recipient_phone", "TEXT"],
     ["address_region", "TEXT"],
     ["address_detail", "TEXT"],
+    ["shipping_province", "TEXT"],
+    ["shipping_city", "TEXT"],
+    ["shipping_district", "TEXT"],
+    ["shipping_detail_address", "TEXT"],
+    ["shipping_postal_code", "TEXT"],
+    ["shipping_label", "TEXT"],
+    ["shipping_address_snapshot", "TEXT"],
     ["shipping_remark", "TEXT"],
     ["print_fee_total", "REAL"],
     ["payable_price", "REAL"],
@@ -867,6 +936,24 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["admin_remark", "TEXT"],
     ["updated_at", "DATETIME"],
   ]);
+  ensureColumns(db, "customer_addresses", [
+    ["customer_id", "INTEGER"],
+    ["recipient_name", "TEXT"],
+    ["phone", "TEXT"],
+    ["province", "TEXT"],
+    ["city", "TEXT"],
+    ["district", "TEXT"],
+    ["detail_address", "TEXT"],
+    ["postal_code", "TEXT"],
+    ["label", "TEXT"],
+    ["is_default", "INTEGER NOT NULL DEFAULT 0"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id, updated_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_addresses_default ON customer_addresses(customer_id) WHERE is_default = 1;
+  `);
   ensureColumns(db, "order_status_logs", [["note", "TEXT"]]);
   ensureColumns(db, "payment_settings", [
     ["wechat_qr_path", "TEXT"],
@@ -1295,6 +1382,244 @@ function touchQuoteDraft(db: DatabaseSync, draftId: number, now: number) {
   ).run(now + QUOTE_DRAFT_TTL_MS, getBeijingTimestamp(), draftId);
 }
 
+export function listCustomerAddresses(db: DatabaseSync, customerId: number): CustomerAddressRecord[] {
+  return db
+    .prepare(
+      customerAddressSelectSql(
+        "WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC, id DESC",
+      ),
+    )
+    .all(customerId)
+    .map(normalizeCustomerAddressRecord) as CustomerAddressRecord[];
+}
+
+export function getCustomerAddressByIdForCustomer(
+  db: DatabaseSync,
+  customerId: number,
+  addressId: number,
+): CustomerAddressRecord {
+  const address = db
+    .prepare(customerAddressSelectSql("WHERE id = ? AND customer_id = ?"))
+    .get(addressId, customerId);
+
+  if (!address) {
+    throw new Error("收货地址不存在");
+  }
+
+  return normalizeCustomerAddressRecord(address) as CustomerAddressRecord;
+}
+
+export function createCustomerAddress(
+  db: DatabaseSync,
+  customerId: number,
+  input: CustomerAddressInput,
+): CustomerAddressRecord {
+  const count = getCustomerAddressCount(db, customerId);
+
+  if (count >= CUSTOMER_ADDRESS_LIMIT) {
+    throw new Error("最多可保存 5 个常用地址，如需新增请先删除旧地址。");
+  }
+
+  const normalized = normalizeCustomerAddressInput(input);
+  const shouldDefault = count === 0 || Boolean(input.isDefault);
+  const now = getBeijingTimestamp();
+
+  try {
+    db.exec("BEGIN");
+    if (shouldDefault) {
+      clearCustomerDefaultAddress(db, customerId);
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO customer_addresses (
+          customer_id,
+          recipient_name,
+          phone,
+          province,
+          city,
+          district,
+          detail_address,
+          postal_code,
+          label,
+          is_default,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        customerId,
+        normalized.recipientName,
+        normalized.phone,
+        normalized.province,
+        normalized.city,
+        normalized.district,
+        normalized.detailAddress,
+        normalized.postalCode ?? null,
+        normalized.label ?? null,
+        shouldDefault ? 1 : 0,
+        now,
+        now,
+      );
+
+    db.exec("COMMIT");
+    return getCustomerAddressByIdForCustomer(db, customerId, Number(result.lastInsertRowid));
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function updateCustomerAddress(
+  db: DatabaseSync,
+  customerId: number,
+  addressId: number,
+  input: CustomerAddressInput,
+): CustomerAddressRecord {
+  getCustomerAddressByIdForCustomer(db, customerId, addressId);
+  const normalized = normalizeCustomerAddressInput(input);
+  const now = getBeijingTimestamp();
+
+  try {
+    db.exec("BEGIN");
+    if (input.isDefault) {
+      clearCustomerDefaultAddress(db, customerId);
+    }
+
+    db
+      .prepare(
+        `UPDATE customer_addresses
+         SET recipient_name = ?,
+             phone = ?,
+             province = ?,
+             city = ?,
+             district = ?,
+             detail_address = ?,
+             postal_code = ?,
+             label = ?,
+             is_default = CASE WHEN ? THEN 1 ELSE is_default END,
+             updated_at = ?
+         WHERE id = ? AND customer_id = ?`,
+      )
+      .run(
+        normalized.recipientName,
+        normalized.phone,
+        normalized.province,
+        normalized.city,
+        normalized.district,
+        normalized.detailAddress,
+        normalized.postalCode ?? null,
+        normalized.label ?? null,
+        input.isDefault ? 1 : 0,
+        now,
+        addressId,
+        customerId,
+      );
+
+    ensureCustomerHasDefaultAddress(db, customerId);
+    db.exec("COMMIT");
+    return getCustomerAddressByIdForCustomer(db, customerId, addressId);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function deleteCustomerAddress(db: DatabaseSync, customerId: number, addressId: number) {
+  const address = getCustomerAddressByIdForCustomer(db, customerId, addressId);
+
+  try {
+    db.exec("BEGIN");
+    db.prepare("DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?").run(addressId, customerId);
+
+    if (address.isDefault) {
+      ensureCustomerHasDefaultAddress(db, customerId);
+    }
+
+    db.exec("COMMIT");
+    return true;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function setCustomerDefaultAddress(
+  db: DatabaseSync,
+  customerId: number,
+  addressId: number,
+): CustomerAddressRecord {
+  getCustomerAddressByIdForCustomer(db, customerId, addressId);
+
+  try {
+    db.exec("BEGIN");
+    clearCustomerDefaultAddress(db, customerId);
+    db
+      .prepare(
+        `UPDATE customer_addresses
+         SET is_default = 1,
+             updated_at = ?
+         WHERE id = ? AND customer_id = ?`,
+      )
+      .run(getBeijingTimestamp(), addressId, customerId);
+    db.exec("COMMIT");
+    return getCustomerAddressByIdForCustomer(db, customerId, addressId);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function getCustomerAddressCount(db: DatabaseSync, customerId: number) {
+  const row = db
+    .prepare("SELECT COUNT(*) AS count FROM customer_addresses WHERE customer_id = ?")
+    .get(customerId) as { count?: number } | undefined;
+
+  return row?.count || 0;
+}
+
+function clearCustomerDefaultAddress(db: DatabaseSync, customerId: number) {
+  db.prepare("UPDATE customer_addresses SET is_default = 0 WHERE customer_id = ?").run(customerId);
+}
+
+function ensureCustomerHasDefaultAddress(db: DatabaseSync, customerId: number) {
+  const defaultAddress = db
+    .prepare("SELECT id FROM customer_addresses WHERE customer_id = ? AND is_default = 1 LIMIT 1")
+    .get(customerId);
+
+  if (defaultAddress) {
+    return;
+  }
+
+  const latest = db
+    .prepare(
+      `SELECT id
+       FROM customer_addresses
+       WHERE customer_id = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(customerId) as { id?: number } | undefined;
+
+  if (latest?.id) {
+    db.prepare("UPDATE customer_addresses SET is_default = 1 WHERE id = ?").run(latest.id);
+  }
+}
+
+function normalizeCustomerAddressInput(input: CustomerAddressInput): CustomerAddressInput {
+  return {
+    recipientName: input.recipientName.trim(),
+    phone: input.phone.trim(),
+    province: input.province.trim(),
+    city: input.city.trim(),
+    district: input.district.trim(),
+    detailAddress: input.detailAddress.trim(),
+    postalCode: input.postalCode?.trim() || null,
+    label: input.label?.trim() || null,
+    isDefault: Boolean(input.isDefault),
+  };
+}
+
 export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): CreatedOrder {
   if (input.files.length === 0) {
     throw new Error("请上传模型文件");
@@ -1333,6 +1658,13 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           recipient_phone,
           address_region,
           address_detail,
+          shipping_province,
+          shipping_city,
+          shipping_district,
+          shipping_detail_address,
+          shipping_postal_code,
+          shipping_label,
+          shipping_address_snapshot,
           shipping_remark,
           print_fee_total,
           payable_price,
@@ -1352,7 +1684,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           status,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -1379,6 +1711,13 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.recipientPhone || null,
         input.addressRegion || null,
         input.addressDetail || null,
+        input.shippingProvince || null,
+        input.shippingCity || null,
+        input.shippingDistrict || null,
+        input.shippingDetailAddress || null,
+        input.shippingPostalCode || null,
+        input.shippingLabel || null,
+        input.shippingAddressSnapshot || null,
         input.shippingRemark || null,
         input.printFeeTotal ?? null,
         input.payablePrice ?? null,
@@ -2924,6 +3263,13 @@ function orderSelectSql(suffix: string) {
     recipient_phone AS recipientPhone,
     address_region AS addressRegion,
     address_detail AS addressDetail,
+    shipping_province AS shippingProvince,
+    shipping_city AS shippingCity,
+    shipping_district AS shippingDistrict,
+    shipping_detail_address AS shippingDetailAddress,
+    shipping_postal_code AS shippingPostalCode,
+    shipping_label AS shippingLabel,
+    shipping_address_snapshot AS shippingAddressSnapshot,
     shipping_remark AS shippingRemark,
     print_fee_total AS printFeeTotal,
     payable_price AS payablePrice,
@@ -3033,6 +3379,25 @@ function customerSelectSql(suffix: string) {
   ${suffix}`;
 }
 
+function customerAddressSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    customer_id AS customerId,
+    recipient_name AS recipientName,
+    phone,
+    province,
+    city,
+    district,
+    detail_address AS detailAddress,
+    postal_code AS postalCode,
+    label,
+    is_default AS isDefault,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM customer_addresses
+  ${suffix}`;
+}
+
 function wechatAccountSelectSql(suffix: string) {
   return `SELECT
     id,
@@ -3113,6 +3478,14 @@ function normalizeQuoteDraftRecord(draft: unknown) {
 
 function normalizeQuoteDraftFileRecord(file: unknown) {
   return file as QuoteDraftFileRecord;
+}
+
+function normalizeCustomerAddressRecord(address: unknown) {
+  const record = address as Record<string, unknown> & { isDefault: 0 | 1 | boolean };
+  return {
+    ...record,
+    isDefault: Boolean(record.isDefault),
+  } as CustomerAddressRecord;
 }
 
 function normalizeSliceJobRecord(job: unknown) {

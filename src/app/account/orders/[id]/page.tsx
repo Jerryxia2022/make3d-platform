@@ -85,6 +85,8 @@ export default async function CustomerOrderDetailPage({
                 <Detail label="收件人" value={order.recipientName || "-"} />
                 <Detail label="收件手机号" value={order.recipientPhone || "-"} />
                 <Detail label="收货地址" value={formatAddress(order)} />
+                <Detail label="地址标签" value={order.shippingLabel || "-"} />
+                <Detail label="邮编" value={order.shippingPostalCode || "-"} />
                 <Detail label="配送备注" value={order.shippingRemark || "-"} />
                 <Detail label="快递公司" value={order.shippingCompany || "-"} />
                 <Detail label="物流单号" value={order.trackingNumber || "-"} />
@@ -360,7 +362,16 @@ function formatLeadTime(value?: number | null) {
 }
 
 function formatAddress(order: OrderDetail) {
-  return [order.addressRegion, order.addressDetail].filter(Boolean).join(" ") || "-";
+  const snapshotAddress = [
+    order.shippingProvince,
+    order.shippingCity,
+    order.shippingDistrict,
+    order.shippingDetailAddress,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return snapshotAddress || [order.addressRegion, order.addressDetail].filter(Boolean).join(" ") || "-";
 }
 
 function getFileDimensions(file: OrderFileRecord) {

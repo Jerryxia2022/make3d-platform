@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import {
   createQuoteFileId,
@@ -20,9 +21,13 @@ import {
 import {
   isValidMainlandPhone,
   mainlandPhoneErrorMessage,
-  mainlandPhoneHtmlPattern,
 } from "@/shared/phoneValidation";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
+import {
+  formatCustomerAddress,
+  getDefaultAddress,
+  type CustomerAddressView,
+} from "@/frontend/lib/customer-addresses";
 
 const materials = ["PLA", "PETG", "ABS"];
 const colors = ["黑", "白", "红", "蓝"];
@@ -32,7 +37,6 @@ const SLICE_MATERIAL = "PETG";
 const DEFAULT_COLOR = "白";
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const customerNamePattern = "(?:[\\u4e00-\\u9fa5]{2,}|[A-Za-z][A-Za-z\\s'-]{3,})";
 const guestUploadGateMessage = "请先登录后使用在线上传和自动报价功能。";
 
 type SelectedModelFile = SelectedQuoteFile & {
@@ -117,17 +121,21 @@ type QuoteFormCustomer = {
 };
 
 export function QuoteForm({
+  addresses = [],
   customer,
   disabled = false,
 }: {
+  addresses?: CustomerAddressView[];
   customer?: QuoteFormCustomer | null;
   disabled?: boolean;
 }) {
   const router = useRouter();
+  const defaultAddress = getDefaultAddress(addresses);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<SelectedModelFile[]>([]);
   const [stlDimensions, setStlDimensions] = useState<Record<string, QuoteDimensions>>({});
   const [sliceQuotes, setSliceQuotes] = useState<Record<string, SliceQuoteState>>({});
+  const [selectedAddressId, setSelectedAddressId] = useState(defaultAddress ? String(defaultAddress.id) : "");
   const filesRef = useRef<SelectedModelFile[]>([]);
   const stlDimensionsRef = useRef<Record<string, QuoteDimensions>>({});
   const sliceQuotesRef = useRef<Record<string, SliceQuoteState>>({});
@@ -135,6 +143,11 @@ export function QuoteForm({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const selectedAddress = useMemo(
+    () => addresses.find((address) => String(address.id) === selectedAddressId) || null,
+    [addresses, selectedAddressId],
+  );
+  const hasAddresses = addresses.length > 0;
   const fileEstimates = useMemo(() => estimateFiles(files), [files]);
   const orderSummary = useMemo(
     () => buildOrderSummary(files, fileEstimates, sliceQuotes, shippingMethod),
@@ -579,6 +592,11 @@ export function QuoteForm({
       return;
     }
 
+    if (!hasAddresses || !selectedAddress) {
+      setError("请先添加收货地址后再提交订单。");
+      return;
+    }
+
     if (!validateFileQuantities(files)) {
       setError("数量必须是 1-1000 的整数");
       return;
@@ -616,10 +634,9 @@ export function QuoteForm({
       formData.delete("savedFilenames");
       formData.delete("savedFilepaths");
       formData.delete("savedFilesizes");
-      formData.set("recipientName", getRequiredFormValue(formData, "customerName"));
+      formData.set("customerName", customer?.name || "");
       formData.set("phone", phone);
-      formData.set("recipientPhone", phone);
-      formData.set("addressRegion", "-");
+      formData.set("addressId", String(selectedAddress.id));
       formData.set("shippingRemark", "");
 
       for (const item of files) {
@@ -877,34 +894,21 @@ export function QuoteForm({
       )}
 
       <section className="border border-ink/10 bg-white/70 p-5">
-        <h2 className="text-lg font-bold">收货地址信息</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold">选择收货地址</h2>
+            <p className="mt-2 text-sm text-graphite">
+              报价页只能选择地址簿中的收货地址，地址修改请进入账户地址簿。
+            </p>
+          </div>
+          <Link className="text-sm font-semibold text-coral" href="/account/addresses">
+            管理地址簿
+          </Link>
+        </div>
         <input name="wechat" type="hidden" defaultValue={customer?.wechat || ""} />
         <input name="email" type="hidden" defaultValue={customer?.email || ""} />
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <TextField
-            autoComplete="name"
-            defaultValue={customer?.name || ""}
-            disabled={disabled}
-            label="姓名"
-            name="customerName"
-            pattern={customerNamePattern}
-            required
-            title="姓名必填：至少2个汉字，或至少4个英文字母"
-          />
-          <TextField
-            autoComplete="tel"
-            defaultValue={customer?.phone || ""}
-            disabled={disabled}
-            inputMode="numeric"
-            label="手机号"
-            maxLength={11}
-            name="phone"
-            pattern={mainlandPhoneHtmlPattern}
-            required
-            title={mainlandPhoneErrorMessage}
-            type="tel"
-          />
-        </div>
+        <input name="customerName" type="hidden" defaultValue={customer?.name || ""} />
+        <input name="phone" type="hidden" defaultValue={customer?.phone || ""} />
 
         <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
           配送方式
@@ -924,16 +928,60 @@ export function QuoteForm({
           </select>
         </label>
 
-        <label className="mt-4 block text-sm font-semibold">
-          收货地址
-          <textarea
-          className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
-            disabled={disabled}
-            name="addressDetail"
-            placeholder="填写省市区、详细地址、收件说明等"
-            required
-          />
-        </label>
+        {hasAddresses ? (
+          <>
+            <label className="mt-4 block text-sm font-semibold" htmlFor="addressId">
+              收货地址
+              <select
+                className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                disabled={disabled}
+                id="addressId"
+                name="addressId"
+                onChange={(event) => setSelectedAddressId(event.target.value)}
+                required
+                value={selectedAddressId}
+              >
+                {addresses.map((address) => (
+                  <option key={address.id} value={address.id}>
+                    {address.label ? `${address.label} - ` : ""}
+                    {address.recipientName} / {address.phone} / {formatCustomerAddress(address)}
+                    {address.isDefault ? " / 默认地址" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {selectedAddress ? (
+              <div className="mt-4 border border-ink/10 bg-white p-4 text-sm">
+                <div className="flex flex-wrap gap-2">
+                  {selectedAddress.label ? (
+                    <span className="border border-ink/10 bg-paper px-2 py-1 text-xs font-bold text-ink">
+                      {selectedAddress.label}
+                    </span>
+                  ) : null}
+                  {selectedAddress.isDefault ? (
+                    <span className="border border-coral/30 bg-coral/10 px-2 py-1 text-xs font-bold text-coral">
+                      默认地址
+                    </span>
+                  ) : null}
+                </div>
+                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <AddressPreviewItem label="收件人" value={selectedAddress.recipientName} />
+                  <AddressPreviewItem label="电话" value={selectedAddress.phone} />
+                  <AddressPreviewItem label="地址" value={formatCustomerAddress(selectedAddress)} wide />
+                  <AddressPreviewItem label="邮编" value={selectedAddress.postalCode || "-"} />
+                </dl>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="mt-4 border border-coral/30 bg-coral/10 p-4">
+            <p className="text-sm font-semibold text-coral">请先添加收货地址后再提交订单。</p>
+            <Link className="mt-3 inline-flex bg-ink px-4 py-2 text-sm font-semibold text-white" href="/account/addresses">
+              添加地址
+            </Link>
+          </div>
+        )}
 
         <label className="mt-4 block text-sm font-semibold">
           备注
@@ -991,7 +1039,7 @@ export function QuoteForm({
 
       <button
         className="w-full bg-ink px-5 py-3 font-semibold text-white transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/60"
-        disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled}
+        disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled || !hasAddresses}
         type="submit"
       >
         {isSubmitted
@@ -1078,51 +1126,20 @@ function QuoteMetric({
   );
 }
 
-function TextField({
-  autoComplete,
-  defaultValue,
-  disabled,
-  helpText,
-  inputMode,
+function AddressPreviewItem({
   label,
-  maxLength,
-  name,
-  pattern,
-  required,
-  title,
-  type = "text",
+  value,
+  wide = false,
 }: {
-  autoComplete?: string;
-  defaultValue?: string;
-  disabled?: boolean;
-  helpText?: string;
-  inputMode?: "email" | "numeric" | "search" | "tel" | "text" | "url";
   label: string;
-  maxLength?: number;
-  name: string;
-  pattern?: string;
-  required?: boolean;
-  title?: string;
-  type?: string;
+  value: string;
+  wide?: boolean;
 }) {
   return (
-    <label className="block text-sm font-semibold">
-      {label}
-      <input
-        autoComplete={autoComplete}
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
-        defaultValue={defaultValue}
-        disabled={disabled}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        name={name}
-        pattern={pattern}
-        required={required}
-        title={title}
-        type={type}
-      />
-      {helpText ? <span className="mt-2 block text-xs leading-5 text-graphite">{helpText}</span> : null}
-    </label>
+    <div className={wide ? "sm:col-span-2" : ""}>
+      <dt className="text-xs font-semibold text-graphite">{label}</dt>
+      <dd className="mt-1 font-semibold text-ink">{value}</dd>
+    </div>
   );
 }
 

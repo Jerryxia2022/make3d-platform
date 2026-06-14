@@ -112,6 +112,8 @@ test("customer account center shows profile, compact orders, and owned order det
   assert.doesNotMatch(accountSource, /我的历史报价/);
   assert.match(accountSource, /修改密码/);
   assert.match(accountSource, /ChangePasswordForm/);
+  assert.match(accountSource, /\/account\/addresses/);
+  assert.match(accountSource, /管理地址簿/);
   assert.match(accountSource, /\/account\/orders\/\$\{order\.id\}/);
   assert.match(accountSource, /formatFileCount/);
   assert.match(accountSource, /formatMoney\(order\.finalPrice \?\? order\.payablePrice/);
@@ -214,12 +216,53 @@ test("customer account page routes and APIs exist", async () => {
     assertFileExists("src/app/account/login/page.tsx"),
     assertFileExists("src/app/account/forgot-password/page.tsx"),
     assertFileExists("src/app/account/page.tsx"),
+    assertFileExists("src/app/account/addresses/page.tsx"),
     assertFileExists("src/app/api/account/register/route.ts"),
     assertFileExists("src/app/api/account/login/route.ts"),
     assertFileExists("src/app/api/account/logout/route.ts"),
     assertFileExists("src/app/api/account/me/route.ts"),
     assertFileExists("src/app/api/account/forgot-password/route.ts"),
+    assertFileExists("src/app/api/account/addresses/route.ts"),
+    assertFileExists("src/app/api/account/addresses/[id]/route.ts"),
+    assertFileExists("src/app/api/account/addresses/[id]/default/route.ts"),
   ]);
+});
+
+test("customer address book page and APIs manage owned addresses only", async () => {
+  const pageSource = await readSource("src/app/account/addresses/page.tsx");
+  const managerSource = await readSource("src/frontend/components/AddressBookManager.tsx");
+  const addressApiSource = await readSource("src/app/api/account/addresses/route.ts");
+  const addressItemApiSource = await readSource("src/app/api/account/addresses/[id]/route.ts");
+  const addressDefaultApiSource = await readSource("src/app/api/account/addresses/[id]/default/route.ts");
+  const databaseSource = await readSource("src/backend/database.ts");
+
+  assert.match(pageSource, /redirect\("\/account\/login"\)/);
+  assert.match(pageSource, /listCustomerAddresses/);
+  assert.match(pageSource, /AddressBookManager/);
+  assert.match(managerSource, /最多可保存 5 个常用地址/);
+  assert.match(managerSource, /默认地址/);
+  assert.match(managerSource, /确定删除该地址吗？/);
+  assert.match(managerSource, /\/api\/account\/addresses\/\$\{address\.id\}\/default/);
+  assert.match(managerSource, /mainlandPhoneHtmlPattern/);
+  assert.match(managerSource, /maxLength=\{10\}/);
+
+  assert.match(addressApiSource, /getCustomerFromRequestCookie/);
+  assert.match(addressApiSource, /createCustomerAddress/);
+  assert.match(addressApiSource, /listCustomerAddresses/);
+  assert.match(addressApiSource, /手机号必须为中国大陆 11 位手机号/);
+  assert.match(addressApiSource, /地址标签最多 10 个字符/);
+  assert.match(addressItemApiSource, /updateCustomerAddress/);
+  assert.match(addressItemApiSource, /deleteCustomerAddress/);
+  assert.match(addressItemApiSource, /session\.customerId/);
+  assert.match(addressDefaultApiSource, /setCustomerDefaultAddress/);
+  assert.match(addressDefaultApiSource, /session\.customerId/);
+
+  assert.match(databaseSource, /CREATE TABLE IF NOT EXISTS customer_addresses/);
+  assert.match(databaseSource, /CUSTOMER_ADDRESS_LIMIT = 5/);
+  assert.match(databaseSource, /idx_customer_addresses_default/);
+  assert.match(databaseSource, /createCustomerAddress/);
+  assert.match(databaseSource, /setCustomerDefaultAddress/);
+  assert.match(databaseSource, /ensureCustomerHasDefaultAddress/);
 });
 
 test("wechat account binding explains keyword service mode", async () => {
@@ -249,15 +292,19 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(quoteSource, /disabled={!customer}/);
   assert.match(quoteSource, /quoteCustomer/);
   assert.match(quoteSource, /customer={quoteCustomer}/);
+  assert.match(quoteSource, /listCustomerAddresses/);
+  assert.match(quoteSource, /addresses={addresses}/);
   assert.match(quoteSource, /登录后可上传模型文件，自动计算打印价格和预计交货期。/);
   assert.match(quoteSource, /xl:grid-cols-\[260px_minmax\(0,1fr\)\]/);
   assert.match(formSource, /disabled = false/);
+  assert.match(formSource, /addresses = \[\]/);
+  assert.match(formSource, /addresses\?: CustomerAddressView\[\]/);
   assert.match(formSource, /customer\?: QuoteFormCustomer/);
   assert.match(formSource, /guestUploadGateMessage/);
   assert.match(formSource, /xl:sticky xl:top-6/);
   assert.match(formSource, /if \(disabled\) \{/);
   assert.match(formSource, /disabled={disabled}/);
-  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses}/);
   assert.match(formSource, /defaultValue={customer\?\.name \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.phone \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.wechat \|\| ""}/);
@@ -266,32 +313,34 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(formSource, /router\.push\(`\/account\/orders\/\$\{result\.id\}\/confirm`\)/);
 });
 
-test("quote form exposes merged contact and shipping fields with customer validation", async () => {
+test("quote form selects saved address book entries instead of editing shipping address", async () => {
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
   const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
 
-  assert.match(formSource, /收货地址信息/);
+  assert.match(formSource, /选择收货地址/);
+  assert.match(formSource, /管理地址簿/);
+  assert.match(formSource, /\/account\/addresses/);
+  assert.match(formSource, /getDefaultAddress\(addresses\)/);
+  assert.match(formSource, /selectedAddressId/);
+  assert.match(formSource, /selectedAddress/);
+  assert.match(formSource, /formatCustomerAddress\(address\)/);
+  assert.match(formSource, /formatCustomerAddress\(selectedAddress\)/);
+  assert.match(formSource, /name="addressId"/);
+  assert.match(formSource, /请先添加收货地址后再提交订单。/);
+  assert.match(formSource, /添加地址/);
   assert.match(formSource, /name="customerName"/);
-  assert.match(formSource, /pattern={customerNamePattern}/);
-  assert.match(formSource, /至少2个汉字，或至少4个英文字母/);
   assert.match(formSource, /name="phone"/);
-  assert.match(formSource, /inputMode="numeric"/);
-  assert.match(formSource, /maxLength=\{11\}/);
-  assert.match(formSource, /pattern={mainlandPhoneHtmlPattern}/);
-  assert.match(formSource, /title={mainlandPhoneErrorMessage}/);
   assert.match(formSource, /isValidMainlandPhone\(phone\)/);
   assert.match(formSource, /name="wechat"/);
   assert.match(formSource, /name="email"/);
   assert.match(formSource, /type="hidden"/);
   assert.match(formSource, /name="shippingMethod"/);
-  assert.match(formSource, /name="addressDetail"/);
   assert.match(formSource, /name="remark"/);
-  assert.match(formSource, /formData\.set\("recipientName", getRequiredFormValue\(formData, "customerName"\)\)/);
-  assert.match(formSource, /formData\.set\("recipientPhone", phone\)/);
-  assert.match(formSource, /formData\.set\("addressRegion", "-"\)/);
+  assert.match(formSource, /formData\.set\("addressId", String\(selectedAddress\.id\)\)/);
   assert.doesNotMatch(formSource, /name="recipientName"/);
   assert.doesNotMatch(formSource, /name="recipientPhone"/);
   assert.doesNotMatch(formSource, /name="addressRegion"/);
+  assert.doesNotMatch(formSource, /name="addressDetail"/);
 
   assert.match(estimateSource, /DEFAULT_LEAD_TIME_MIN_HOURS = 48/);
   assert.match(estimateSource, /DEFAULT_LEAD_TIME_MAX_HOURS = 72/);
@@ -348,7 +397,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.doesNotMatch(formSource, /整单计算报价/);
   assert.doesNotMatch(formSource, /calculateOrderQuote/);
   assert.doesNotMatch(formSource, /请先计算报价/);
-  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses}/);
   assert.match(formSource, /等待计算/);
   assert.match(formSource, /正在计算/);
   assert.match(formSource, /已完成/);
@@ -548,6 +597,13 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   assert.match(detailSource, /recipientPhone/);
   assert.match(detailSource, /addressRegion/);
   assert.match(detailSource, /addressDetail/);
+  assert.match(detailSource, /shippingProvince/);
+  assert.match(detailSource, /shippingCity/);
+  assert.match(detailSource, /shippingDistrict/);
+  assert.match(detailSource, /shippingDetailAddress/);
+  assert.match(detailSource, /shippingPostalCode/);
+  assert.match(detailSource, /shippingLabel/);
+  assert.match(detailSource, /formatShippingAddress/);
   assert.match(detailSource, /shippingRemark/);
   assert.match(detailSource, /assignedPrinter/);
   assert.match(detailSource, /estimatedStartAt/);
@@ -641,10 +697,14 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /packagingFee: estimate\.packagingFee/);
   assert.match(apiSource, /shippingFee: shipping\.amount/);
   assert.match(apiSource, /shippingMethod: getString\(formData, "shippingMethod"\)/);
-  assert.match(apiSource, /recipientName: getString\(formData, "recipientName"\)/);
-  assert.match(apiSource, /recipientPhone,/);
-  assert.match(apiSource, /addressRegion: getString\(formData, "addressRegion"\)/);
-  assert.match(apiSource, /addressDetail: getString\(formData, "addressDetail"\)/);
+  assert.match(apiSource, /getCustomerAddressByIdForCustomer/);
+  assert.match(apiSource, /getPositiveInteger\(formData, "addressId"\)/);
+  assert.match(apiSource, /recipientName: shippingAddress\.recipientName/);
+  assert.match(apiSource, /recipientPhone: shippingAddress\.phone/);
+  assert.match(apiSource, /addressRegion,/);
+  assert.match(apiSource, /addressDetail: shippingAddress\.detailAddress/);
+  assert.match(apiSource, /shippingProvince: shippingAddress\.province/);
+  assert.match(apiSource, /shippingAddressSnapshot: JSON\.stringify\(addressSnapshot\)/);
   assert.match(apiSource, /shippingRemark: getString\(formData, "shippingRemark"\)/);
   assert.match(apiSource, /createOrderWithFiles/);
   assert.match(apiSource, /getSliceQuoteList/);

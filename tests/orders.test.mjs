@@ -5,14 +5,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  CUSTOMER_ADDRESS_LIMIT,
   QUOTE_DRAFT_TTL_MS,
   addQuoteDraftFile,
+  createCustomerAddress,
   createOrderWithFile,
   createCustomerAccount,
   createOrderWithFiles,
   createSliceJob,
+  deleteCustomerAddress,
   deleteQuoteDraftFile,
   getActiveQuoteDraft,
+  getCustomerAddressByIdForCustomer,
   getOrderById,
   getOrderByIdForCustomer,
   getBeijingTimestamp,
@@ -21,8 +25,11 @@ import {
   getSliceJobsByOrderId,
   initDatabase,
   listOrders,
+  listCustomerAddresses,
   listOrdersByCustomerId,
   markActiveQuoteDraftSubmitted,
+  setCustomerDefaultAddress,
+  updateCustomerAddress,
   updateQuoteDraftFile,
   updateSliceJobFailure,
   updateSliceJobSuccess,
@@ -42,12 +49,13 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'quote_drafts', 'quote_draft_files') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'quote_drafts', 'quote_draft_files', 'customer_addresses') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
 
   assert.deepEqual(tables, [
+    "customer_addresses",
     "files",
     "orders",
     "payment_settings",
@@ -96,6 +104,13 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "recipient_phone",
     "address_region",
     "address_detail",
+    "shipping_province",
+    "shipping_city",
+    "shipping_district",
+    "shipping_detail_address",
+    "shipping_postal_code",
+    "shipping_label",
+    "shipping_address_snapshot",
     "shipping_remark",
     "print_fee_total",
     "payable_price",
@@ -193,6 +208,24 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     assert.equal(quoteDraftFileColumns.includes(column), true);
   }
 
+  const addressColumns = db.prepare("PRAGMA table_info(customer_addresses)").all().map((row) => row.name);
+  for (const column of [
+    "customer_id",
+    "recipient_name",
+    "phone",
+    "province",
+    "city",
+    "district",
+    "detail_address",
+    "postal_code",
+    "label",
+    "is_default",
+    "created_at",
+    "updated_at",
+  ]) {
+    assert.equal(addressColumns.includes(column), true);
+  }
+
   db.close();
 });
 
@@ -209,6 +242,146 @@ test("returns payment settings as a plain object for client components", () => {
     taobaoUrl: null,
     otherNote: null,
   });
+
+  db.close();
+});
+
+test("manages customer address book defaults, limits, and ownership", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13810000000",
+    password: "password123",
+    name: "Address User",
+    wechat: "address-user",
+    email: "address@example.com",
+  });
+  const otherCustomer = createCustomerAccount(db, {
+    phone: "13810000001",
+    password: "password123",
+    name: "Other User",
+    wechat: "other-user",
+    email: "other-address@example.com",
+  });
+
+  const first = createCustomerAddress(db, customer.id, makeAddressInput("家", "科技路 1 号"));
+  assert.equal(first.isDefault, true);
+  assert.equal(CUSTOMER_ADDRESS_LIMIT, 5);
+
+  const second = createCustomerAddress(db, customer.id, makeAddressInput("公司", "高新路 2 号"));
+  createCustomerAddress(db, customer.id, makeAddressInput("学校", "长安路 3 号"));
+  createCustomerAddress(db, customer.id, makeAddressInput("工厂", "草堂路 4 号"));
+  createCustomerAddress(db, customer.id, makeAddressInput("备用", "雁塔路 5 号"));
+
+  assert.equal(listCustomerAddresses(db, customer.id).length, 5);
+  assert.throws(
+    () => createCustomerAddress(db, customer.id, makeAddressInput("第六个", "未央路 6 号")),
+    /最多可保存 5 个常用地址/,
+  );
+
+  const defaultAddress = setCustomerDefaultAddress(db, customer.id, second.id);
+  const afterDefault = listCustomerAddresses(db, customer.id);
+  assert.equal(defaultAddress.isDefault, true);
+  assert.equal(afterDefault.filter((address) => address.isDefault).length, 1);
+  assert.equal(afterDefault.find((address) => address.isDefault)?.id, second.id);
+
+  assert.throws(
+    () => getCustomerAddressByIdForCustomer(db, otherCustomer.id, first.id),
+    /收货地址不存在/,
+  );
+  assert.throws(
+    () => updateCustomerAddress(db, otherCustomer.id, first.id, makeAddressInput("越权", "错误路 9 号")),
+    /收货地址不存在/,
+  );
+
+  deleteCustomerAddress(db, customer.id, second.id);
+  const afterDelete = listCustomerAddresses(db, customer.id);
+  assert.equal(afterDelete.length, 4);
+  assert.equal(afterDelete.filter((address) => address.isDefault).length, 1);
+
+  db.close();
+});
+
+test("saves order shipping address snapshot independent of later address edits", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13810000002",
+    password: "password123",
+    name: "Snapshot User",
+    wechat: "snapshot-user",
+    email: "snapshot@example.com",
+  });
+  const address = createCustomerAddress(db, customer.id, {
+    ...makeAddressInput("公司", "科技二路 18 号 A 座"),
+    recipientName: "张三",
+    phone: "13811112222",
+    province: "陕西省",
+    city: "西安市",
+    district: "雁塔区",
+    postalCode: "710000",
+  });
+  const snapshot = {
+    id: address.id,
+    recipientName: address.recipientName,
+    phone: address.phone,
+    province: address.province,
+    city: address.city,
+    district: address.district,
+    detailAddress: address.detailAddress,
+    postalCode: address.postalCode,
+    label: address.label,
+  };
+  const order = createOrderWithFiles(db, {
+    customerId: customer.id,
+    customerName: "Snapshot User",
+    phone: "13810000002",
+    wechat: "snapshot-user",
+    email: "snapshot@example.com",
+    quantity: 1,
+    estimatedPrice: 88,
+    payablePrice: 88,
+    estimatedLeadTimeHours: 36,
+    shippingMethod: "普通快递",
+    recipientName: address.recipientName,
+    recipientPhone: address.phone,
+    addressRegion: `${address.province} ${address.city} ${address.district}`,
+    addressDetail: address.detailAddress,
+    shippingProvince: address.province,
+    shippingCity: address.city,
+    shippingDistrict: address.district,
+    shippingDetailAddress: address.detailAddress,
+    shippingPostalCode: address.postalCode,
+    shippingLabel: address.label,
+    shippingAddressSnapshot: JSON.stringify(snapshot),
+    files: [
+      {
+        filename: "snapshot.stl",
+        filepath: "/uploads/snapshot.stl",
+        filesize: 128,
+        material: "PETG",
+        color: "白",
+        quantity: 1,
+        unitPrice: 88,
+        subtotalPrice: 88,
+      },
+    ],
+  });
+
+  updateCustomerAddress(db, customer.id, address.id, {
+    ...makeAddressInput("新公司", "完全不同的新地址 99 号"),
+    recipientName: "李四",
+    phone: "13833334444",
+  });
+
+  const detail = getOrderById(db, order.id);
+  assert.equal(detail.recipientName, "张三");
+  assert.equal(detail.recipientPhone, "13811112222");
+  assert.equal(detail.shippingProvince, "陕西省");
+  assert.equal(detail.shippingCity, "西安市");
+  assert.equal(detail.shippingDistrict, "雁塔区");
+  assert.equal(detail.shippingDetailAddress, "科技二路 18 号 A 座");
+  assert.equal(detail.shippingPostalCode, "710000");
+  assert.equal(detail.shippingLabel, "公司");
+  assert.match(detail.shippingAddressSnapshot || "", /科技二路 18 号 A 座/);
 
   db.close();
 });
@@ -855,3 +1028,17 @@ test("limits uploads from the same IP to 10 requests per 10 minutes", () => {
   assert.equal(consumeUploadRateLimit("203.0.113.11").allowed, true);
   resetUploadRateLimit();
 });
+
+function makeAddressInput(label, detailAddress) {
+  return {
+    recipientName: "Jerry",
+    phone: "13812345678",
+    province: "陕西省",
+    city: "西安市",
+    district: "雁塔区",
+    detailAddress,
+    postalCode: "",
+    label,
+    isDefault: false,
+  };
+}

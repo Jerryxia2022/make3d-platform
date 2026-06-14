@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   createOrderWithFiles,
   createSliceJob,
+  getCustomerAddressByIdForCustomer,
   getCustomerById,
   getOrderById,
   markActiveQuoteDraftSubmitted,
@@ -30,10 +31,7 @@ const requiredFields = [
   "customerName",
   "phone",
   "shippingMethod",
-  "recipientName",
-  "recipientPhone",
-  "addressRegion",
-  "addressDetail",
+  "addressId",
 ] as const;
 
 export async function POST(request: Request) {
@@ -69,10 +67,15 @@ export async function POST(request: Request) {
     }
 
     const phone = getString(formData, "phone");
-    const recipientPhone = getString(formData, "recipientPhone");
 
-    if (!isValidMainlandPhone(phone) || !isValidMainlandPhone(recipientPhone)) {
+    if (!isValidMainlandPhone(phone)) {
       return NextResponse.json({ error: mainlandPhoneErrorMessage }, { status: 400 });
+    }
+
+    const addressId = getPositiveInteger(formData, "addressId");
+
+    if (!addressId) {
+      return NextResponse.json({ error: "请选择收货地址" }, { status: 400 });
     }
 
     const rawFiles = formData.getAll("modelFiles");
@@ -202,6 +205,22 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "请先登录后提交订单" }, { status: 401 });
       }
 
+      const shippingAddress = getCustomerAddressByIdForCustomer(db, customer.id, addressId);
+      const addressRegion = [shippingAddress.province, shippingAddress.city, shippingAddress.district]
+        .filter(Boolean)
+        .join(" ");
+      const addressSnapshot = {
+        id: shippingAddress.id,
+        recipientName: shippingAddress.recipientName,
+        phone: shippingAddress.phone,
+        province: shippingAddress.province,
+        city: shippingAddress.city,
+        district: shippingAddress.district,
+        detailAddress: shippingAddress.detailAddress,
+        postalCode: shippingAddress.postalCode,
+        label: shippingAddress.label,
+      };
+
       const orderInput = {
         customerId: customer.id,
         customerName: getString(formData, "customerName"),
@@ -225,10 +244,17 @@ export async function POST(request: Request) {
         estimatedLeadTimeHours: exactLeadTimeHours,
         shippingMethod: getString(formData, "shippingMethod"),
         shippingFeeEstimate: shipping.label,
-        recipientName: getString(formData, "recipientName"),
-        recipientPhone,
-        addressRegion: getString(formData, "addressRegion"),
-        addressDetail: getString(formData, "addressDetail"),
+        recipientName: shippingAddress.recipientName,
+        recipientPhone: shippingAddress.phone,
+        addressRegion,
+        addressDetail: shippingAddress.detailAddress,
+        shippingProvince: shippingAddress.province,
+        shippingCity: shippingAddress.city,
+        shippingDistrict: shippingAddress.district,
+        shippingDetailAddress: shippingAddress.detailAddress,
+        shippingPostalCode: shippingAddress.postalCode,
+        shippingLabel: shippingAddress.label,
+        shippingAddressSnapshot: JSON.stringify(addressSnapshot),
         shippingRemark: getString(formData, "shippingRemark"),
         files: savedFilesWithPackaging,
       };
@@ -286,6 +312,11 @@ export async function POST(request: Request) {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getPositiveInteger(formData: FormData, key: string) {
+  const parsed = Number(getString(formData, key));
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function getCustomerFromRequest(request: Request) {

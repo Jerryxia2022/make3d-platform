@@ -57,6 +57,20 @@ export default async function AccountPage() {
           </section>
 
           <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold">地址簿</h2>
+                <p className="mt-2 text-sm text-graphite">
+                  维护常用收货地址，报价下单时只能选择已保存地址。
+                </p>
+              </div>
+              <Link className="bg-ink px-4 py-2 text-sm font-semibold text-white" href="/account/addresses">
+                管理地址簿
+              </Link>
+            </div>
+          </section>
+
+          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
             <h2 className="text-xl font-bold">修改密码</h2>
             <p className="mt-2 text-sm text-graphite">用于保护报价、订单和收货信息。</p>
             <ChangePasswordForm />

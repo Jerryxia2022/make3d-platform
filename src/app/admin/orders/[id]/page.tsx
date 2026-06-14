@@ -187,8 +187,9 @@ export default async function AdminOrderDetailPage({
               <Detail label="预估运费" value={order.shippingFeeEstimate || "-"} />
               <Detail label="收件人" value={order.recipientName || "-"} />
               <Detail label="手机号" value={order.recipientPhone || "-"} />
-              <Detail label="省市区" value={order.addressRegion || "-"} />
-              <Detail label="详细地址" value={order.addressDetail || "-"} />
+              <Detail label="收货地址" value={formatShippingAddress(order)} />
+              <Detail label="地址标签" value={order.shippingLabel || "-"} />
+              <Detail label="邮编" value={order.shippingPostalCode || "-"} />
               <Detail label="配送备注" value={order.shippingRemark || "-"} />
               <Detail label="快递公司" value={order.shippingCompany || "-"} />
               <Detail label="快递单号" value={order.trackingNumber || "-"} />
@@ -458,6 +459,19 @@ function formatOrderLeadTime(order: OrderDetail) {
   const hours = order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
 
   return hours == null ? "-" : `约${hours}小时`;
+}
+
+function formatShippingAddress(order: OrderDetail) {
+  const snapshotAddress = [
+    order.shippingProvince,
+    order.shippingCity,
+    order.shippingDistrict,
+    order.shippingDetailAddress,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return snapshotAddress || [order.addressRegion, order.addressDetail].filter(Boolean).join(" ") || "-";
 }
 
 function formatFilePrice(file: OrderFileRecord) {

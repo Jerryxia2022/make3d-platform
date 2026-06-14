@@ -2,12 +2,24 @@ import { QuoteForm } from "@/frontend/components/QuoteForm";
 import { ContactSection } from "@/frontend/components/ContactSection";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
+import { listCustomerAddresses, openDatabase, type CustomerAddressRecord } from "@/backend/database";
 import Link from "next/link";
 
 const supportedFormats = ["STL", "STEP", "STP"];
 
 export default async function QuotePage() {
   const customer = await getCurrentCustomer();
+  let addresses: CustomerAddressRecord[] = [];
+
+  if (customer) {
+    const db = openDatabase();
+
+    try {
+      addresses = listCustomerAddresses(db, customer.id);
+    } finally {
+      db.close();
+    }
+  }
   const quoteCustomer = customer
     ? {
         name: customer.name,
@@ -69,7 +81,7 @@ export default async function QuotePage() {
           </div>
         </div>
 
-        <QuoteForm customer={quoteCustomer} disabled={!customer} />
+        <QuoteForm addresses={addresses} customer={quoteCustomer} disabled={!customer} />
       </section>
       <ContactSection />
     </main>
