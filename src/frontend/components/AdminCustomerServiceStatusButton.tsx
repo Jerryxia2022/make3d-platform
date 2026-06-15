@@ -39,7 +39,7 @@ export function AdminCustomerServiceStatusButton({
   return (
     <div className="space-y-2">
       <button
-        className="inline-flex bg-ink px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/50"
+        className="btn-primary px-3 py-2 text-xs"
         disabled={disabled || isSubmitting}
         onClick={markHandled}
         type="button"

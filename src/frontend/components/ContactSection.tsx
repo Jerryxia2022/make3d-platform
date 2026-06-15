@@ -7,10 +7,10 @@ const contactItems = [
 
 export function ContactSection() {
   return (
-    <section className="mx-auto w-full max-w-6xl border border-ink/10 bg-white/75 p-6 text-ink shadow-sm">
+    <section className="surface-card mx-auto w-full max-w-6xl p-6 text-ink">
       <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Contact</p>
+          <p className="eyebrow">Contact</p>
           <h2 className="mt-3 text-2xl font-bold">联系 Make3D</h2>
         </div>
         <div>
@@ -19,7 +19,7 @@ export function ContactSection() {
               const [label, value] = item.split("：");
 
               return (
-                <div className="border border-ink/10 bg-white/70 px-4 py-3" key={item}>
+                <div className="metric-tile px-4 py-3" key={item}>
                   <dt className="font-semibold text-ink">{label}</dt>
                   <dd className="mt-1">{value}</dd>
                 </div>

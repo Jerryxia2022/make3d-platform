@@ -8,7 +8,7 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen px-6 py-10 text-ink">
       <CustomerAuthBar />
-      <section className="mx-auto max-w-xl border border-ink/10 bg-white/80 p-6 shadow-sm">
+      <section className="surface-card mx-auto max-w-xl p-6">
         <div className="mb-6 flex justify-center">
           <BrandLogo size="small" />
         </div>
@@ -35,7 +35,7 @@ export default function RegisterPage() {
             required
           />
           <Field helpText="邮箱建议填写，用于找回密码。" label="邮箱" name="email" type="email" />
-          <button className="w-full bg-ink px-5 py-3 font-semibold text-white" type="submit">
+          <button className="btn-primary w-full px-5 py-3" type="submit">
             注册
           </button>
         </form>
@@ -61,7 +61,7 @@ function Field({
     <label className="block text-sm font-semibold">
       {label}
       <input
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+        className="field-input mt-2 py-3"
         name={name}
         {...props}
       />

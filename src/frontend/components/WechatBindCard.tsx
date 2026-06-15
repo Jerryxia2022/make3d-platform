@@ -45,7 +45,7 @@ export function WechatBindCard({
   }
 
   return (
-    <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+    <section className="surface-card mt-8 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- Public brand icon is a fixed SVG used as a compact account badge. */}
@@ -60,8 +60,8 @@ export function WechatBindCard({
         <span
           className={
             bound
-              ? "inline-flex border border-mint/30 bg-mint/10 px-3 py-1 text-xs font-bold text-ink"
-              : "inline-flex border border-coral/30 bg-coral/10 px-3 py-1 text-xs font-bold text-coral"
+              ? "status-pill status-mint"
+              : "status-pill status-orange"
           }
         >
           {bound ? "已绑定" : "未绑定"}
@@ -75,7 +75,7 @@ export function WechatBindCard({
             <WechatMetric label="订阅状态" value={bound ? (subscribed ? "已关注" : "已取消关注") : "-"} />
             <WechatMetric label="绑定码有效期" value={expiresAt ? formatExpiresAt(expiresAt) : "-"} />
           </div>
-          <div className="mt-4 border border-ink/10 bg-white px-4 py-3 text-sm">
+          <div className="surface-soft mt-4 px-4 py-3 text-sm">
             <p className="font-semibold text-ink">公众号关键词</p>
             <ul className="mt-2 grid gap-2 leading-6 text-graphite md:grid-cols-2">
               <li>发送【报价】获取在线报价入口</li>
@@ -86,11 +86,11 @@ export function WechatBindCard({
             </ul>
           </div>
         </div>
-        <div className="border border-ink/10 bg-paper/60 p-4">
+        <div className="metric-tile p-4">
           <p className="text-xs font-semibold text-graphite">当前绑定码</p>
           <p className="mt-2 text-2xl font-black tracking-[0.12em] text-ink">{bindCode || "未生成"}</p>
           <button
-            className="mt-4 w-full bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-graphite/60"
+            className="btn-primary mt-4 w-full px-4 py-2"
             disabled={isSubmitting}
             onClick={generateBindCode}
             type="button"
@@ -106,7 +106,7 @@ export function WechatBindCard({
 
 function WechatMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-ink/10 bg-white px-3 py-3">
+    <div className="metric-tile px-3 py-3">
       <p className="text-xs font-semibold text-graphite">{label}</p>
       <p className="mt-1 break-all font-bold">{value}</p>
     </div>

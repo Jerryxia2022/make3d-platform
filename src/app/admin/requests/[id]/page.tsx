@@ -39,7 +39,7 @@ export default async function AdminRequestDetailPage({
                   返回需求列表
                 </Link>
               </div>
-              <p className="mt-6 text-sm font-semibold uppercase tracking-[0.16em] text-coral">
+              <p className="eyebrow mt-6">
                 #{request.id} · {formatRequestType(request.requestType)}
               </p>
               <h1 className="mt-3 text-4xl font-bold">{request.projectName}</h1>
@@ -50,7 +50,7 @@ export default async function AdminRequestDetailPage({
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr_360px]">
-            <section className="border border-ink/10 bg-white/90 p-5 shadow-sm">
+            <section className="surface-card p-5">
               <h2 className="text-xl font-bold">客户信息</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="客户" value={request.customerName} />
@@ -64,12 +64,12 @@ export default async function AdminRequestDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/90 p-5 shadow-sm">
+            <section className="surface-card p-5">
               <h2 className="text-xl font-bold">表单内容</h2>
               <RequestFields request={request} />
             </section>
 
-            <section className="border border-ink/10 bg-white/90 p-5 shadow-sm">
+            <section className="surface-card p-5">
               <h2 className="text-xl font-bold">管理员备注</h2>
               <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-graphite">
                 {request.adminNote || "暂无管理员备注"}
@@ -79,21 +79,21 @@ export default async function AdminRequestDetailPage({
             </section>
           </div>
 
-          <section className="mt-6 border border-ink/10 bg-white/90 p-5 shadow-sm">
+          <section className="surface-card mt-6 p-5">
             <h2 className="text-xl font-bold">附件</h2>
             {request.files.length === 0 ? (
               <p className="mt-4 text-sm text-graphite">未上传附件</p>
             ) : (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {request.files.map((file) => (
-                  <div className="flex items-center justify-between gap-4 border border-ink/10 px-4 py-3" key={file.id}>
+                  <div className="surface-soft flex items-center justify-between gap-4 px-4 py-3" key={file.id}>
                     <div>
                       <p className="font-semibold">{file.filename}</p>
                       <p className="mt-1 text-xs text-graphite">
                         {formatBytes(file.filesize)} · 上传时间：{formatDate(file.createdAt)}
                       </p>
                     </div>
-                    <a className="shrink-0 bg-ink px-3 py-2 text-xs font-semibold text-white" href={`/api/admin/request-files/${file.id}/download`}>
+                    <a className="btn-primary shrink-0 px-3 py-2 text-xs" href={`/api/admin/request-files/${file.id}/download`}>
                       下载
                     </a>
                   </div>
@@ -143,7 +143,7 @@ function ContactLogs({ logs }: { logs: ServiceRequestLogRecord[] }) {
   return (
     <div className="mt-3 space-y-3">
       {logs.map((log) => (
-        <div className="border border-ink/10 px-3 py-2 text-sm" key={log.id}>
+        <div className="surface-soft px-3 py-2 text-sm" key={log.id}>
           <div className="flex items-center justify-between gap-3">
             <p className="font-semibold">{log.toStatus}</p>
             <p className="text-xs text-graphite">{formatDate(log.createdAt)}</p>

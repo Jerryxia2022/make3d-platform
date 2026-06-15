@@ -42,13 +42,13 @@ export function AdminPaymentConfirmForm({ orderId }: { orderId: number }) {
   }
 
   return (
-    <form className="border border-coral/30 bg-coral/5 p-4 shadow-sm" onSubmit={handleSubmit}>
+    <form className="notice-warning p-4" onSubmit={handleSubmit}>
       <h2 className="text-base font-bold">待付款核对</h2>
       <p className="mt-2 text-sm text-graphite">付款时请备注：订单编号/手机号</p>
       <label className="mt-4 block text-sm font-semibold">
         到账方式
         <select
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 py-2"
           onChange={(event) => setPaymentMethod(event.target.value)}
           value={paymentMethod}
         >
@@ -62,14 +62,14 @@ export function AdminPaymentConfirmForm({ orderId }: { orderId: number }) {
       <label className="mt-3 block text-sm font-semibold">
         到账备注
         <textarea
-          className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 min-h-20"
           onChange={(event) => setPaymentNote(event.target.value)}
           placeholder="例如：微信到账 / 支付宝到账 / 闲鱼付款 / 淘宝付款"
           value={paymentNote}
         />
       </label>
       <button
-        className="mt-3 w-full bg-coral px-4 py-2 text-sm font-semibold text-white disabled:bg-graphite/60"
+        className="btn-primary mt-3 w-full px-4 py-2"
         disabled={isSubmitting}
         type="submit"
       >

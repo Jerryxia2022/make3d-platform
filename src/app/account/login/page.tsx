@@ -7,7 +7,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen px-6 py-10 text-ink">
       <CustomerAuthBar />
-      <section className="mx-auto max-w-md border border-ink/10 bg-white/80 p-6 shadow-sm">
+      <section className="surface-card mx-auto max-w-md p-6">
         <div className="mb-6 flex justify-center">
           <BrandLogo size="small" />
         </div>

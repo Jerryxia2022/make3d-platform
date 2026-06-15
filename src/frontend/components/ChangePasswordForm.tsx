@@ -40,7 +40,7 @@ export function ChangePasswordForm() {
       <label className="block text-sm font-semibold">
         当前密码
         <input
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          className="field-input mt-2 py-3"
           name="currentPassword"
           required
           type="password"
@@ -49,7 +49,7 @@ export function ChangePasswordForm() {
       <label className="block text-sm font-semibold">
         新密码
         <input
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          className="field-input mt-2 py-3"
           minLength={8}
           name="newPassword"
           required
@@ -58,7 +58,7 @@ export function ChangePasswordForm() {
       </label>
       <div className="flex items-end">
         <button
-          className="w-full bg-ink px-5 py-3 font-semibold text-white disabled:bg-graphite/60"
+          className="btn-primary w-full px-5 py-3"
           disabled={isSubmitting}
           type="submit"
         >

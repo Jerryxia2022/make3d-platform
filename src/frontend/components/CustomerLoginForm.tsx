@@ -98,14 +98,14 @@ export function CustomerLoginForm() {
   return (
     <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
       {message ? (
-        <p className="border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+        <p className="notice-warning px-4 py-3 text-sm font-semibold">
           {formatMessage(message, remainingSeconds)}
         </p>
       ) : null}
       <label className="block text-sm font-semibold">
         手机号
         <input
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          className="field-input mt-2 py-3"
           name="phone"
           onChange={(event) => setPhone(event.target.value)}
           inputMode="numeric"
@@ -120,7 +120,7 @@ export function CustomerLoginForm() {
       <label className="block text-sm font-semibold">
         密码
         <input
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+          className="field-input mt-2 py-3"
           minLength={8}
           name="password"
           onChange={(event) => setPassword(event.target.value)}
@@ -130,7 +130,7 @@ export function CustomerLoginForm() {
         />
       </label>
       <button
-        className="w-full bg-ink px-5 py-3 font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-graphite/60"
+        className="btn-primary w-full px-5 py-3"
         disabled={isButtonDisabled}
         type="submit"
       >

@@ -38,8 +38,8 @@ export default async function CustomerOrderConfirmPage({
           <Link className="font-semibold text-graphite" href={`/account/orders/${order.id}`}>
             查看订单详情
           </Link>
-          <div className="mt-6 border border-coral/30 bg-coral/10 p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">
+          <div className="notice-warning mt-6 p-6">
+            <p className="eyebrow">
               {order.orderNo}
             </p>
             <h1 className="mt-3 text-4xl font-bold">订单确认</h1>
@@ -49,7 +49,7 @@ export default async function CustomerOrderConfirmPage({
           </div>
 
           <section className="mt-8 grid gap-6 lg:grid-cols-3">
-            <div className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <div className="surface-card p-6">
               <h2 className="text-xl font-bold">订单信息</h2>
               <dl className="mt-5 grid gap-4 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
@@ -58,7 +58,7 @@ export default async function CustomerOrderConfirmPage({
               </dl>
             </div>
 
-            <div className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <div className="surface-card p-6">
               <h2 className="text-xl font-bold">配送信息</h2>
               <dl className="mt-5 grid gap-4 text-sm">
                 <Detail label="配送方式" value={order.shippingMethod || "-"} />
@@ -67,7 +67,7 @@ export default async function CustomerOrderConfirmPage({
               </dl>
             </div>
 
-            <div className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <div className="surface-card p-6">
               <h2 className="text-xl font-bold">应付总价</h2>
               <p className="mt-5 text-3xl font-bold text-coral">
                 {formatMoney(order.finalPrice ?? order.payablePrice ?? order.estimatedPrice)}
@@ -77,7 +77,7 @@ export default async function CustomerOrderConfirmPage({
           </section>
 
           {order.status === "待付款" ? (
-            <section className="mt-8 border border-coral/30 bg-coral/5 p-6 shadow-sm">
+            <section className="notice-warning mt-8 p-6">
               <h2 className="text-xl font-bold">付款说明</h2>
               <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                 <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
@@ -93,7 +93,7 @@ export default async function CustomerOrderConfirmPage({
             </section>
           ) : null}
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">文件列表</h2>
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-[760px] border-collapse text-left text-sm">
@@ -123,7 +123,7 @@ export default async function CustomerOrderConfirmPage({
             </div>
           </section>
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">收货信息</h2>
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
               <Detail label="收件人" value={order.recipientName || order.customerName} />
@@ -146,7 +146,7 @@ export default async function CustomerOrderConfirmPage({
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-ink/10 bg-white p-4">
+    <div className="metric-tile p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite">{label}</p>
       <p className="mt-2 font-semibold">{value}</p>
     </div>

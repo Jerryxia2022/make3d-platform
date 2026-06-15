@@ -4,11 +4,11 @@ import {
   SERVICE_REQUEST_STATUSES,
   searchServiceRequests,
   openDatabase,
-  type ServiceRequestRecord,
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
 import { AdminBrand } from "@/frontend/components/BrandLogo";
+import { StatusPill } from "@/frontend/components/UiPrimitives";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 const requestTypes = [
@@ -56,11 +56,11 @@ export default async function AdminRequestsPage({
           </div>
         </div>
 
-        <form className="mt-6 grid gap-3 border border-ink/10 bg-white/90 p-4 shadow-sm lg:grid-cols-[1fr_210px_210px_auto]" method="get">
+        <form className="surface-card mt-6 grid gap-3 p-4 lg:grid-cols-[1fr_210px_210px_auto]" method="get">
           <label className="text-sm font-semibold">
             搜索需求
             <input
-              className="mt-2 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+              className="field-input mt-2 py-2"
               defaultValue={filters.q || ""}
               name="q"
               placeholder="项目、客户、手机号、说明"
@@ -69,7 +69,7 @@ export default async function AdminRequestsPage({
           <label className="text-sm font-semibold">
             需求类型
             <select
-              className="mt-2 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+              className="field-input mt-2 py-2"
               defaultValue={filters.type || ""}
               name="type"
             >
@@ -84,7 +84,7 @@ export default async function AdminRequestsPage({
           <label className="text-sm font-semibold">
             状态筛选
             <select
-              className="mt-2 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+              className="field-input mt-2 py-2"
               defaultValue={filters.status || ""}
               name="status"
             >
@@ -97,18 +97,18 @@ export default async function AdminRequestsPage({
             </select>
           </label>
           <div className="flex items-end gap-3">
-            <button className="bg-ink px-5 py-2 text-sm font-semibold text-white" type="submit">
+            <button className="btn-primary px-5 py-2" type="submit">
               搜索
             </button>
-            <Link className="border border-ink/20 px-5 py-2 text-sm font-semibold" href="/admin/requests">
+            <Link className="btn-secondary px-5 py-2" href="/admin/requests">
               重置
             </Link>
           </div>
         </form>
 
-        <div className="mt-6 overflow-x-auto border border-ink/10 bg-white/90 shadow-sm">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
-            <thead className="bg-ink text-white">
+        <div className="table-shell mt-6">
+          <table className="admin-table w-full min-w-[1100px] border-collapse text-left text-sm">
+            <thead>
               <tr>
                 {["需求类型", "项目名称", "客户", "手机号", "预算", "状态", "提交时间", "操作"].map((header) => (
                   <th className="px-4 py-3 font-semibold" key={header}>
@@ -129,11 +129,11 @@ export default async function AdminRequestsPage({
                   <td className="px-4 py-3">{request.phone}</td>
                   <td className="px-4 py-3">{request.budgetRange}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={request.status} />
+                    <StatusPill status={request.status} />
                   </td>
                   <td className="px-4 py-3">{formatDate(request.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <Link className="inline-flex bg-ink px-3 py-2 text-xs font-semibold text-white" href={`/admin/requests/${request.id}`}>
+                    <Link className="btn-primary px-3 py-2 text-xs" href={`/admin/requests/${request.id}`}>
                       查看详情
                     </Link>
                   </td>
@@ -154,16 +154,7 @@ export default async function AdminRequestsPage({
   );
 }
 
-function StatusBadge({ status }: { status: ServiceRequestRecord["status"] }) {
-  const urgent = status === "待评估" || status === "已联系";
-  return (
-    <span className={urgent ? "inline-flex border border-coral/30 bg-coral/10 px-2 py-1 text-xs font-bold text-coral" : "inline-flex border border-mint/30 bg-mint/10 px-2 py-1 text-xs font-bold text-ink"}>
-      {status}
-    </span>
-  );
-}
-
-function formatRequestType(type: ServiceRequestRecord["requestType"]) {
+function formatRequestType(type: "design" | "development") {
   return type === "design" ? "模型修改与打印" : "工装夹具 / 研发咨询";
 }
 

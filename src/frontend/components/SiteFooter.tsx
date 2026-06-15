@@ -6,7 +6,7 @@ export function SiteFooter() {
   const icpBeian = process.env.NEXT_PUBLIC_ICP_BEIAN?.trim();
 
   return (
-    <footer className="border-t border-ink/10 bg-white/80 px-6 py-5 text-xs text-graphite">
+    <footer className="border-t border-ink/10 bg-white/85 px-6 py-5 text-xs text-graphite">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
         <BrandLogo size="footer" />
         <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-4">

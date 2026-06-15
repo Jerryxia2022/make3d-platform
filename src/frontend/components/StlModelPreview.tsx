@@ -136,8 +136,8 @@ export function StlModelPreview({
         aria-label={isStl ? `查看3D模型 ${filename}` : `文件 ${filename}`}
         className={
           compact
-            ? "relative flex h-28 w-36 items-center justify-center overflow-hidden border border-ink/10 bg-ash text-xs text-graphite"
-            : "relative flex h-32 w-full max-w-44 items-center justify-center overflow-hidden border border-ink/10 bg-ash text-xs text-graphite"
+            ? "relative flex h-28 w-36 items-center justify-center overflow-hidden rounded-md border border-ink/10 bg-ash text-xs text-graphite"
+            : "relative flex h-32 w-full max-w-44 items-center justify-center overflow-hidden rounded-md border border-ink/10 bg-ash text-xs text-graphite"
         }
         disabled={!isStl}
         onClick={openPreview}
@@ -271,19 +271,19 @@ function StlPreviewModal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="grid max-h-[92vh] w-full max-w-5xl overflow-hidden bg-white shadow-xl md:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="surface-card grid max-h-[92vh] w-full max-w-5xl overflow-hidden md:grid-cols-[minmax(0,1fr)_18rem]">
         <section className="flex min-h-[22rem] flex-col border-b border-ink/10 md:border-b-0 md:border-r">
           <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
             <h2 className="text-base font-bold">3D 模型预览</h2>
             <div className="flex items-center gap-2">
               <button
-                className="border border-ink/15 px-3 py-2 text-xs font-semibold text-ink"
+                className="btn-secondary px-3 py-2 text-xs"
                 onClick={() => handleRef.current?.resetView()}
                 type="button"
               >
                 重置视角
               </button>
-              <button className="bg-ink px-3 py-2 text-xs font-semibold text-white" onClick={onClose} type="button">
+              <button className="btn-primary px-3 py-2 text-xs" onClick={onClose} type="button">
                 关闭
               </button>
             </div>
@@ -312,11 +312,11 @@ function StlPreviewModal({
             <InfoRow label="报价状态" value={quoteStatus || "-"} />
           </dl>
           {getStlDimensionNotice(activeDimensions) ? (
-            <p className="border border-coral/30 bg-coral/10 px-3 py-2 text-xs font-semibold leading-5 text-coral">
+            <p className="notice-warning px-3 py-2 text-xs font-semibold leading-5">
               {getStlDimensionNotice(activeDimensions)}
             </p>
           ) : null}
-          <p className="border border-ink/10 bg-paper px-3 py-2 text-xs leading-5 text-graphite">
+          <p className="surface-soft px-3 py-2 text-xs leading-5 text-graphite">
             STL 文件通常不包含单位，系统默认按 mm 识别。如尺寸异常，请联系客服确认。
           </p>
         </aside>
@@ -327,7 +327,7 @@ function StlPreviewModal({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[5rem_1fr] gap-3 border border-ink/10 bg-white px-3 py-2">
+    <div className="metric-tile grid grid-cols-[5rem_1fr] gap-3 px-3 py-2">
       <dt className="font-semibold text-graphite">{label}</dt>
       <dd className="break-all font-semibold text-ink">{value}</dd>
     </div>

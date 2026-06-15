@@ -9,11 +9,11 @@ export function CustomerPaymentOptions({ settings }: { settings: PaymentSettings
   const [selectedMethod, setSelectedMethod] = useState<(typeof methods)[number]>("微信转账");
 
   return (
-    <div className="mt-5 border border-ink/10 bg-white p-5">
+    <div className="surface-soft mt-5 p-5">
       <label className="block text-sm font-semibold">
         付款方式
         <select
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 py-2"
           onChange={(event) => setSelectedMethod(event.target.value as (typeof methods)[number])}
           value={selectedMethod}
         >
@@ -80,7 +80,7 @@ function LinkDetail({ label, url }: { label: string; url: string | null }) {
 
   return (
     <a
-      className="mt-4 inline-flex border border-ink/20 px-4 py-2 text-sm font-semibold"
+      className="btn-secondary mt-4 px-4 py-2"
       href={url}
       rel="noreferrer"
       target="_blank"

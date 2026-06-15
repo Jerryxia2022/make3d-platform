@@ -50,7 +50,7 @@ export default function HomePage() {
         <CustomerAuthBar />
         <div className="mx-auto grid w-full max-w-7xl items-center gap-8 py-10 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-coral">
+            <p className="eyebrow">
               Make3D Manufacturing Service
             </p>
             <h1 className="mt-4 max-w-3xl text-4xl font-bold leading-tight sm:text-5xl">
@@ -60,27 +60,27 @@ export default function HomePage() {
               标准打印可在线自动报价；模型修改、工装夹具和研发类需求由人工评估后报价，适合结构验证、外壳样机和小批量试产。
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="bg-ink px-5 py-3 font-semibold text-white transition hover:bg-graphite" href="/quote">
+              <Link className="btn-primary px-5 py-3" href="/quote">
                 上传模型报价
               </Link>
-              <Link className="border border-ink/20 bg-white px-5 py-3 font-semibold text-ink transition hover:border-ink" href="/request/development">
+              <Link className="btn-secondary px-5 py-3" href="/request/development">
                 提交研发需求
               </Link>
             </div>
           </div>
 
-          <div className="border border-ink/10 bg-white/90 p-5 shadow-sm">
+          <div className="surface-card p-5">
             <div className="grid gap-3 sm:grid-cols-3">
               {capabilityItems.map((item) => (
                 <Metric key={item.label} label={item.label} value={item.value} />
               ))}
             </div>
-            <div className="mt-5 border border-ink/10 p-5">
+            <div className="surface-soft mt-5 p-5">
               <p className="text-sm font-semibold text-coral">需求分流</p>
               <div className="mt-4 grid gap-3">
                 {serviceCards.map((service, index) => (
                   <div className="grid grid-cols-[2.5rem_1fr] items-center gap-3" key={service.href}>
-                    <span className="flex h-10 w-10 items-center justify-center border border-ink/15 bg-paper text-sm font-bold">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-md border border-ink/10 bg-white text-sm font-bold shadow-sm">
                       0{index + 1}
                     </span>
                     <div>
@@ -95,16 +95,21 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="border-y border-ink/10 bg-white/80 px-6 py-10">
+      <section className="section-band px-6 py-10">
         <div className="mx-auto max-w-7xl">
           <SectionTitle eyebrow="Service Intake" title="选择你的需求类型" />
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            {serviceCards.map((service) => (
-              <article className="flex min-h-64 flex-col border border-ink/10 bg-white p-5 shadow-sm" key={service.href}>
-                <p className="text-sm font-semibold text-coral">{service.meta}</p>
+            {serviceCards.map((service, index) => (
+              <article className="surface-card hover-lift flex min-h-64 flex-col p-5" key={service.href}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-coral">{service.meta}</p>
+                  {index === 0 ? (
+                    <span className="status-pill status-orange">最快</span>
+                  ) : null}
+                </div>
                 <h2 className="mt-3 text-2xl font-bold">{service.title}</h2>
                 <p className="mt-3 flex-1 text-sm leading-6 text-graphite">{service.description}</p>
-                <Link className="mt-5 inline-flex justify-center bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-graphite" href={service.href}>
+                <Link className={index === 0 ? "btn-primary mt-5" : "btn-secondary mt-5"} href={service.href}>
                   {service.button}
                 </Link>
               </article>
@@ -118,7 +123,7 @@ export default function HomePage() {
           <SectionTitle eyebrow="Workflow" title="服务流程" />
           <div className="mt-6 grid gap-3 md:grid-cols-4">
             {process.map((step, index) => (
-              <div className="border border-ink/10 bg-white/85 p-4" key={step}>
+              <div className="surface-card p-4" key={step}>
                 <p className="text-sm font-bold text-coral">0{index + 1}</p>
                 <p className="mt-2 font-bold">{step}</p>
               </div>
@@ -127,12 +132,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="border-y border-ink/10 bg-white/80 px-6 py-10">
+      <section className="section-band px-6 py-10">
         <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[280px_1fr]">
           <SectionTitle eyebrow="Use Cases" title="常见适用场景" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {scenarios.map((scenario) => (
-              <div className="border border-ink/10 bg-white px-4 py-3 font-semibold" key={scenario}>
+              <div className="surface-card px-4 py-3 font-semibold" key={scenario}>
                 {scenario}
               </div>
             ))}
@@ -145,7 +150,7 @@ export default function HomePage() {
           <SectionTitle eyebrow="FAQ" title="常见问题" />
           <div className="mt-5 grid gap-3 lg:grid-cols-3">
             {faqs.map((item) => (
-              <details className="border border-ink/10 bg-white/85 p-4" key={item.q}>
+              <details className="surface-card p-4" key={item.q}>
                 <summary className="cursor-pointer font-bold">{item.q}</summary>
                 <p className="mt-3 text-sm leading-6 text-graphite">{item.a}</p>
               </details>
@@ -163,7 +168,7 @@ export default function HomePage() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-ink/10 bg-paper/70 p-3">
+    <div className="metric-tile p-3">
       <p className="text-xs font-semibold text-graphite">{label}</p>
       <p className="mt-1 text-sm font-bold">{value}</p>
     </div>
@@ -173,7 +178,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-coral">{eyebrow}</p>
+      <p className="eyebrow">{eyebrow}</p>
       <h2 className="mt-2 text-2xl font-bold">{title}</h2>
     </div>
   );

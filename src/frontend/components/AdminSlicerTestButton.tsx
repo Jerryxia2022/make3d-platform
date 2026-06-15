@@ -82,7 +82,7 @@ export function AdminSlicerTestButton({
   return (
     <div className="flex flex-col items-start gap-2 sm:items-end">
       <button
-        className="bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-graphite/40"
+        className="btn-primary px-4 py-2"
         disabled={!enabled || isRunning}
         onClick={handleClick}
         type="button"

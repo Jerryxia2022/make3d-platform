@@ -56,8 +56,8 @@ export default async function AdminOrderDetailPage({
             </Link>
           </div>
           <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">
+            <section className="surface-card p-4">
+              <p className="eyebrow">
                 {order.orderNo}
               </p>
               <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -104,7 +104,7 @@ export default async function AdminOrderDetailPage({
           </div>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
-            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
+            <section className="surface-card p-4">
               <h2 className="text-xl font-bold">订单信息</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
@@ -127,7 +127,7 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
+            <section className="surface-card p-4">
               <h2 className="text-xl font-bold">客户信息</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="姓名" value={order.customerName} />
@@ -138,7 +138,7 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
+            <section className="surface-card p-4">
               <h2 className="text-xl font-bold">微信公众号</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
@@ -155,7 +155,7 @@ export default async function AdminOrderDetailPage({
               </dl>
             </section>
 
-            <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
+            <section className="surface-card p-4">
               <h2 className="text-xl font-bold">打印信息</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="材料" value={order.material} />
@@ -165,7 +165,7 @@ export default async function AdminOrderDetailPage({
             </section>
           </div>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">生产管理</h2>
@@ -184,7 +184,7 @@ export default async function AdminOrderDetailPage({
             </dl>
           </section>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <h2 className="text-xl font-bold">配送与物流</h2>
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <Detail label="配送方式" value={order.shippingMethod || "-"} />
@@ -202,7 +202,7 @@ export default async function AdminOrderDetailPage({
             </dl>
           </section>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <h2 className="text-xl font-bold">付款核对</h2>
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
               <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
@@ -220,7 +220,7 @@ export default async function AdminOrderDetailPage({
             </dl>
           </section>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <h2 className="text-xl font-bold">备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-graphite">{order.remark || "无备注"}</p>
             <h3 className="mt-6 text-base font-bold">生产备注</h3>
@@ -229,12 +229,12 @@ export default async function AdminOrderDetailPage({
             <p className="mt-3 whitespace-pre-wrap text-graphite">{order.adminRemark || "无备注"}</p>
           </section>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <h2 className="text-xl font-bold">状态历史</h2>
             <StatusHistory logs={statusLogs} />
           </section>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">自动切片报价</h2>
@@ -253,12 +253,12 @@ export default async function AdminOrderDetailPage({
             <SliceJobResults jobs={sliceJobs} />
           </section>
 
-          <section className="mt-6 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-6 p-6">
             <h2 className="text-xl font-bold">上传文件</h2>
             <div className="mt-4 space-y-3">
               {order.files.map((file) => (
                 <div
-                  className="grid gap-4 border border-ink/10 px-4 py-3 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:items-start"
+                  className="surface-soft grid gap-4 px-4 py-3 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:items-start"
                   key={file.id}
                 >
                   <StlModelPreview
@@ -294,7 +294,7 @@ export default async function AdminOrderDetailPage({
                     ) : null}
                   </div>
                   <a
-                    className="inline-flex bg-ink px-4 py-2 text-sm font-semibold text-white"
+                    className="btn-primary px-4 py-2"
                     href={`/api/admin/files/${file.id}/download`}
                   >
                     下载文件
@@ -323,15 +323,19 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const urgent = status === "待确认" || status === "待付款";
+  const toneByStatus: Record<string, string> = {
+    待确认: "status-gray",
+    待付款: "status-orange",
+    已付款: "status-blue",
+    排产中: "status-blue",
+    生产中: "status-purple",
+    后处理: "status-yellow",
+    已发货: "status-green",
+    已完成: "status-mint",
+    已取消: "status-gray",
+  };
   return (
-    <span
-      className={
-        urgent
-          ? "inline-flex border border-coral/30 bg-coral/10 px-3 py-1 text-xs font-bold text-coral"
-          : "inline-flex border border-mint/30 bg-mint/10 px-3 py-1 text-xs font-bold text-ink"
-      }
-    >
+    <span className={`status-pill ${toneByStatus[status] || "status-gray"}`}>
       {status}
     </span>
   );
@@ -391,7 +395,7 @@ function SliceJobResult({ job }: { job: SliceJobRecord }) {
 
   if (job.status !== "success") {
     return (
-      <div className="mt-5 border border-coral/30 bg-coral/5 p-4 text-sm">
+      <div className="notice-warning mt-5 p-4 text-sm">
         <p className="font-semibold text-coral">最近一次切片记录：{job.status}</p>
         <p className="mt-2 text-graphite">{job.errorMessage || "切片失败"}</p>
       </div>
@@ -399,7 +403,7 @@ function SliceJobResult({ job }: { job: SliceJobRecord }) {
   }
 
   return (
-    <div className="mt-5 border border-ink/10 bg-white p-4">
+    <div className="surface-soft mt-5 p-4">
       <h3 className="text-base font-bold">最近一次切片记录</h3>
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         <Detail label="耗材重量" value={formatWeight(job.filamentWeightG)} />

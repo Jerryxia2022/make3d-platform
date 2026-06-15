@@ -29,7 +29,7 @@ export default async function AccountAddressesPage() {
               <Link className="font-semibold text-graphite" href="/account">
                 返回我的账户
               </Link>
-              <p className="mt-6 text-sm font-semibold uppercase tracking-[0.18em] text-coral">
+              <p className="eyebrow mt-6">
                 Make3D 地址簿
               </p>
               <h1 className="mt-3 text-4xl font-bold">收货地址管理</h1>
@@ -37,7 +37,7 @@ export default async function AccountAddressesPage() {
                 最多保存 5 个常用地址。报价页只能选择这里维护的地址，订单提交后会保存当时的地址快照。
               </p>
             </div>
-            <Link className="bg-ink px-5 py-3 text-sm font-semibold text-white" href="/quote">
+            <Link className="btn-primary px-5 py-3" href="/quote">
               返回报价页
             </Link>
           </div>

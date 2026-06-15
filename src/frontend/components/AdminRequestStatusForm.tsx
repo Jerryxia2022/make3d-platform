@@ -56,11 +56,11 @@ export function AdminRequestStatusForm({
   }
 
   return (
-    <form className="border border-ink/10 bg-white/90 p-4 shadow-sm" onSubmit={handleSubmit}>
+    <form className="surface-card p-4" onSubmit={handleSubmit}>
       <label className="block text-sm font-semibold">
         修改状态
         <select
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 py-2"
           onChange={(event) => setSelectedStatus(event.target.value as ServiceRequestStatus)}
           value={selectedStatus}
         >
@@ -74,7 +74,7 @@ export function AdminRequestStatusForm({
       <label className="mt-3 block text-sm font-semibold">
         管理员备注
         <textarea
-          className="mt-2 min-h-24 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 min-h-24"
           onChange={(event) => setCurrentAdminNote(event.target.value)}
           value={currentAdminNote}
         />
@@ -82,14 +82,14 @@ export function AdminRequestStatusForm({
       <label className="mt-3 block text-sm font-semibold">
         联系记录
         <textarea
-          className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 min-h-20"
           onChange={(event) => setContactNote(event.target.value)}
           placeholder="例如：已电话沟通，客户补充图纸后再报价"
           value={contactNote}
         />
       </label>
       <button
-        className="mt-3 w-full bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-graphite/60"
+        className="btn-primary mt-3 w-full px-4 py-2"
         disabled={isSubmitting}
         type="submit"
       >

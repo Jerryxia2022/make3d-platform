@@ -688,13 +688,13 @@ export function QuoteForm({
 
   return (
     <form
-      className="grid gap-5 border border-ink/10 bg-white/85 p-4 shadow-sm xl:grid-cols-[minmax(0,1fr)_20rem] xl:p-5"
+      className="surface-card grid gap-5 p-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:p-5"
       onSubmit={handleSubmit}
     >
       <div className="space-y-5">
       <section>
         <div
-          className="relative flex min-h-44 flex-col items-center justify-center border border-dashed border-ink/25 bg-white/70 px-5 py-7 text-center"
+          className="relative flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed border-ink/25 bg-paper/70 px-5 py-7 text-center"
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
         >
@@ -727,7 +727,7 @@ export function QuoteForm({
           type="file"
         />
         <button
-          className="mt-4 w-full border border-ink/20 bg-white px-5 py-3 font-semibold text-ink transition hover:border-ink"
+          className="btn-secondary mt-4 w-full"
           disabled={disabled}
           onClick={() => {
             if (disabled) {
@@ -751,7 +751,7 @@ export function QuoteForm({
             const fileSubtotal = getFileSubtotalPrice(quote, files.length, item.quantity, item.material);
 
             return (
-            <article className="border border-ink/10 bg-white/90 p-3" key={item.id}>
+            <article className="surface-card p-3" key={item.id}>
               <input
                 name="fileDimensionX"
                 type="hidden"
@@ -802,8 +802,8 @@ export function QuoteForm({
                         <p
                           className={
                             estimate.riskLevel === "danger"
-                              ? "mt-2 border border-red-500/30 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                              : "mt-2 border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
+                              ? "mt-2 rounded-md border border-red-500/30 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                              : "notice-warning mt-2 px-3 py-2 text-sm font-semibold"
                           }
                         >
                           {estimate.riskNotice}
@@ -824,7 +824,7 @@ export function QuoteForm({
                     <label className="block text-sm font-semibold">
                       材料
                       <select
-                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                        className="field-input mt-2"
                         disabled={disabled}
                         name="fileMaterials"
                         onChange={(event) =>
@@ -842,7 +842,7 @@ export function QuoteForm({
                     <label className="block text-sm font-semibold">
                       颜色
                       <select
-                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                        className="field-input mt-2"
                         disabled={disabled}
                         name="fileColors"
                         onChange={(event) => updateFileOption(item.id, "color", event.target.value)}
@@ -858,7 +858,7 @@ export function QuoteForm({
                     <label className="block text-sm font-semibold">
                       数量
                       <input
-                        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                        className="field-input mt-2"
                         disabled={disabled}
                         inputMode="numeric"
                         max="1000"
@@ -885,7 +885,7 @@ export function QuoteForm({
           })}
         </section>
       ) : (
-        <section className="border border-ink/10 bg-white/70 p-5">
+        <section className="surface-soft p-5">
           <h2 className="text-lg font-bold">文件卡片区域</h2>
           <p className="mt-3 text-sm text-graphite">
             上传模型后会在这里显示文件名、尺寸、材料、颜色、数量、报价状态和单件打印价。
@@ -893,7 +893,7 @@ export function QuoteForm({
         </section>
       )}
 
-      <section className="border border-ink/10 bg-white/70 p-5">
+      <section className="surface-card p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-bold">选择收货地址</h2>
@@ -913,7 +913,7 @@ export function QuoteForm({
         <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
           配送方式
           <select
-            className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+            className="field-input mt-2"
             disabled={disabled}
             id="shippingMethod"
             name="shippingMethod"
@@ -933,7 +933,7 @@ export function QuoteForm({
             <label className="mt-4 block text-sm font-semibold" htmlFor="addressId">
               收货地址
               <select
-                className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                className="field-input mt-2"
                 disabled={disabled}
                 id="addressId"
                 name="addressId"
@@ -952,15 +952,15 @@ export function QuoteForm({
             </label>
 
             {selectedAddress ? (
-              <div className="mt-4 border border-ink/10 bg-white p-4 text-sm">
+              <div className="surface-soft mt-4 p-4 text-sm">
                 <div className="flex flex-wrap gap-2">
                   {selectedAddress.label ? (
-                    <span className="border border-ink/10 bg-paper px-2 py-1 text-xs font-bold text-ink">
+                    <span className="status-pill status-gray">
                       {selectedAddress.label}
                     </span>
                   ) : null}
                   {selectedAddress.isDefault ? (
-                    <span className="border border-coral/30 bg-coral/10 px-2 py-1 text-xs font-bold text-coral">
+                    <span className="status-pill status-orange">
                       默认地址
                     </span>
                   ) : null}
@@ -975,9 +975,9 @@ export function QuoteForm({
             ) : null}
           </>
         ) : (
-          <div className="mt-4 border border-coral/30 bg-coral/10 p-4">
+          <div className="notice-warning mt-4 p-4">
             <p className="text-sm font-semibold text-coral">请先添加收货地址后再提交订单。</p>
-            <Link className="mt-3 inline-flex bg-ink px-4 py-2 text-sm font-semibold text-white" href="/account/addresses">
+            <Link className="btn-primary mt-3 px-4 py-2" href="/account/addresses">
               添加地址
             </Link>
           </div>
@@ -986,7 +986,7 @@ export function QuoteForm({
         <label className="mt-4 block text-sm font-semibold">
           备注
           <textarea
-          className="mt-2 min-h-24 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+          className="field-input mt-2 min-h-24"
             disabled={disabled}
             name="remark"
             placeholder="补充特殊层高、强度、表面效果、支撑方式、分件打印、加急等要求"
@@ -997,15 +997,15 @@ export function QuoteForm({
       </div>
 
       <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-      <section className="border border-ink/10 bg-white/70 p-5">
+      <section className="surface-card p-5">
         <h2 className="text-lg font-bold">订单汇总</h2>
         {hasPendingQuotes ? (
-          <p className="mt-3 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+          <p className="notice-warning mt-3 px-4 py-3 text-sm font-semibold">
             文件正在自动切片，完成后将更新总价。调整材料和颜色不会重新切片。
           </p>
         ) : null}
         {!hasPendingQuotes && hasManualQuotes ? (
-          <p className="mt-3 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+          <p className="notice-warning mt-3 px-4 py-3 text-sm font-semibold">
             部分文件需人工确认
           </p>
         ) : null}
@@ -1032,13 +1032,13 @@ export function QuoteForm({
       </section>
 
       {error ? (
-        <p className="border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+        <p className="notice-warning px-4 py-3 text-sm font-semibold">
           {error}
         </p>
       ) : null}
 
       <button
-        className="w-full bg-ink px-5 py-3 font-semibold text-white transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/60"
+        className="btn-primary w-full"
         disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled || !hasAddresses}
         type="submit"
       >
@@ -1117,7 +1117,7 @@ function QuoteMetric({
   value: string;
 }) {
   return (
-    <div className="border border-ink/10 bg-white px-3 py-2">
+    <div className="metric-tile px-3 py-2">
       <dt className="text-xs font-semibold text-graphite">{label}</dt>
       <dd className={emphasis ? "mt-1 font-bold text-coral" : "mt-1 font-semibold text-ink"}>
         {value}
@@ -1153,7 +1153,7 @@ function SummaryItem({
   value: string;
 }) {
   return (
-    <div className={highlight ? "border border-coral/40 bg-coral/10 px-4 py-3" : "border border-ink/10 bg-white/80 px-4 py-3"}>
+    <div className={highlight ? "notice-warning px-4 py-3" : "metric-tile px-4 py-3"}>
       <dt className="font-semibold text-graphite">{label}</dt>
       <dd className={highlight ? "mt-1 text-2xl font-bold text-coral" : "mt-1 font-semibold text-ink"}>
         {value}

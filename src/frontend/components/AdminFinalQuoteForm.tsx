@@ -62,11 +62,11 @@ export function AdminFinalQuoteForm({
   }
 
   return (
-    <form className="border border-ink/10 bg-white/80 p-4 shadow-sm" onSubmit={handleSubmit}>
+    <form className="surface-card p-4" onSubmit={handleSubmit}>
       <label className="block text-sm font-semibold">
         最终报价
         <input
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 py-2"
           inputMode="decimal"
           min="0"
           onChange={(event) => setCurrentFinalPrice(event.target.value)}
@@ -79,7 +79,7 @@ export function AdminFinalQuoteForm({
       <label className="mt-3 block text-sm font-semibold">
         最终交货期（小时）
         <input
-          className="mt-2 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 py-2"
           inputMode="numeric"
           min="0"
           onChange={(event) => setCurrentLeadTime(event.target.value)}
@@ -92,7 +92,7 @@ export function AdminFinalQuoteForm({
       <label className="mt-3 block text-sm font-semibold">
         调价原因
         <textarea
-          className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 min-h-20"
           onChange={(event) => setCurrentReason(event.target.value)}
           placeholder="如支撑、拆件、后处理、加急、人工确认等"
           value={currentReason}
@@ -101,14 +101,14 @@ export function AdminFinalQuoteForm({
       <label className="mt-3 block text-sm font-semibold">
         生产备注
         <textarea
-          className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2"
+          className="field-input mt-2 min-h-20"
           onChange={(event) => setCurrentProductionNote(event.target.value)}
           placeholder="材料、工艺、后处理、排产注意事项"
           value={currentProductionNote}
         />
       </label>
       <button
-        className="mt-3 w-full bg-coral px-4 py-2 text-sm font-semibold text-white disabled:bg-graphite/60"
+        className="btn-primary mt-3 w-full px-4 py-2"
         disabled={isSubmitting}
         type="submit"
       >

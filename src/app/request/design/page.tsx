@@ -25,7 +25,7 @@ export default async function DesignRequestPage() {
           <Link className="text-sm font-semibold text-graphite" href="/">
             返回首页
           </Link>
-          <p className="mt-6 text-sm font-semibold uppercase tracking-[0.16em] text-coral">
+          <p className="eyebrow mt-6">
             模型修改与打印
           </p>
           <h1 className="mt-3 text-4xl font-bold leading-tight">提交模型修改需求</h1>
@@ -36,7 +36,7 @@ export default async function DesignRequestPage() {
           <GuideBlock title="适合什么需求" items={fitItems} />
           <GuideBlock title="不适合什么需求" items={unfitItems} />
 
-          <div className="mt-5 border border-ink/10 bg-white/80 p-4 text-sm leading-6 text-graphite">
+          <div className="surface-card mt-5 p-4 text-sm leading-6 text-graphite">
             <p className="font-semibold text-ink">响应时间</p>
             <p className="mt-2">通常 24 小时内评估。复杂项目建议提供图纸、样品或关键尺寸。</p>
             <p className="mt-2">工作日晚上和周末优先处理复杂沟通。</p>
@@ -44,7 +44,7 @@ export default async function DesignRequestPage() {
         </aside>
 
         <section>
-          <div className="mb-4 border border-ink/10 bg-white/80 px-4 py-3 text-sm leading-6 text-graphite">
+          <div className="surface-card mb-4 px-4 py-3 text-sm leading-6 text-graphite">
             标准打印订单可在线自动报价；涉及模型修改的需求会先人工评估，再确认费用和交付方式。
           </div>
           <ServiceRequestForm customer={formCustomer} disabled={!customer} mode="design" />
@@ -56,7 +56,7 @@ export default async function DesignRequestPage() {
 
 function GuideBlock({ items, title }: { items: string[]; title: string }) {
   return (
-    <div className="mt-5 border border-ink/10 bg-white/80 p-4">
+    <div className="surface-card mt-5 p-4">
       <h2 className="font-bold">{title}</h2>
       <ul className="mt-3 space-y-2 text-sm leading-6 text-graphite">
         {items.map((item) => (

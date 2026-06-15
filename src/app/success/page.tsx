@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function SuccessPage() {
   return (
     <main className="flex min-h-screen items-center px-6 py-8 text-ink">
-      <section className="mx-auto w-full max-w-3xl border border-ink/10 bg-white/75 p-8 shadow-sm">
+      <section className="surface-card mx-auto w-full max-w-3xl p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-mint">
           Make3D
         </p>
@@ -12,7 +12,7 @@ export default function SuccessPage() {
           我们已收到你的打印需求。系统报价仅作预估，最终价格和生产安排将由人工确认后联系你。
         </p>
         <Link
-          className="mt-8 inline-flex bg-ink px-5 py-3 font-semibold text-white"
+          className="btn-primary mt-8 px-5 py-3"
           href="/"
         >
           返回首页

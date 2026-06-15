@@ -23,7 +23,7 @@ export default async function AdminPaymentSettingsPage() {
             返回订单列表
           </Link>
         </div>
-        <p className="mt-6 text-sm font-semibold uppercase tracking-[0.18em] text-coral">Payment Settings</p>
+        <p className="eyebrow mt-6">Payment Settings</p>
         <h1 className="mt-3 text-4xl font-bold">付款设置</h1>
         <p className="mt-4 text-sm leading-6 text-graphite">
           这里仅配置客户待付款页面展示的收款码路径和外部付款链接。客户不能上传付款截图，

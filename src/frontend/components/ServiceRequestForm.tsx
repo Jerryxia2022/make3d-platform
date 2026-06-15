@@ -84,19 +84,19 @@ export function ServiceRequestForm({
 
   return (
     <form
-      className="border border-ink/10 bg-white/90 p-5 shadow-sm sm:p-6"
+      className="surface-card p-5 sm:p-6"
       encType="multipart/form-data"
       onSubmit={handleSubmit}
       ref={formRef}
     >
       {disabled ? (
-        <div className="mb-5 border border-coral/30 bg-coral/10 px-4 py-3 text-sm text-graphite">
+        <div className="notice-warning mb-5 px-4 py-3 text-sm">
           <p className="font-semibold text-coral">{loginMessage}</p>
           <div className="mt-3 flex flex-wrap gap-3">
-            <Link className="bg-ink px-4 py-2 font-semibold text-white" href={`/account/login?next=${encodeURIComponent(mode === "design" ? "/request/design" : "/request/development")}`}>
+            <Link className="btn-primary px-4 py-2" href={`/account/login?next=${encodeURIComponent(mode === "design" ? "/request/design" : "/request/development")}`}>
               登录
             </Link>
-            <Link className="border border-ink/20 bg-white px-4 py-2 font-semibold text-ink" href="/account/register">
+            <Link className="btn-secondary px-4 py-2" href="/account/register">
               注册
             </Link>
           </div>
@@ -110,7 +110,7 @@ export function ServiceRequestForm({
             <label className="block text-sm font-semibold">
               项目类型
               <select
-                className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                className="field-input mt-2"
                 disabled={disabled}
                 name="projectType"
                 onChange={(event) => setProjectType(event.target.value)}
@@ -127,7 +127,7 @@ export function ServiceRequestForm({
             <label className="block text-sm font-semibold">
               是否需要打印
               <select
-                className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+                className="field-input mt-2"
                 disabled={disabled}
                 name="needsPrinting"
                 defaultValue="需要修改并打印"
@@ -199,7 +199,7 @@ export function ServiceRequestForm({
           <label className="block text-sm font-semibold">
             预算范围
             <select
-              className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+              className="field-input mt-2"
               disabled={disabled}
               name="budgetRange"
               onChange={(event) => setBudgetRange(event.target.value)}
@@ -222,7 +222,7 @@ export function ServiceRequestForm({
           />
         </div>
         {showDevelopmentBudgetWarning ? (
-          <p className="mt-4 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold leading-6 text-coral">
+          <p className="notice-warning mt-4 px-4 py-3 text-sm font-semibold leading-6">
             该预算通常适合简单模型修改或打印，不适合完整产品研发。复杂项目建议提供明确图纸、样品或功能说明后评估。
           </p>
         ) : null}
@@ -277,14 +277,14 @@ export function ServiceRequestForm({
       </FormSection>
 
       {message ? (
-        <p className={successId ? "mt-5 border border-mint/40 bg-mint/10 px-4 py-3 text-sm font-semibold text-ink" : "mt-5 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral"}>
+        <p className={successId ? "notice-success mt-5 px-4 py-3 text-sm font-semibold" : "notice-warning mt-5 px-4 py-3 text-sm font-semibold"}>
           {message}
           {successId ? <span className="ml-2 text-graphite">需求编号：#{successId}</span> : null}
         </p>
       ) : null}
 
       <button
-        className="mt-5 w-full bg-ink px-5 py-3 font-semibold text-white transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/60"
+        className="btn-primary mt-5 w-full px-5 py-3"
         disabled={disabled || isSubmitting}
         type="submit"
       >
@@ -341,7 +341,7 @@ function TextField({
       {label}
       <input
         autoComplete={autoComplete}
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+        className="field-input mt-2"
         defaultValue={defaultValue}
         disabled={disabled}
         inputMode={inputMode}
@@ -376,7 +376,7 @@ function TextArea({
     <label className="block text-sm font-semibold">
       {label}
       <textarea
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+        className="field-input mt-2"
         disabled={disabled}
         name={name}
         placeholder={placeholder}
@@ -401,7 +401,7 @@ function SelectField({
   return (
     <label className="block text-sm font-semibold">
       {label}
-      <select className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal" disabled={disabled} name={name}>
+      <select className="field-input mt-2" disabled={disabled} name={name}>
         {options.map((item) => (
           <option key={item} value={item}>
             {item}
@@ -418,7 +418,7 @@ function FileField({ disabled, label }: { disabled?: boolean; label: string }) {
       {label}
       <input
         accept={attachmentAccept}
-        className="mt-2 w-full border border-dashed border-ink/25 bg-white px-3 py-3 text-sm font-normal"
+        className="mt-2 w-full rounded-md border border-dashed border-ink/25 bg-white px-3 py-3 text-sm font-normal"
         disabled={disabled}
         multiple
         name="attachments"

@@ -49,7 +49,7 @@ export function AdminPaymentSettingsForm({ settings }: { settings: PaymentSettin
   }
 
   return (
-    <form className="mt-6 grid gap-5 border border-ink/10 bg-white/80 p-6 shadow-sm" onSubmit={handleSubmit}>
+    <form className="surface-card mt-6 grid gap-5 p-6" onSubmit={handleSubmit}>
       <TextInput
         label="微信收款二维码图片路径"
         onChange={setWechatQrPath}
@@ -77,14 +77,14 @@ export function AdminPaymentSettingsForm({ settings }: { settings: PaymentSettin
       <label className="text-sm font-semibold">
         其他付款说明
         <textarea
-          className="mt-2 min-h-28 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+          className="field-input mt-2 min-h-28"
           onChange={(event) => setOtherNote(event.target.value)}
           placeholder="例如：也可以通过微信人工沟通付款方式。"
           value={otherNote}
         />
       </label>
       <button
-        className="w-full bg-ink px-5 py-3 text-sm font-semibold text-white disabled:bg-graphite/60"
+        className="btn-primary w-full px-5 py-3"
         disabled={isSubmitting}
         type="submit"
       >
@@ -110,7 +110,7 @@ function TextInput({
     <label className="text-sm font-semibold">
       {label}
       <input
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2 font-normal"
+        className="field-input mt-2 py-2"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}

@@ -14,6 +14,7 @@ import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
+import { StatusPill } from "@/frontend/components/UiPrimitives";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export const dynamic = "force-dynamic";
@@ -47,12 +48,12 @@ export default async function CustomerOrderDetailPage({
               <Link className="font-semibold text-graphite" href="/account">
                 返回我的账户
               </Link>
-              <p className="mt-6 text-sm font-semibold uppercase tracking-[0.18em] text-coral">
+              <p className="eyebrow mt-6">
                 {order.orderNo}
               </p>
               <h1 className="mt-3 text-4xl font-bold">订单详情</h1>
             </div>
-            <Link className="bg-ink px-5 py-3 text-sm font-semibold text-white" href="/quote">
+            <Link className="btn-primary px-5 py-3" href="/quote">
               再次下单
             </Link>
           </div>
@@ -60,7 +61,7 @@ export default async function CustomerOrderDetailPage({
           <CurrentStatusPanel order={order} />
 
           <section className="mt-8 grid gap-6 lg:grid-cols-3">
-            <div className="border border-ink/10 bg-white/80 p-6 shadow-sm">
+            <div className="surface-card p-6">
               <h2 className="text-xl font-bold">订单信息</h2>
               <dl className="mt-5 grid gap-4 text-sm">
                 <Detail label="订单编号" value={order.orderNo} />
@@ -74,7 +75,7 @@ export default async function CustomerOrderDetailPage({
               </dl>
             </div>
 
-            <div className="border border-ink/10 bg-white/80 p-6 shadow-sm lg:col-span-2">
+            <div className="surface-card p-6 lg:col-span-2">
               <h2 className="text-xl font-bold">联系与收货信息</h2>
               <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                 <Detail label="姓名" value={order.customerName} />
@@ -94,21 +95,21 @@ export default async function CustomerOrderDetailPage({
             </div>
           </section>
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">状态时间轴</h2>
             <StatusTimeline order={order} logs={statusLogs} />
           </section>
 
           <PaymentStatusPanel order={order} paymentSettings={paymentSettings} />
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">管理员备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-graphite">
               {order.adminRemark || "暂无管理员备注"}
             </p>
           </section>
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">文件明细</h2>
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-[920px] border-collapse text-left text-sm">
@@ -152,7 +153,7 @@ export default async function CustomerOrderDetailPage({
             </div>
           </section>
 
-          <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+          <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">订单汇总</h2>
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">
               <Detail label="文件数量" value={`${order.files.length} 个`} />
@@ -164,7 +165,7 @@ export default async function CustomerOrderDetailPage({
               <Detail label="订单状态" value={order.status} />
             </dl>
             {order.status === "待付款" ? (
-              <p className="mt-5 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+              <p className="notice-warning mt-5 px-4 py-3 text-sm font-semibold">
                 请联系工作人员完成付款
               </p>
             ) : null}
@@ -183,10 +184,13 @@ function CurrentStatusPanel({ order }: { order: OrderDetail }) {
   const statusText = getCustomerStatusText(order);
 
   return (
-    <section className="mt-8 border border-ink/10 bg-white/90 p-6 shadow-sm">
+    <section className="surface-card mt-8 p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm font-semibold text-coral">当前状态：{order.status}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-coral">当前状态</p>
+            <StatusPill status={order.status} />
+          </div>
           <h2 className="mt-2 text-2xl font-bold">{statusText}</h2>
         </div>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
@@ -207,7 +211,7 @@ function PaymentStatusPanel({
 }) {
   if (order.status === "待确认") {
     return (
-      <section className="mt-8 border border-coral/30 bg-coral/5 p-6 shadow-sm">
+      <section className="notice-warning mt-8 p-6">
         <h2 className="text-xl font-bold">付款确认</h2>
         <p className="mt-4 text-sm font-semibold text-coral">订单正在人工确认，自动估价仅供参考</p>
         <p className="mt-2 text-sm text-graphite">人工确认最终报价前不显示付款方式。</p>
@@ -217,7 +221,7 @@ function PaymentStatusPanel({
 
   if (order.status === "待付款") {
     return (
-      <section className="mt-8 border border-coral/30 bg-coral/5 p-6 shadow-sm">
+      <section className="notice-warning mt-8 p-6">
         <h2 className="text-xl font-bold">付款说明</h2>
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
           <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
@@ -236,7 +240,7 @@ function PaymentStatusPanel({
 
   if (order.status === "已付款") {
     return (
-      <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+      <section className="surface-card mt-8 p-6">
         <h2 className="text-xl font-bold">生产进度</h2>
         <p className="mt-4 text-sm font-semibold text-coral">订单已付款，等待排产。</p>
         <p className="mt-2 text-sm text-graphite">付款已确认，订单已进入生产准备。</p>
@@ -246,7 +250,7 @@ function PaymentStatusPanel({
 
   if (["排产中", "生产中", "后处理", "已发货", "已完成"].includes(order.status)) {
     return (
-      <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
+      <section className="surface-card mt-8 p-6">
         <h2 className="text-xl font-bold">生产与物流</h2>
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <Detail label="分配打印机" value={order.assignedPrinter || "-"} />
@@ -269,7 +273,7 @@ function PaymentStatusPanel({
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-ink/10 bg-white p-4">
+    <div className="metric-tile p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite">{label}</p>
       <p className="mt-2 font-semibold">{value}</p>
     </div>
@@ -291,8 +295,8 @@ function StatusTimeline({
         <li
           className={
             item.completed
-              ? "border border-coral/30 bg-coral/5 px-4 py-3 text-sm"
-              : "border border-ink/10 bg-paper/70 px-4 py-3 text-sm text-graphite"
+              ? "notice-success px-4 py-3 text-sm"
+              : "surface-soft px-4 py-3 text-sm text-graphite"
           }
           key={item.label}
         >

@@ -13,7 +13,7 @@ export default async function ForgotPasswordPage({
   return (
     <main className="min-h-screen px-6 py-10 text-ink">
       <CustomerAuthBar />
-      <section className="mx-auto max-w-md border border-ink/10 bg-white/80 p-6 shadow-sm">
+      <section className="surface-card mx-auto max-w-md p-6">
         <div className="mb-6 flex justify-center">
           <BrandLogo size="small" />
         </div>
@@ -24,13 +24,13 @@ export default async function ForgotPasswordPage({
           <label className="block text-sm font-semibold">
             邮箱
             <input
-              className="mt-2 w-full border border-ink/20 bg-white px-3 py-3 font-normal"
+              className="field-input mt-2 py-3"
               name="email"
               required
               type="email"
             />
           </label>
-          <button className="w-full bg-ink px-5 py-3 font-semibold text-white" type="submit">
+          <button className="btn-primary w-full px-5 py-3" type="submit">
             提交
           </button>
         </form>
@@ -44,7 +44,7 @@ export default async function ForgotPasswordPage({
 
 function IfAccountExistsMessage() {
   return (
-    <p className="mt-4 border border-coral/30 bg-coral/10 p-3 text-sm font-semibold text-ink">
+    <p className="notice-warning mt-4 p-3 text-sm font-semibold">
       如果账号存在，我们会发送密码重置邮件。
     </p>
   );

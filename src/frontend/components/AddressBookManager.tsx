@@ -152,7 +152,7 @@ export function AddressBookManager({
 
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-      <section className="border border-ink/10 bg-white/80 p-5 shadow-sm">
+      <section className="surface-card p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-bold">常用地址</h2>
@@ -161,7 +161,7 @@ export function AddressBookManager({
             </p>
           </div>
           <button
-            className="border border-ink/20 px-4 py-2 text-sm font-semibold text-ink disabled:cursor-not-allowed disabled:text-graphite"
+            className="btn-secondary px-4 py-2"
             disabled={!canCreate}
             onClick={startCreate}
             type="button"
@@ -171,33 +171,33 @@ export function AddressBookManager({
         </div>
 
         {!canCreate ? (
-          <p className="mt-4 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+          <p className="notice-warning mt-4 px-4 py-3 text-sm font-semibold">
             {limitMessage}
           </p>
         ) : null}
 
         {defaultCount > 1 ? (
-          <p className="mt-4 border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
+          <p className="notice-warning mt-4 px-4 py-3 text-sm font-semibold">
             地址默认状态异常，请重新设置一个默认地址。
           </p>
         ) : null}
 
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {addresses.length === 0 ? (
-            <div className="border border-ink/10 bg-white p-5 text-sm text-graphite md:col-span-2">
+            <div className="surface-soft p-5 text-sm text-graphite md:col-span-2">
               还没有收货地址，请先添加一个常用地址。
             </div>
           ) : (
             addresses.map((address) => (
-              <article className="border border-ink/10 bg-white p-4" key={address.id}>
+              <article className="surface-card p-4" key={address.id}>
                 <div className="flex flex-wrap items-center gap-2">
                   {address.label ? (
-                    <span className="border border-ink/10 bg-paper px-2 py-1 text-xs font-bold text-ink">
+                    <span className="status-pill status-gray">
                       {address.label}
                     </span>
                   ) : null}
                   {address.isDefault ? (
-                    <span className="border border-coral/30 bg-coral/10 px-2 py-1 text-xs font-bold text-coral">
+                    <span className="status-pill status-orange">
                       默认地址
                     </span>
                   ) : null}
@@ -210,7 +210,7 @@ export function AddressBookManager({
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-ink/10 pt-3">
                   {!address.isDefault ? (
                     <button
-                      className="bg-ink px-3 py-2 text-xs font-semibold text-white"
+                      className="btn-primary px-3 py-2 text-xs"
                       onClick={() => setDefault(address)}
                       type="button"
                     >
@@ -218,14 +218,14 @@ export function AddressBookManager({
                     </button>
                   ) : null}
                   <button
-                    className="border border-ink/20 px-3 py-2 text-xs font-semibold text-ink"
+                    className="btn-secondary px-3 py-2 text-xs"
                     onClick={() => startEdit(address)}
                     type="button"
                   >
                     编辑
                   </button>
                   <button
-                    className="border border-coral/30 px-3 py-2 text-xs font-semibold text-coral"
+                    className="btn-danger px-3 py-2 text-xs"
                     onClick={() => deleteAddress(address)}
                     type="button"
                   >
@@ -239,7 +239,7 @@ export function AddressBookManager({
       </section>
 
       {(canCreate || isEditing) ? (
-        <section className="border border-ink/10 bg-white/80 p-5 shadow-sm lg:sticky lg:top-6">
+        <section className="surface-card p-5 lg:sticky lg:top-6">
           <h2 className="text-xl font-bold">{formTitle}</h2>
           <form className="mt-5 space-y-4" onSubmit={submitAddress}>
             <AddressInput label="收件人姓名" required value={form.recipientName} onChange={(value) => updateForm("recipientName", value)} />
@@ -274,12 +274,12 @@ export function AddressBookManager({
               设为默认地址
             </label>
 
-            {error ? <p className="border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">{error}</p> : null}
-            {message ? <p className="border border-mint/30 bg-mint/10 px-3 py-2 text-sm font-semibold text-ink">{message}</p> : null}
+            {error ? <p className="notice-warning px-3 py-2 text-sm font-semibold">{error}</p> : null}
+            {message ? <p className="notice-success px-3 py-2 text-sm font-semibold">{message}</p> : null}
 
             <div className="flex gap-3">
               <button
-                className="bg-ink px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-graphite/60"
+                className="btn-primary px-5 py-3"
                 disabled={isSaving}
                 type="submit"
               >
@@ -287,7 +287,7 @@ export function AddressBookManager({
               </button>
               {isEditing ? (
                 <button
-                  className="border border-ink/20 px-5 py-3 text-sm font-semibold text-ink"
+                  className="btn-secondary px-5 py-3"
                   onClick={startCreate}
                   type="button"
                 >
@@ -327,7 +327,7 @@ function AddressInput({
     <label className="block text-sm font-semibold">
       {label}
       <input
-        className="mt-2 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+        className="field-input mt-2"
         inputMode={inputMode}
         maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
@@ -356,7 +356,7 @@ function AddressTextarea({
     <label className="block text-sm font-semibold">
       {label}
       <textarea
-        className="mt-2 min-h-20 w-full border border-ink/20 bg-white px-3 py-2.5 font-normal"
+        className="field-input mt-2 min-h-20"
         minLength={5}
         onChange={(event) => onChange(event.target.value)}
         required={required}
