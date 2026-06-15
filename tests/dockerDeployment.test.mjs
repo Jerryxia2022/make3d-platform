@@ -22,6 +22,8 @@ test("docker build receives public ICP filing environment", async () => {
   assert.match(compose, /environment:/);
   assert.match(dockerfile, /ARG NEXT_PUBLIC_ICP_BEIAN=/);
   assert.match(dockerfile, /ENV NEXT_PUBLIC_ICP_BEIAN=\$\{NEXT_PUBLIC_ICP_BEIAN\}/);
+  assert.match(dockerfile, /COPY --from=builder \/app\/public \.\/public/);
+  assert.match(dockerfile, /COPY --from=builder \/app\/scripts \.\/scripts/);
 });
 
 test("docker compose passes optional wechat official account runtime environment", async () => {
