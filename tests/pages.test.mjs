@@ -320,8 +320,11 @@ test("wechat account binding explains keyword service mode", async () => {
   assert.match(bindCardSource, /发送绑定码完成账号绑定/);
   assert.match(customerServiceSource, /客户可发送 报价 \/ 订单 \/ 付款 \/ 人工 获取对应服务/);
   assert.match(menuScriptSource, /WECHAT_MP_MENU_ENABLED/);
-  assert.match(menuScriptSource, /Wechat menu API creation is paused/);
+  assert.match(menuScriptSource, /Wechat menu API creation is disabled/);
+  assert.match(menuScriptSource, /certified account with custom menu API permission/);
   assert.match(menuScriptSource, /This is non-blocking/);
+  assert.match(menuScriptSource, /常见问题/);
+  assert.match(menuScriptSource, /官网首页/);
   assert.match(readmeSource, /不把 `npm run wechat:menu` 作为部署或验证必需步骤/);
 });
 

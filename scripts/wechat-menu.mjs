@@ -9,9 +9,9 @@ const menuApiEnabled = process.env.WECHAT_MP_MENU_ENABLED === "true";
 
 if (!menuApiEnabled) {
   console.log(
-    "Wechat menu API creation is paused. Make3D is using keyword service mode: 报价 / 订单 / 付款 / 人工.",
+    "Wechat menu API creation is disabled. Make3D can still use keyword service mode: 报价 / 订单 / 付款 / 人工.",
   );
-  console.log("Set WECHAT_MP_MENU_ENABLED=true only for an account with custom menu API permission.");
+  console.log("Set WECHAT_MP_MENU_ENABLED=true for a certified account with custom menu API permission.");
   process.exit(0);
 }
 
@@ -30,6 +30,7 @@ const menu = {
       sub_button: [
         { type: "view", name: "付款说明", url: `${appUrl}/account` },
         { type: "view", name: "发货查询", url: `${appUrl}/account` },
+        { type: "view", name: "常见问题", url: appUrl },
       ],
     },
     {
@@ -37,7 +38,7 @@ const menu = {
       sub_button: [
         { type: "click", name: "人工客服", key: "人工" },
         { type: "view", name: "服务范围", url: appUrl },
-        { type: "view", name: "常见问题", url: appUrl },
+        { type: "view", name: "官网首页", url: appUrl },
       ],
     },
   ],
@@ -64,11 +65,12 @@ try {
   }
 
   console.log("Wechat official account menu updated.");
+  console.log(JSON.stringify(result));
 } catch (error) {
   const message = error instanceof Error ? error.message : "unknown error";
   console.warn(`Wechat menu update skipped: ${message}`);
   console.warn(
-    "This is non-blocking. Current personal account mode relies on keyword replies instead of API-created menus.",
+    "This is non-blocking. Make3D keyword replies remain available even if API-created menus fail.",
   );
 }
 
