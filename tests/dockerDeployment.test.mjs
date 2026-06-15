@@ -32,6 +32,7 @@ test("docker compose passes optional wechat official account runtime environment
   assert.match(compose, /WECHAT_MP_APP_SECRET: \$\{WECHAT_MP_APP_SECRET:-\}/);
   assert.match(compose, /WECHAT_MP_TOKEN: \$\{WECHAT_MP_TOKEN:-\}/);
   assert.match(compose, /WECHAT_MP_AES_KEY: \$\{WECHAT_MP_AES_KEY:-\}/);
+  assert.match(compose, /WECHAT_MP_MENU_ENABLED: \$\{WECHAT_MP_MENU_ENABLED:-false\}/);
 });
 
 test("Dockerfile creates runtime slicer profile and gcode directories", async () => {
