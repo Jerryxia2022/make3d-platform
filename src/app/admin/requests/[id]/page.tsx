@@ -9,6 +9,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminRequestStatusForm } from "@/frontend/components/AdminRequestStatusForm";
+import { AdminBrand } from "@/frontend/components/BrandLogo";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminRequestDetailPage({
@@ -32,9 +33,12 @@ export default async function AdminRequestDetailPage({
         <section className="mx-auto w-full max-w-7xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <Link className="text-sm font-semibold text-graphite" href="/admin/requests">
-                返回需求列表
-              </Link>
+              <div className="flex flex-wrap items-center gap-4">
+                <AdminBrand />
+                <Link className="text-sm font-semibold text-graphite" href="/admin/requests">
+                  返回需求列表
+                </Link>
+              </div>
               <p className="mt-6 text-sm font-semibold uppercase tracking-[0.16em] text-coral">
                 #{request.id} · {formatRequestType(request.requestType)}
               </p>

@@ -19,6 +19,7 @@ import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
+import { AdminBrand } from "@/frontend/components/BrandLogo";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
@@ -48,9 +49,12 @@ export default async function AdminOrderDetailPage({
     return (
       <main className="min-h-screen px-6 py-8 text-ink">
         <section className="mx-auto w-full max-w-7xl">
-          <Link className="font-semibold text-graphite" href="/admin/orders">
-            返回订单列表
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <AdminBrand />
+            <Link className="font-semibold text-graphite" href="/admin/orders">
+              返回订单列表
+            </Link>
+          </div>
           <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
             <section className="border border-ink/10 bg-white/80 p-4 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">

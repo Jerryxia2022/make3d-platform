@@ -1,6 +1,7 @@
 import type { InputHTMLAttributes } from "react";
 import Link from "next/link";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
+import { BrandLogo } from "@/frontend/components/BrandLogo";
 import { mainlandPhoneErrorMessage, mainlandPhoneHtmlPattern } from "@/shared/phoneValidation";
 
 export default function RegisterPage() {
@@ -8,6 +9,9 @@ export default function RegisterPage() {
     <main className="min-h-screen px-6 py-10 text-ink">
       <CustomerAuthBar />
       <section className="mx-auto max-w-xl border border-ink/10 bg-white/80 p-6 shadow-sm">
+        <div className="mb-6 flex justify-center">
+          <BrandLogo size="small" />
+        </div>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Make3D 会员</p>
         <h1 className="mt-3 text-3xl font-bold">注册账号</h1>
         <form action="/api/account/register" className="mt-6 space-y-4" method="post">

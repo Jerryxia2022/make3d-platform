@@ -10,6 +10,14 @@ export const metadata: Metadata = {
   },
   description: "Make3D 提供在线模型上传、STL 自动切片报价、模型修改、工装夹具和小型研发制造服务。",
   keywords: ["3D打印", "在线报价", "STL切片", "FDM打印", "模型修改", "工装夹具", "Make3D"],
+  icons: {
+    icon: [
+      { url: "/brand/favicon.ico", sizes: "any" },
+      { url: "/brand/make3d-icon-square-256.png", sizes: "256x256", type: "image/png" },
+      { url: "/brand/make3d-icon-square-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/make3d-icon-square-256.png", sizes: "256x256", type: "image/png" }],
+  },
   alternates: {
     canonical: "/",
   },

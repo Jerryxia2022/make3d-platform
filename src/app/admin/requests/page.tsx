@@ -8,6 +8,7 @@ import {
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
+import { AdminBrand } from "@/frontend/components/BrandLogo";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 const requestTypes = [
@@ -38,9 +39,7 @@ export default async function AdminRequestsPage({
       <section className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-coral">
-              Make3D Admin
-            </p>
+            <AdminBrand />
             <h1 className="mt-3 text-4xl font-bold">非标准需求</h1>
           </div>
           <div className="flex flex-wrap gap-4 text-sm">

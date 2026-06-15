@@ -80,6 +80,47 @@ test("global footer reads ICP filing number from environment", async () => {
   assert.match(productionEnvExample, /NEXT_PUBLIC_ICP_BEIAN=陕ICP备2026014335号-1/);
 });
 
+test("brand logo assets are generated and applied to public entry points", async () => {
+  const layoutSource = await readSource("src/app/layout.tsx");
+  const navSource = await readSource("src/frontend/components/CustomerAuthBar.tsx");
+  const footerSource = await readSource("src/frontend/components/SiteFooter.tsx");
+  const loginSource = await readSource("src/app/account/login/page.tsx");
+  const registerSource = await readSource("src/app/account/register/page.tsx");
+  const bindCardSource = await readSource("src/frontend/components/WechatBindCard.tsx");
+  const adminLoginSource = await readSource("src/app/admin/login/page.tsx");
+  const adminOrdersSource = await readSource("src/app/admin/orders/page.tsx");
+
+  await Promise.all([
+    assertFileExists("public/brand/make3d-logo-horizontal.svg"),
+    assertFileExists("public/brand/make3d-logo-horizontal.png"),
+    assertFileExists("public/brand/make3d-logo-horizontal-transparent.png"),
+    assertFileExists("public/brand/make3d-icon-square.svg"),
+    assertFileExists("public/brand/make3d-icon-square.png"),
+    assertFileExists("public/brand/make3d-icon-square-512.png"),
+    assertFileExists("public/brand/make3d-icon-square-256.png"),
+    assertFileExists("public/brand/make3d-icon-square-128.png"),
+    assertFileExists("public/brand/make3d-icon-square-transparent.png"),
+    assertFileExists("public/brand/make3d-wechat-avatar.png"),
+    assertFileExists("public/brand/favicon.ico"),
+    assertFileExists("design/brand/make3d-logo-horizontal.ai"),
+    assertFileExists("design/brand/make3d-logo-horizontal.pdf"),
+    assertFileExists("design/brand/make3d-icon-square.ai"),
+    assertFileExists("design/brand/make3d-icon-square.pdf"),
+    assertFileExists("design/brand/make3d-logo-source.png"),
+  ]);
+
+  assert.match(layoutSource, /\/brand\/favicon\.ico/);
+  assert.match(layoutSource, /\/brand\/make3d-icon-square-256\.png/);
+  assert.match(layoutSource, /\/brand\/make3d-icon-square-512\.png/);
+  assert.match(navSource, /BrandLogo/);
+  assert.match(footerSource, /BrandLogo/);
+  assert.match(loginSource, /BrandLogo/);
+  assert.match(registerSource, /BrandLogo/);
+  assert.match(bindCardSource, /make3d-icon-square\.svg/);
+  assert.match(adminLoginSource, /AdminBrand/);
+  assert.match(adminOrdersSource, /AdminBrand/);
+});
+
 test("customer MVP pages and logout route exist", async () => {
   const accountSource = await readSource("src/app/account/page.tsx");
   const logoutSource = await readSource("src/app/account/logout/route.ts");

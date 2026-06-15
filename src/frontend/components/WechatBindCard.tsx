@@ -47,11 +47,15 @@ export function WechatBindCard({
   return (
     <section className="mt-8 border border-ink/10 bg-white/80 p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-xl font-bold">微信公众号绑定</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-graphite">
-            当前公众号采用关键词服务模式。关注 Make3D 公众号后，发送绑定码即可绑定账号，绑定后可接收订单状态通知。
-          </p>
+        <div className="flex gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- Public brand icon is a fixed SVG used as a compact account badge. */}
+          <img alt="" className="h-12 w-12 shrink-0 object-contain" src="/brand/make3d-icon-square.svg" />
+          <div>
+            <h2 className="text-xl font-bold">微信公众号绑定</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-graphite">
+              当前公众号采用关键词服务模式。关注 Make3D 公众号后，发送绑定码即可绑定账号，绑定后可接收订单状态通知。
+            </p>
+          </div>
         </div>
         <span
           className={
