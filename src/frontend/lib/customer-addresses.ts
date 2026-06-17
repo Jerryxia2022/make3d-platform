@@ -6,6 +6,13 @@ export type CustomerAddressView = {
   province: string;
   city: string;
   district: string;
+  provinceCode: string | null;
+  provinceName: string | null;
+  cityCode: string | null;
+  cityName: string | null;
+  districtCode: string | null;
+  districtName: string | null;
+  districtCustom: string | null;
   detailAddress: string;
   postalCode: string | null;
   label: string | null;
@@ -16,9 +23,9 @@ export type CustomerAddressView = {
 
 export function formatCustomerAddress(address: Pick<
   CustomerAddressView,
-  "province" | "city" | "district" | "detailAddress"
+  "province" | "city" | "district" | "detailAddress" | "districtCustom"
 >) {
-  return [address.province, address.city, address.district, address.detailAddress]
+  return [address.province, address.city, address.districtCustom || address.district, address.detailAddress]
     .filter(Boolean)
     .join(" ");
 }

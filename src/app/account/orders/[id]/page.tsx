@@ -2,11 +2,15 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   getPaymentSettings,
+  listCustomerServiceRequestsForCustomer,
+  listOrderPaymentsByOrderId,
   getOrderByIdForCustomer,
   getOrderStatusLogsByOrderId,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
+  type OrderPaymentRecord,
+  type CustomerServiceRequestRecord,
   type OrderStatusLogRecord,
   type PaymentSettings,
 } from "@/backend/database";
@@ -38,6 +42,8 @@ export default async function CustomerOrderDetailPage({
     const order = getOrderByIdForCustomer(db, Number(id), customer.id);
     const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
     const paymentSettings = getPaymentSettings(db);
+    const paymentRecords = listOrderPaymentsByOrderId(db, order.id);
+    const serviceRequests = listCustomerServiceRequestsForCustomer(db, customer.id, order.id);
 
     return (
       <main className="min-h-screen px-6 py-10 text-ink">
@@ -100,7 +106,9 @@ export default async function CustomerOrderDetailPage({
             <StatusTimeline order={order} logs={statusLogs} />
           </section>
 
-          <PaymentStatusPanel order={order} paymentSettings={paymentSettings} />
+          <PaymentStatusPanel order={order} paymentRecords={paymentRecords} paymentSettings={paymentSettings} />
+
+          <CustomerServiceRecords records={serviceRequests} />
 
           <section className="surface-card mt-8 p-6">
             <h2 className="text-xl font-bold">管理员备注</h2>
@@ -204,9 +212,11 @@ function CurrentStatusPanel({ order }: { order: OrderDetail }) {
 
 function PaymentStatusPanel({
   order,
+  paymentRecords,
   paymentSettings,
 }: {
   order: OrderDetail;
+  paymentRecords: OrderPaymentRecord[];
   paymentSettings: PaymentSettings;
 }) {
   if (order.status === "待确认") {
@@ -244,6 +254,7 @@ function PaymentStatusPanel({
         <h2 className="text-xl font-bold">生产进度</h2>
         <p className="mt-4 text-sm font-semibold text-coral">订单已付款，等待排产。</p>
         <p className="mt-2 text-sm text-graphite">付款已确认，订单已进入生产准备。</p>
+        <PaymentRecordSummary records={paymentRecords} />
       </section>
     );
   }
@@ -264,11 +275,65 @@ function PaymentStatusPanel({
             <Detail label="运单号" value={order.trackingNumber || "-"} />
           </div>
         ) : null}
+        <PaymentRecordSummary records={paymentRecords} />
       </section>
     );
   }
 
   return null;
+}
+
+function PaymentRecordSummary({ records }: { records: OrderPaymentRecord[] }) {
+  if (records.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+      {records.map((record) => (
+        <div className="metric-tile p-4" key={record.id}>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite">
+            {formatPaymentMethod(record.paymentMethod)}
+          </p>
+          <p className="mt-2 font-bold">{formatCents(record.paidAmountCents)}</p>
+          <p className="mt-1 text-xs text-graphite">{formatOptionalDate(record.paidAt)}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CustomerServiceRecords({ records }: { records: CustomerServiceRequestRecord[] }) {
+  return (
+    <section className="surface-card mt-8 p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">客服记录</h2>
+          <p className="mt-2 text-sm text-graphite">需要补充信息时，可使用右下角在线咨询继续提交。</p>
+        </div>
+      </div>
+      {records.length === 0 ? (
+        <p className="mt-4 text-sm text-graphite">暂无关联客服记录。</p>
+      ) : (
+        <div className="mt-4 grid gap-3">
+          {records.map((record) => (
+            <article className="surface-soft p-4 text-sm" key={record.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill status={record.status} />
+                <span className="text-xs text-graphite">{formatOptionalDate(record.createdAt)}</span>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap leading-6">{record.message}</p>
+              {record.customerVisibleReply ? (
+                <p className="notice-success mt-3 px-3 py-2 text-sm font-semibold">
+                  回复：{record.customerVisibleReply}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -359,6 +424,21 @@ function getCustomerStatusText(order: OrderDetail) {
 
 function formatMoney(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)} 元` : "-";
+}
+
+function formatCents(value: number | null) {
+  return value == null ? "-" : `${(value / 100).toFixed(2)} 元`;
+}
+
+function formatPaymentMethod(value: string | null) {
+  const labels: Record<string, string> = {
+    wechat: "微信转账",
+    alipay: "支付宝转账",
+    bank_transfer: "银行转账",
+    manual: "人工确认",
+  };
+
+  return value ? labels[value] || value : "人工确认";
 }
 
 function formatLeadTime(value?: number | null) {

@@ -8,6 +8,7 @@ import {
   getOrderById,
   getOrderByIdForCustomer,
   getOrderStatusLogsByOrderId,
+  listOrderPaymentsByOrderId,
   confirmOrderFinalQuote,
   confirmOrderPayment,
   initDatabase,
@@ -212,6 +213,9 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
   assert.equal(
     confirmOrderPayment(db, order.id, {
       paymentMethod: "微信转账",
+      paidAmount: 88.5,
+      payerName: "Jerry",
+      platformTradeNo: "wx-001",
       paymentNote: "微信到账",
       operator: "admin",
     }),
@@ -226,6 +230,12 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
   assert.equal(paid.paymentConfirmedBy, "admin");
   assert.equal(paid.paymentNote, "微信到账");
   assert.ok(paid.paymentConfirmedAt);
+  const paymentRecords = listOrderPaymentsByOrderId(db, order.id);
+  assert.equal(paymentRecords.length, 1);
+  assert.equal(paymentRecords[0].expectedAmountCents, 8850);
+  assert.equal(paymentRecords[0].paidAmountCents, 8850);
+  assert.equal(paymentRecords[0].payerName, "Jerry");
+  assert.equal(paymentRecords[0].platformTradeNo, "wx-001");
 
   assert.equal(updateOrderStatus(db, order.id, { status: "生产中", operator: "admin" }), true);
   assert.equal(getOrderById(db, order.id).status, "生产中");
@@ -312,6 +322,7 @@ test("admin status dropdown can confirm payment through shared status logic", ()
   assert.equal(customerDetail.status, "已付款");
   assert.equal(customerDetail.paymentStatus, "paid");
   assert.ok(logs.some((log) => log.fromStatus === "待付款" && log.toStatus === "已付款"));
+  assert.equal(listOrderPaymentsByOrderId(db, order.id).length, 1);
 
   db.close();
 });

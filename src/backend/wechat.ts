@@ -429,6 +429,8 @@ function createCustomerServiceRequestReply(
     openid: message.fromUserName,
     phone: extractPhone(content),
     message: content,
+    source: "wechat_keyword",
+    category: "other",
   });
 
   return buildWechatTextReply(

@@ -49,7 +49,7 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'quote_drafts', 'quote_draft_files', 'customer_addresses') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'order_payments', 'quote_drafts', 'quote_draft_files', 'customer_addresses') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
@@ -57,6 +57,7 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   assert.deepEqual(tables, [
     "customer_addresses",
     "files",
+    "order_payments",
     "orders",
     "payment_settings",
     "quote_draft_files",
@@ -107,6 +108,9 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "shipping_province",
     "shipping_city",
     "shipping_district",
+    "shipping_province_code",
+    "shipping_city_code",
+    "shipping_district_custom",
     "shipping_detail_address",
     "shipping_postal_code",
     "shipping_label",
@@ -144,11 +148,32 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   for (const column of [
     "wechat_qr_path",
     "alipay_qr_path",
-    "xianyu_url",
-    "taobao_url",
-    "other_note",
+    "wechat_enabled",
+    "wechat_qr_image_path",
+    "alipay_enabled",
+    "alipay_qr_image_path",
+    "bank_enabled",
+    "bank_account_name",
+    "bank_account",
+    "payment_notice",
+    "service_account_qr_path",
   ]) {
     assert.equal(paymentColumns.includes(column), true);
+  }
+
+  const orderPaymentColumns = db.prepare("PRAGMA table_info(order_payments)").all().map((row) => row.name);
+  for (const column of [
+    "order_id",
+    "payment_method",
+    "expected_amount_cents",
+    "paid_amount_cents",
+    "paid_at",
+    "payer_name",
+    "platform_trade_no",
+    "payment_difference_reason",
+    "refund_status",
+  ]) {
+    assert.equal(orderPaymentColumns.includes(column), true);
   }
 
   const sliceJobColumns = db.prepare("PRAGMA table_info(slice_jobs)").all().map((row) => row.name);
@@ -216,6 +241,9 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "province",
     "city",
     "district",
+    "province_code",
+    "city_code",
+    "district_custom",
     "detail_address",
     "postal_code",
     "label",
@@ -238,9 +266,23 @@ test("returns payment settings as a plain object for client components", () => {
   assert.deepEqual(settings, {
     wechatQrPath: null,
     alipayQrPath: null,
-    xianyuUrl: null,
-    taobaoUrl: null,
-    otherNote: null,
+    wechatEnabled: false,
+    wechatDisplayName: "微信转账",
+    wechatQrImagePath: null,
+    wechatPaymentInstruction: null,
+    alipayEnabled: false,
+    alipayDisplayName: "支付宝转账",
+    alipayQrImagePath: null,
+    alipayPaymentInstruction: null,
+    bankEnabled: false,
+    bankAccountName: null,
+    bankName: null,
+    bankBranch: null,
+    bankAccount: null,
+    bankPaymentInstruction: null,
+    paymentNotice: null,
+    customerServiceHours: "工作日晚上和周末优先处理复杂沟通",
+    serviceAccountQrPath: "/brand/make3d-service-qrcode.png",
   });
 
   db.close();

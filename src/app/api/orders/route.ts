@@ -206,7 +206,8 @@ export async function POST(request: Request) {
       }
 
       const shippingAddress = getCustomerAddressByIdForCustomer(db, customer.id, addressId);
-      const addressRegion = [shippingAddress.province, shippingAddress.city, shippingAddress.district]
+      const district = shippingAddress.districtCustom || shippingAddress.district;
+      const addressRegion = [shippingAddress.province, shippingAddress.city, district]
         .filter(Boolean)
         .join(" ");
       const addressSnapshot = {
@@ -214,8 +215,15 @@ export async function POST(request: Request) {
         recipientName: shippingAddress.recipientName,
         phone: shippingAddress.phone,
         province: shippingAddress.province,
+        provinceCode: shippingAddress.provinceCode,
+        provinceName: shippingAddress.provinceName,
         city: shippingAddress.city,
-        district: shippingAddress.district,
+        cityCode: shippingAddress.cityCode,
+        cityName: shippingAddress.cityName,
+        district,
+        districtCode: shippingAddress.districtCode,
+        districtName: shippingAddress.districtName,
+        districtCustom: shippingAddress.districtCustom,
         detailAddress: shippingAddress.detailAddress,
         postalCode: shippingAddress.postalCode,
         label: shippingAddress.label,
@@ -250,7 +258,14 @@ export async function POST(request: Request) {
         addressDetail: shippingAddress.detailAddress,
         shippingProvince: shippingAddress.province,
         shippingCity: shippingAddress.city,
-        shippingDistrict: shippingAddress.district,
+        shippingDistrict: district,
+        shippingProvinceCode: shippingAddress.provinceCode,
+        shippingProvinceName: shippingAddress.provinceName,
+        shippingCityCode: shippingAddress.cityCode,
+        shippingCityName: shippingAddress.cityName,
+        shippingDistrictCode: shippingAddress.districtCode,
+        shippingDistrictName: shippingAddress.districtName,
+        shippingDistrictCustom: shippingAddress.districtCustom,
         shippingDetailAddress: shippingAddress.detailAddress,
         shippingPostalCode: shippingAddress.postalCode,
         shippingLabel: shippingAddress.label,

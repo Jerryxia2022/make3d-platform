@@ -31,6 +31,13 @@ export type OrderInput = {
   shippingProvince?: string | null;
   shippingCity?: string | null;
   shippingDistrict?: string | null;
+  shippingProvinceCode?: string | null;
+  shippingProvinceName?: string | null;
+  shippingCityCode?: string | null;
+  shippingCityName?: string | null;
+  shippingDistrictCode?: string | null;
+  shippingDistrictName?: string | null;
+  shippingDistrictCustom?: string | null;
   shippingDetailAddress?: string | null;
   shippingPostalCode?: string | null;
   shippingLabel?: string | null;
@@ -168,9 +175,16 @@ export const CUSTOMER_ADDRESS_LIMIT = 5;
 export type CustomerAddressInput = {
   recipientName: string;
   phone: string;
-  province: string;
-  city: string;
-  district: string;
+  province?: string;
+  city?: string;
+  district?: string;
+  provinceCode?: string | null;
+  provinceName?: string | null;
+  cityCode?: string | null;
+  cityName?: string | null;
+  districtCode?: string | null;
+  districtName?: string | null;
+  districtCustom?: string | null;
   detailAddress: string;
   postalCode?: string | null;
   label?: string | null;
@@ -180,6 +194,16 @@ export type CustomerAddressInput = {
 export type CustomerAddressRecord = CustomerAddressInput & {
   id: number;
   customerId: number;
+  province: string;
+  city: string;
+  district: string;
+  provinceCode: string | null;
+  provinceName: string | null;
+  cityCode: string | null;
+  cityName: string | null;
+  districtCode: string | null;
+  districtName: string | null;
+  districtCustom: string | null;
   postalCode: string | null;
   label: string | null;
   isDefault: boolean;
@@ -246,7 +270,13 @@ export type WechatNotificationRecord = {
   createdAt: string;
 };
 
-export const CUSTOMER_SERVICE_REQUEST_STATUSES = ["待处理", "已处理"] as const;
+export const CUSTOMER_SERVICE_REQUEST_STATUSES = [
+  "pending",
+  "processing",
+  "waiting_customer",
+  "resolved",
+  "closed",
+] as const;
 
 export type CustomerServiceRequestStatus =
   (typeof CUSTOMER_SERVICE_REQUEST_STATUSES)[number];
@@ -257,6 +287,8 @@ export type CustomerServiceRequestInput = {
   phone?: string | null;
   orderId?: number | null;
   message: string;
+  source?: string | null;
+  category?: string | null;
 };
 
 export type CustomerServiceRequestRecord = {
@@ -269,6 +301,12 @@ export type CustomerServiceRequestRecord = {
   orderNo: string | null;
   message: string;
   status: CustomerServiceRequestStatus;
+  source: string | null;
+  category: string | null;
+  adminNote: string | null;
+  customerVisibleReply: string | null;
+  handledBy: string | null;
+  handledAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -438,6 +476,13 @@ export type OrderRecord = {
   shippingProvince: string | null;
   shippingCity: string | null;
   shippingDistrict: string | null;
+  shippingProvinceCode: string | null;
+  shippingProvinceName: string | null;
+  shippingCityCode: string | null;
+  shippingCityName: string | null;
+  shippingDistrictCode: string | null;
+  shippingDistrictName: string | null;
+  shippingDistrictCustom: string | null;
   shippingDetailAddress: string | null;
   shippingPostalCode: string | null;
   shippingLabel: string | null;
@@ -494,9 +539,56 @@ export type OrderStatusLogRecord = {
 export type PaymentSettings = {
   wechatQrPath: string | null;
   alipayQrPath: string | null;
-  xianyuUrl: string | null;
-  taobaoUrl: string | null;
-  otherNote: string | null;
+  wechatEnabled: boolean;
+  wechatDisplayName: string | null;
+  wechatQrImagePath: string | null;
+  wechatPaymentInstruction: string | null;
+  alipayEnabled: boolean;
+  alipayDisplayName: string | null;
+  alipayQrImagePath: string | null;
+  alipayPaymentInstruction: string | null;
+  bankEnabled: boolean;
+  bankAccountName: string | null;
+  bankName: string | null;
+  bankBranch: string | null;
+  bankAccount: string | null;
+  bankPaymentInstruction: string | null;
+  paymentNotice: string | null;
+  customerServiceHours: string | null;
+  serviceAccountQrPath: string | null;
+};
+
+export type OrderPaymentInput = {
+  orderId: number;
+  paymentMethod: string;
+  expectedAmountCents: number;
+  paidAmountCents: number;
+  paidAt?: string | null;
+  payerName?: string | null;
+  payerReference?: string | null;
+  platformTradeNo?: string | null;
+  paymentNote?: string | null;
+  paymentDifferenceReason?: string | null;
+  confirmedBy?: string | null;
+};
+
+export type OrderPaymentRecord = {
+  id: number;
+  orderId: number;
+  paymentMethod: string;
+  expectedAmountCents: number;
+  paidAmountCents: number;
+  paidAt: string;
+  payerName: string | null;
+  payerReference: string | null;
+  platformTradeNo: string | null;
+  paymentNote: string | null;
+  paymentDifferenceReason: string | null;
+  refundStatus: string;
+  refundAmountCents: number | null;
+  refundNote: string | null;
+  confirmedBy: string | null;
+  createdAt: string;
 };
 
 export type SliceJobInput = {
@@ -588,6 +680,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
       shipping_province TEXT,
       shipping_city TEXT,
       shipping_district TEXT,
+      shipping_province_code TEXT,
+      shipping_province_name TEXT,
+      shipping_city_code TEXT,
+      shipping_city_name TEXT,
+      shipping_district_code TEXT,
+      shipping_district_name TEXT,
+      shipping_district_custom TEXT,
       shipping_detail_address TEXT,
       shipping_postal_code TEXT,
       shipping_label TEXT,
@@ -643,6 +742,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
       province TEXT NOT NULL,
       city TEXT NOT NULL,
       district TEXT NOT NULL,
+      province_code TEXT,
+      province_name TEXT,
+      city_code TEXT,
+      city_name TEXT,
+      district_code TEXT,
+      district_name TEXT,
+      district_custom TEXT,
       detail_address TEXT NOT NULL,
       postal_code TEXT,
       label TEXT,
@@ -683,7 +789,44 @@ export function initDatabase(dbPath = getDatabasePath()) {
       xianyu_url TEXT,
       taobao_url TEXT,
       other_note TEXT,
+      wechat_enabled INTEGER NOT NULL DEFAULT 0,
+      wechat_display_name TEXT,
+      wechat_qr_image_path TEXT,
+      wechat_payment_instruction TEXT,
+      alipay_enabled INTEGER NOT NULL DEFAULT 0,
+      alipay_display_name TEXT,
+      alipay_qr_image_path TEXT,
+      alipay_payment_instruction TEXT,
+      bank_enabled INTEGER NOT NULL DEFAULT 0,
+      bank_account_name TEXT,
+      bank_name TEXT,
+      bank_branch TEXT,
+      bank_account TEXT,
+      bank_payment_instruction TEXT,
+      payment_notice TEXT,
+      customer_service_hours TEXT,
+      service_account_qr_path TEXT,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS order_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      payment_method TEXT NOT NULL,
+      expected_amount_cents INTEGER NOT NULL,
+      paid_amount_cents INTEGER NOT NULL,
+      paid_at DATETIME NOT NULL,
+      payer_name TEXT,
+      payer_reference TEXT,
+      platform_trade_no TEXT,
+      payment_note TEXT,
+      payment_difference_reason TEXT,
+      refund_status TEXT NOT NULL DEFAULT 'none',
+      refund_amount_cents INTEGER,
+      refund_note TEXT,
+      confirmed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS order_status_logs (
@@ -781,7 +924,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
       phone TEXT,
       order_id INTEGER,
       message TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT '待处理',
+      status TEXT NOT NULL DEFAULT 'pending',
+      source TEXT,
+      category TEXT,
+      admin_note TEXT,
+      customer_visible_reply TEXT,
+      handled_by TEXT,
+      handled_at DATETIME,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
@@ -904,6 +1053,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["shipping_province", "TEXT"],
     ["shipping_city", "TEXT"],
     ["shipping_district", "TEXT"],
+    ["shipping_province_code", "TEXT"],
+    ["shipping_province_name", "TEXT"],
+    ["shipping_city_code", "TEXT"],
+    ["shipping_city_name", "TEXT"],
+    ["shipping_district_code", "TEXT"],
+    ["shipping_district_name", "TEXT"],
+    ["shipping_district_custom", "TEXT"],
     ["shipping_detail_address", "TEXT"],
     ["shipping_postal_code", "TEXT"],
     ["shipping_label", "TEXT"],
@@ -943,6 +1099,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["province", "TEXT"],
     ["city", "TEXT"],
     ["district", "TEXT"],
+    ["province_code", "TEXT"],
+    ["province_name", "TEXT"],
+    ["city_code", "TEXT"],
+    ["city_name", "TEXT"],
+    ["district_code", "TEXT"],
+    ["district_name", "TEXT"],
+    ["district_custom", "TEXT"],
     ["detail_address", "TEXT"],
     ["postal_code", "TEXT"],
     ["label", "TEXT"],
@@ -961,9 +1124,44 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["xianyu_url", "TEXT"],
     ["taobao_url", "TEXT"],
     ["other_note", "TEXT"],
+    ["wechat_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["wechat_display_name", "TEXT"],
+    ["wechat_qr_image_path", "TEXT"],
+    ["wechat_payment_instruction", "TEXT"],
+    ["alipay_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["alipay_display_name", "TEXT"],
+    ["alipay_qr_image_path", "TEXT"],
+    ["alipay_payment_instruction", "TEXT"],
+    ["bank_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["bank_account_name", "TEXT"],
+    ["bank_name", "TEXT"],
+    ["bank_branch", "TEXT"],
+    ["bank_account", "TEXT"],
+    ["bank_payment_instruction", "TEXT"],
+    ["payment_notice", "TEXT"],
+    ["customer_service_hours", "TEXT"],
+    ["service_account_qr_path", "TEXT"],
     ["updated_at", "DATETIME"],
   ]);
   db.prepare("INSERT OR IGNORE INTO payment_settings (id) VALUES (1)").run();
+  ensureColumns(db, "order_payments", [
+    ["order_id", "INTEGER"],
+    ["payment_method", "TEXT"],
+    ["expected_amount_cents", "INTEGER"],
+    ["paid_amount_cents", "INTEGER"],
+    ["paid_at", "DATETIME"],
+    ["payer_name", "TEXT"],
+    ["payer_reference", "TEXT"],
+    ["platform_trade_no", "TEXT"],
+    ["payment_note", "TEXT"],
+    ["payment_difference_reason", "TEXT"],
+    ["refund_status", "TEXT NOT NULL DEFAULT 'none'"],
+    ["refund_amount_cents", "INTEGER"],
+    ["refund_note", "TEXT"],
+    ["confirmed_by", "TEXT"],
+    ["created_at", "DATETIME"],
+  ]);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(order_id, created_at DESC)");
   ensureColumns(db, "service_requests", [
     ["request_type", "TEXT"],
     ["customer_id", "INTEGER"],
@@ -1015,10 +1213,25 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["phone", "TEXT"],
     ["order_id", "INTEGER"],
     ["message", "TEXT"],
-    ["status", "TEXT NOT NULL DEFAULT '待处理'"],
+    ["status", "TEXT NOT NULL DEFAULT 'pending'"],
+    ["source", "TEXT"],
+    ["category", "TEXT"],
+    ["admin_note", "TEXT"],
+    ["customer_visible_reply", "TEXT"],
+    ["handled_by", "TEXT"],
+    ["handled_at", "DATETIME"],
     ["created_at", "DATETIME"],
     ["updated_at", "DATETIME"],
   ]);
+  db.exec(`
+    UPDATE customer_service_requests
+    SET status = CASE status
+      WHEN '待处理' THEN 'pending'
+      WHEN '已处理' THEN 'resolved'
+      ELSE status
+    END
+    WHERE status IN ('待处理', '已处理');
+  `);
   ensureColumns(db, "quote_drafts", [
     ["customer_id", "INTEGER"],
     ["status", "TEXT NOT NULL DEFAULT 'active'"],
@@ -1439,21 +1652,35 @@ export function createCustomerAddress(
           province,
           city,
           district,
+          province_code,
+          province_name,
+          city_code,
+          city_name,
+          district_code,
+          district_name,
+          district_custom,
           detail_address,
           postal_code,
           label,
           is_default,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         customerId,
         normalized.recipientName,
         normalized.phone,
-        normalized.province,
-        normalized.city,
-        normalized.district,
+        normalized.province || "",
+        normalized.city || "",
+        normalized.district || "",
+        normalized.provinceCode ?? null,
+        normalized.provinceName ?? normalized.province ?? "",
+        normalized.cityCode ?? null,
+        normalized.cityName ?? normalized.city ?? "",
+        normalized.districtCode ?? null,
+        normalized.districtName ?? normalized.district ?? "",
+        normalized.districtCustom ?? null,
         normalized.detailAddress,
         normalized.postalCode ?? null,
         normalized.label ?? null,
@@ -1494,6 +1721,13 @@ export function updateCustomerAddress(
              province = ?,
              city = ?,
              district = ?,
+             province_code = ?,
+             province_name = ?,
+             city_code = ?,
+             city_name = ?,
+             district_code = ?,
+             district_name = ?,
+             district_custom = ?,
              detail_address = ?,
              postal_code = ?,
              label = ?,
@@ -1504,9 +1738,16 @@ export function updateCustomerAddress(
       .run(
         normalized.recipientName,
         normalized.phone,
-        normalized.province,
-        normalized.city,
-        normalized.district,
+        normalized.province || "",
+        normalized.city || "",
+        normalized.district || "",
+        normalized.provinceCode ?? null,
+        normalized.provinceName ?? normalized.province ?? "",
+        normalized.cityCode ?? null,
+        normalized.cityName ?? normalized.city ?? "",
+        normalized.districtCode ?? null,
+        normalized.districtName ?? normalized.district ?? "",
+        normalized.districtCustom ?? null,
         normalized.detailAddress,
         normalized.postalCode ?? null,
         normalized.label ?? null,
@@ -1607,12 +1848,25 @@ function ensureCustomerHasDefaultAddress(db: DatabaseSync, customerId: number) {
 }
 
 function normalizeCustomerAddressInput(input: CustomerAddressInput): CustomerAddressInput {
+  const provinceName = (input.provinceName || input.province || "").trim();
+  const cityName = (input.cityName || input.city || "").trim();
+  const districtName = (input.districtName || input.district || "").trim();
+  const districtCustom = input.districtCustom?.trim() || null;
+  const district = districtCustom || districtName;
+
   return {
     recipientName: input.recipientName.trim(),
     phone: input.phone.trim(),
-    province: input.province.trim(),
-    city: input.city.trim(),
-    district: input.district.trim(),
+    province: provinceName,
+    city: cityName,
+    district,
+    provinceCode: input.provinceCode?.trim() || null,
+    provinceName,
+    cityCode: input.cityCode?.trim() || null,
+    cityName,
+    districtCode: input.districtCode?.trim() || null,
+    districtName,
+    districtCustom,
     detailAddress: input.detailAddress.trim(),
     postalCode: input.postalCode?.trim() || null,
     label: input.label?.trim() || null,
@@ -1661,6 +1915,13 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           shipping_province,
           shipping_city,
           shipping_district,
+          shipping_province_code,
+          shipping_province_name,
+          shipping_city_code,
+          shipping_city_name,
+          shipping_district_code,
+          shipping_district_name,
+          shipping_district_custom,
           shipping_detail_address,
           shipping_postal_code,
           shipping_label,
@@ -1684,7 +1945,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           status,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -1714,6 +1975,13 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.shippingProvince || null,
         input.shippingCity || null,
         input.shippingDistrict || null,
+        input.shippingProvinceCode || null,
+        input.shippingProvinceName || input.shippingProvince || null,
+        input.shippingCityCode || null,
+        input.shippingCityName || input.shippingCity || null,
+        input.shippingDistrictCode || null,
+        input.shippingDistrictName || input.shippingDistrict || null,
+        input.shippingDistrictCustom || null,
         input.shippingDetailAddress || null,
         input.shippingPostalCode || null,
         input.shippingLabel || null,
@@ -2213,6 +2481,13 @@ export type OrderStatusUpdateInput = {
   note?: string | null;
   paymentMethod?: string | null;
   paymentNote?: string | null;
+  paidAmount?: number | null;
+  paidAmountCents?: number | null;
+  paidAt?: string | null;
+  payerName?: string | null;
+  payerReference?: string | null;
+  platformTradeNo?: string | null;
+  paymentDifferenceReason?: string | null;
   assignedPrinter?: string | null;
   estimatedStartAt?: string | null;
   estimatedFinishAt?: string | null;
@@ -2243,6 +2518,8 @@ export function updateOrderStatus(
       `SELECT
         status,
         final_price AS finalPrice,
+        payable_price AS payablePrice,
+        estimated_price AS estimatedPrice,
         payment_method AS paymentMethod,
         payment_confirmed_at AS paymentConfirmedAt,
         payment_status AS paymentStatus,
@@ -2259,6 +2536,8 @@ export function updateOrderStatus(
     | {
         status: string;
         finalPrice: number | null;
+        payablePrice: number | null;
+        estimatedPrice: number | null;
         paymentMethod: string | null;
         paymentConfirmedAt: string | null;
         paymentStatus: string | null;
@@ -2299,6 +2578,16 @@ export function updateOrderStatus(
     typeof input === "string" ? null : normalizeOptionalText(input.paymentMethod);
   const paymentNote =
     typeof input === "string" ? null : normalizeOptionalText(input.paymentNote);
+  const paidAt =
+    typeof input === "string" ? null : normalizeOptionalText(input.paidAt);
+  const payerName =
+    typeof input === "string" ? null : normalizeOptionalText(input.payerName);
+  const payerReference =
+    typeof input === "string" ? null : normalizeOptionalText(input.payerReference);
+  const platformTradeNo =
+    typeof input === "string" ? null : normalizeOptionalText(input.platformTradeNo);
+  const paymentDifferenceReason =
+    typeof input === "string" ? null : normalizeOptionalText(input.paymentDifferenceReason);
   const shippedAt =
     typeof input === "string" ? null : normalizeOptionalText(input.shippedAt);
   const shippingNote =
@@ -2315,6 +2604,19 @@ export function updateOrderStatus(
   }
 
   const now = getBeijingTimestamp();
+  const confirmedPaidAt = paidAt || now;
+  const shouldCreatePaymentRecord = current.status !== status && status === "已付款";
+  const expectedAmountCents = shouldCreatePaymentRecord
+    ? moneyToCents(current.finalPrice ?? current.payablePrice ?? current.estimatedPrice ?? 0)
+    : 0;
+  const paidAmountCents = shouldCreatePaymentRecord
+    ? normalizePaidAmountCents(input, expectedAmountCents)
+    : 0;
+
+  if (shouldCreatePaymentRecord && paidAmountCents !== expectedAmountCents && !paymentDifferenceReason) {
+    throw new Error("实收金额与应收金额不一致时，请填写差额原因");
+  }
+
   const result = db
     .prepare(
       `UPDATE orders
@@ -2370,7 +2672,7 @@ export function updateOrderStatus(
       status,
       status,
       status,
-      now,
+      confirmedPaidAt,
       paymentMethod,
       status,
       now,
@@ -2404,6 +2706,22 @@ export function updateOrderStatus(
 
   if (result.changes > 0 && current.status !== status) {
     insertStatusLog(db, id, current.status, status, operator, note);
+  }
+
+  if (result.changes > 0 && shouldCreatePaymentRecord) {
+    createOrderPaymentRecord(db, {
+      orderId: id,
+      paymentMethod: paymentMethod || "manual",
+      expectedAmountCents,
+      paidAmountCents,
+      paidAt: confirmedPaidAt,
+      payerName,
+      payerReference,
+      platformTradeNo,
+      paymentNote,
+      paymentDifferenceReason,
+      confirmedBy: operator,
+    });
   }
 
   return result.changes > 0;
@@ -2527,6 +2845,13 @@ export function confirmOrderPayment(
   input: {
     paymentMethod?: string | null;
     paymentNote?: string | null;
+    paidAmount?: number | null;
+    paidAmountCents?: number | null;
+    paidAt?: string | null;
+    payerName?: string | null;
+    payerReference?: string | null;
+    platformTradeNo?: string | null;
+    paymentDifferenceReason?: string | null;
     operator?: string;
   },
 ) {
@@ -2535,7 +2860,63 @@ export function confirmOrderPayment(
     operator: input.operator || "admin",
     paymentMethod: input.paymentMethod,
     paymentNote: input.paymentNote,
+    paidAmount: input.paidAmount,
+    paidAmountCents: input.paidAmountCents,
+    paidAt: input.paidAt,
+    payerName: input.payerName,
+    payerReference: input.payerReference,
+    platformTradeNo: input.platformTradeNo,
+    paymentDifferenceReason: input.paymentDifferenceReason,
   });
+}
+
+export function createOrderPaymentRecord(
+  db: DatabaseSync,
+  input: OrderPaymentInput,
+): number {
+  const paidAt = normalizeOptionalText(input.paidAt) || getBeijingTimestamp();
+  const result = db
+    .prepare(
+      `INSERT INTO order_payments (
+        order_id,
+        payment_method,
+        expected_amount_cents,
+        paid_amount_cents,
+        paid_at,
+        payer_name,
+        payer_reference,
+        platform_trade_no,
+        payment_note,
+        payment_difference_reason,
+        confirmed_by,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.orderId,
+      input.paymentMethod,
+      input.expectedAmountCents,
+      input.paidAmountCents,
+      paidAt,
+      normalizeOptionalText(input.payerName),
+      normalizeOptionalText(input.payerReference),
+      normalizeOptionalText(input.platformTradeNo),
+      normalizeOptionalText(input.paymentNote),
+      normalizeOptionalText(input.paymentDifferenceReason),
+      normalizeOptionalText(input.confirmedBy),
+      getBeijingTimestamp(),
+    );
+
+  return Number(result.lastInsertRowid);
+}
+
+export function listOrderPaymentsByOrderId(
+  db: DatabaseSync,
+  orderId: number,
+): OrderPaymentRecord[] {
+  return db
+    .prepare(orderPaymentSelectSql("WHERE order_id = ? ORDER BY paid_at DESC, id DESC"))
+    .all(orderId) as OrderPaymentRecord[];
 }
 
 export function getOrderStatusLogsByOrderId(
@@ -2565,20 +2946,56 @@ export function getPaymentSettings(db: DatabaseSync): PaymentSettings {
       `SELECT
         wechat_qr_path AS wechatQrPath,
         alipay_qr_path AS alipayQrPath,
-        xianyu_url AS xianyuUrl,
-        taobao_url AS taobaoUrl,
-        other_note AS otherNote
+        other_note AS otherNote,
+        wechat_enabled AS wechatEnabled,
+        wechat_display_name AS wechatDisplayName,
+        wechat_qr_image_path AS wechatQrImagePath,
+        wechat_payment_instruction AS wechatPaymentInstruction,
+        alipay_enabled AS alipayEnabled,
+        alipay_display_name AS alipayDisplayName,
+        alipay_qr_image_path AS alipayQrImagePath,
+        alipay_payment_instruction AS alipayPaymentInstruction,
+        bank_enabled AS bankEnabled,
+        bank_account_name AS bankAccountName,
+        bank_name AS bankName,
+        bank_branch AS bankBranch,
+        bank_account AS bankAccount,
+        bank_payment_instruction AS bankPaymentInstruction,
+        payment_notice AS paymentNotice,
+        customer_service_hours AS customerServiceHours,
+        service_account_qr_path AS serviceAccountQrPath
       FROM payment_settings
       WHERE id = 1`,
     )
-    .get() as PaymentSettings | undefined;
+    .get() as
+    | (Omit<PaymentSettings, "wechatEnabled" | "alipayEnabled" | "bankEnabled"> & {
+        wechatEnabled?: 0 | 1 | boolean | null;
+        alipayEnabled?: 0 | 1 | boolean | null;
+        bankEnabled?: 0 | 1 | boolean | null;
+        otherNote?: string | null;
+      })
+    | undefined;
 
   return {
     wechatQrPath: row?.wechatQrPath ?? null,
     alipayQrPath: row?.alipayQrPath ?? null,
-    xianyuUrl: row?.xianyuUrl ?? null,
-    taobaoUrl: row?.taobaoUrl ?? null,
-    otherNote: row?.otherNote ?? null,
+    wechatEnabled: Boolean(row?.wechatEnabled),
+    wechatDisplayName: row?.wechatDisplayName ?? "微信转账",
+    wechatQrImagePath: row?.wechatQrImagePath ?? row?.wechatQrPath ?? null,
+    wechatPaymentInstruction: row?.wechatPaymentInstruction ?? null,
+    alipayEnabled: Boolean(row?.alipayEnabled),
+    alipayDisplayName: row?.alipayDisplayName ?? "支付宝转账",
+    alipayQrImagePath: row?.alipayQrImagePath ?? row?.alipayQrPath ?? null,
+    alipayPaymentInstruction: row?.alipayPaymentInstruction ?? null,
+    bankEnabled: Boolean(row?.bankEnabled),
+    bankAccountName: row?.bankAccountName ?? null,
+    bankName: row?.bankName ?? null,
+    bankBranch: row?.bankBranch ?? null,
+    bankAccount: row?.bankAccount ?? null,
+    bankPaymentInstruction: row?.bankPaymentInstruction ?? null,
+    paymentNotice: row?.paymentNotice ?? row?.otherNote ?? null,
+    customerServiceHours: row?.customerServiceHours ?? "工作日晚上和周末优先处理复杂沟通",
+    serviceAccountQrPath: row?.serviceAccountQrPath ?? "/brand/make3d-service-qrcode.png",
   };
 }
 
@@ -2590,18 +3007,48 @@ export function updatePaymentSettings(db: DatabaseSync, input: PaymentSettings) 
       `UPDATE payment_settings
        SET wechat_qr_path = ?,
            alipay_qr_path = ?,
-           xianyu_url = ?,
-           taobao_url = ?,
            other_note = ?,
+           wechat_enabled = ?,
+           wechat_display_name = ?,
+           wechat_qr_image_path = ?,
+           wechat_payment_instruction = ?,
+           alipay_enabled = ?,
+           alipay_display_name = ?,
+           alipay_qr_image_path = ?,
+           alipay_payment_instruction = ?,
+           bank_enabled = ?,
+           bank_account_name = ?,
+           bank_name = ?,
+           bank_branch = ?,
+           bank_account = ?,
+           bank_payment_instruction = ?,
+           payment_notice = ?,
+           customer_service_hours = ?,
+           service_account_qr_path = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
     )
     .run(
-      normalizeOptionalText(input.wechatQrPath),
-      normalizeOptionalText(input.alipayQrPath),
-      normalizeOptionalText(input.xianyuUrl),
-      normalizeOptionalText(input.taobaoUrl),
-      normalizeOptionalText(input.otherNote),
+      normalizeOptionalText(input.wechatQrImagePath || input.wechatQrPath),
+      normalizeOptionalText(input.alipayQrImagePath || input.alipayQrPath),
+      normalizeOptionalText(input.paymentNotice),
+      input.wechatEnabled ? 1 : 0,
+      normalizeOptionalText(input.wechatDisplayName) || "微信转账",
+      normalizeOptionalText(input.wechatQrImagePath || input.wechatQrPath),
+      normalizeOptionalText(input.wechatPaymentInstruction),
+      input.alipayEnabled ? 1 : 0,
+      normalizeOptionalText(input.alipayDisplayName) || "支付宝转账",
+      normalizeOptionalText(input.alipayQrImagePath || input.alipayQrPath),
+      normalizeOptionalText(input.alipayPaymentInstruction),
+      input.bankEnabled ? 1 : 0,
+      normalizeOptionalText(input.bankAccountName),
+      normalizeOptionalText(input.bankName),
+      normalizeOptionalText(input.bankBranch),
+      normalizeOptionalText(input.bankAccount),
+      normalizeOptionalText(input.bankPaymentInstruction),
+      normalizeOptionalText(input.paymentNotice),
+      normalizeOptionalText(input.customerServiceHours),
+      normalizeOptionalText(input.serviceAccountQrPath) || "/brand/make3d-service-qrcode.png",
     );
 
   return result.changes > 0;
@@ -2869,6 +3316,9 @@ export function createCustomerServiceRequest(
   input: CustomerServiceRequestInput,
 ) {
   const message = normalizeRequiredText(input.message, "请填写客服请求内容");
+  if (message.length > 1000) {
+    throw new Error("客服请求内容最多 1000 字");
+  }
   const links = resolveCustomerServiceRequestLinks(db, {
     ...input,
     message,
@@ -2881,8 +3331,10 @@ export function createCustomerServiceRequest(
         phone,
         order_id,
         message,
-        status
-      ) VALUES (?, ?, ?, ?, ?, '待处理')`,
+        status,
+        source,
+        category
+      ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`,
     )
     .run(
       links.customerId,
@@ -2890,6 +3342,8 @@ export function createCustomerServiceRequest(
       links.phone,
       links.orderId,
       message,
+      normalizeOptionalText(input.source) || "wechat_keyword",
+      normalizeOptionalText(input.category) || "other",
     );
 
   return { id: Number(result.lastInsertRowid) };
@@ -2985,16 +3439,72 @@ export function searchCustomerServiceRequests(
 }
 
 export function markCustomerServiceRequestHandled(db: DatabaseSync, id: number) {
+  return updateCustomerServiceRequest(db, id, {
+    status: "resolved",
+    handledBy: "admin",
+  });
+}
+
+export function updateCustomerServiceRequest(
+  db: DatabaseSync,
+  id: number,
+  input: {
+    status?: CustomerServiceRequestStatus;
+    adminNote?: string | null;
+    customerVisibleReply?: string | null;
+    handledBy?: string | null;
+  },
+) {
+  const status = input.status || null;
+  if (status && !isCustomerServiceRequestStatus(status)) {
+    throw new Error("无效客服状态");
+  }
+
+  const handledAt = status && ["resolved", "closed"].includes(status) ? getBeijingTimestamp() : null;
   const result = db
     .prepare(
       `UPDATE customer_service_requests
-       SET status = '已处理',
-           updated_at = CURRENT_TIMESTAMP
+       SET status = COALESCE(?, status),
+           admin_note = COALESCE(?, admin_note),
+           customer_visible_reply = COALESCE(?, customer_visible_reply),
+           handled_by = COALESCE(?, handled_by),
+           handled_at = COALESCE(?, handled_at),
+           updated_at = ?
        WHERE id = ?`,
     )
-    .run(id);
+    .run(
+      status,
+      normalizeOptionalText(input.adminNote),
+      normalizeOptionalText(input.customerVisibleReply),
+      normalizeOptionalText(input.handledBy),
+      handledAt,
+      getBeijingTimestamp(),
+      id,
+    );
 
   return result.changes > 0;
+}
+
+export function listCustomerServiceRequestsForCustomer(
+  db: DatabaseSync,
+  customerId: number,
+  orderId?: number | null,
+): CustomerServiceRequestRecord[] {
+  const where = ["customer_service_requests.customer_id = ?"];
+  const values: number[] = [customerId];
+
+  if (orderId) {
+    where.push("customer_service_requests.order_id = ?");
+    values.push(orderId);
+  }
+
+  return db
+    .prepare(
+      customerServiceRequestSelectSql(
+        `WHERE ${where.join(" AND ")} ORDER BY customer_service_requests.created_at DESC, customer_service_requests.id DESC`,
+      ),
+    )
+    .all(...values) as CustomerServiceRequestRecord[];
 }
 
 export function createPasswordResetToken(db: DatabaseSync, customerId: number, now = Date.now()) {
@@ -3266,6 +3776,13 @@ function orderSelectSql(suffix: string) {
     shipping_province AS shippingProvince,
     shipping_city AS shippingCity,
     shipping_district AS shippingDistrict,
+    shipping_province_code AS shippingProvinceCode,
+    shipping_province_name AS shippingProvinceName,
+    shipping_city_code AS shippingCityCode,
+    shipping_city_name AS shippingCityName,
+    shipping_district_code AS shippingDistrictCode,
+    shipping_district_name AS shippingDistrictName,
+    shipping_district_custom AS shippingDistrictCustom,
     shipping_detail_address AS shippingDetailAddress,
     shipping_postal_code AS shippingPostalCode,
     shipping_label AS shippingLabel,
@@ -3388,6 +3905,13 @@ function customerAddressSelectSql(suffix: string) {
     province,
     city,
     district,
+    province_code AS provinceCode,
+    province_name AS provinceName,
+    city_code AS cityCode,
+    city_name AS cityName,
+    district_code AS districtCode,
+    district_name AS districtName,
+    district_custom AS districtCustom,
     detail_address AS detailAddress,
     postal_code AS postalCode,
     label,
@@ -3429,6 +3953,28 @@ function wechatNotificationSelectSql(suffix: string) {
   ${suffix}`;
 }
 
+function orderPaymentSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    order_id AS orderId,
+    payment_method AS paymentMethod,
+    expected_amount_cents AS expectedAmountCents,
+    paid_amount_cents AS paidAmountCents,
+    paid_at AS paidAt,
+    payer_name AS payerName,
+    payer_reference AS payerReference,
+    platform_trade_no AS platformTradeNo,
+    payment_note AS paymentNote,
+    payment_difference_reason AS paymentDifferenceReason,
+    refund_status AS refundStatus,
+    refund_amount_cents AS refundAmountCents,
+    refund_note AS refundNote,
+    confirmed_by AS confirmedBy,
+    created_at AS createdAt
+  FROM order_payments
+  ${suffix}`;
+}
+
 function customerServiceRequestSelectSql(suffix: string) {
   return `SELECT
     customer_service_requests.id,
@@ -3440,6 +3986,12 @@ function customerServiceRequestSelectSql(suffix: string) {
     orders.order_no AS orderNo,
     customer_service_requests.message,
     customer_service_requests.status,
+    customer_service_requests.source,
+    customer_service_requests.category,
+    customer_service_requests.admin_note AS adminNote,
+    customer_service_requests.customer_visible_reply AS customerVisibleReply,
+    customer_service_requests.handled_by AS handledBy,
+    customer_service_requests.handled_at AS handledAt,
     customer_service_requests.created_at AS createdAt,
     customer_service_requests.updated_at AS updatedAt
   FROM customer_service_requests
@@ -3482,8 +4034,22 @@ function normalizeQuoteDraftFileRecord(file: unknown) {
 
 function normalizeCustomerAddressRecord(address: unknown) {
   const record = address as Record<string, unknown> & { isDefault: 0 | 1 | boolean };
+  const provinceName = (record.provinceName as string | null) || (record.province as string) || "";
+  const cityName = (record.cityName as string | null) || (record.city as string) || "";
+  const districtCustom = (record.districtCustom as string | null) || null;
+  const districtName = (record.districtName as string | null) || (record.district as string) || "";
   return {
     ...record,
+    province: provinceName,
+    city: cityName,
+    district: districtCustom || districtName,
+    provinceName,
+    cityName,
+    districtName,
+    districtCustom,
+    provinceCode: (record.provinceCode as string | null) || null,
+    cityCode: (record.cityCode as string | null) || null,
+    districtCode: (record.districtCode as string | null) || null,
     isDefault: Boolean(record.isDefault),
   } as CustomerAddressRecord;
 }
@@ -3657,6 +4223,33 @@ function normalizeOptionalText(value: string | null | undefined) {
 
   const normalized = value.trim();
   return normalized || null;
+}
+
+function moneyToCents(value: number) {
+  if (!Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+
+  return Math.round(value * 100);
+}
+
+function normalizePaidAmountCents(
+  input: string | OrderStatusUpdateInput,
+  expectedAmountCents: number,
+) {
+  if (typeof input === "string") {
+    return expectedAmountCents;
+  }
+
+  if (Number.isFinite(input.paidAmountCents ?? NaN) && input.paidAmountCents != null) {
+    return Math.round(input.paidAmountCents);
+  }
+
+  if (Number.isFinite(input.paidAmount ?? NaN) && input.paidAmount != null) {
+    return moneyToCents(input.paidAmount);
+  }
+
+  return expectedAmountCents;
 }
 
 function extractOrderNo(value: string) {

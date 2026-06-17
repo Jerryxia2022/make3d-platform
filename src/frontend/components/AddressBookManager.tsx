@@ -5,14 +5,28 @@ import {
   formatCustomerAddress,
   type CustomerAddressView,
 } from "@/frontend/lib/customer-addresses";
+import {
+  CHINA_REGION_TREE,
+  OTHER_DISTRICT_CODE,
+  type CityOption,
+  type DistrictOption,
+  type ProvinceOption,
+} from "@/shared/chinaRegions";
 import { mainlandPhoneHtmlPattern, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
 
 const emptyForm = {
   recipientName: "",
   phone: "",
   province: "",
+  provinceCode: "",
+  provinceName: "",
   city: "",
+  cityCode: "",
+  cityName: "",
   district: "",
+  districtCode: "",
+  districtName: "",
+  districtCustom: "",
   detailAddress: "",
   postalCode: "",
   label: "",
@@ -36,6 +50,9 @@ export function AddressBookManager({
   const isEditing = editingId != null;
   const formTitle = isEditing ? "编辑地址" : "新增地址";
   const limitMessage = "最多可保存 5 个常用地址，如需新增请先删除旧地址。";
+  const selectedProvince = CHINA_REGION_TREE.find((province) => province.code === form.provinceCode) || null;
+  const selectedCity = selectedProvince?.cities.find((city) => city.code === form.cityCode) || null;
+  const districtOptions = selectedCity?.districts || [];
   const defaultCount = useMemo(
     () => addresses.filter((address) => address.isDefault).length,
     [addresses],
@@ -43,6 +60,48 @@ export function AddressBookManager({
 
   function updateForm(key: keyof AddressFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectProvince(code: string) {
+    const province = CHINA_REGION_TREE.find((item) => item.code === code) || null;
+    setForm((current) => ({
+      ...current,
+      provinceCode: province?.code || "",
+      provinceName: province?.name || "",
+      province: province?.name || "",
+      cityCode: "",
+      cityName: "",
+      city: "",
+      districtCode: "",
+      districtName: "",
+      district: "",
+      districtCustom: "",
+    }));
+  }
+
+  function selectCity(code: string) {
+    const city = selectedProvince?.cities.find((item) => item.code === code) || null;
+    setForm((current) => ({
+      ...current,
+      cityCode: city?.code || "",
+      cityName: city?.name || "",
+      city: city?.name || "",
+      districtCode: "",
+      districtName: "",
+      district: "",
+      districtCustom: "",
+    }));
+  }
+
+  function selectDistrict(code: string) {
+    const district = districtOptions.find((item) => item.code === code) || null;
+    setForm((current) => ({
+      ...current,
+      districtCode: code,
+      districtName: code === OTHER_DISTRICT_CODE ? "其他" : district?.name || "",
+      district: code === OTHER_DISTRICT_CODE ? current.districtCustom : district?.name || "",
+      districtCustom: code === OTHER_DISTRICT_CODE ? current.districtCustom : "",
+    }));
   }
 
   function startCreate() {
@@ -58,8 +117,15 @@ export function AddressBookManager({
       recipientName: address.recipientName,
       phone: address.phone,
       province: address.province,
+      provinceCode: address.provinceCode || findProvinceByName(address.province)?.code || "",
+      provinceName: address.provinceName || address.province,
       city: address.city,
+      cityCode: address.cityCode || findCityByName(address.province, address.city)?.code || "",
+      cityName: address.cityName || address.city,
       district: address.district,
+      districtCode: address.districtCode || findDistrictByName(address.province, address.city, address.district)?.code || "",
+      districtName: address.districtName || address.district,
+      districtCustom: address.districtCustom || "",
       detailAddress: address.detailAddress,
       postalCode: address.postalCode || "",
       label: address.label || "",
@@ -255,10 +321,45 @@ export function AddressBookManager({
               onChange={(value) => updateForm("phone", value)}
             />
             <div className="grid gap-3 sm:grid-cols-3">
-              <AddressInput label="省" required value={form.province} onChange={(value) => updateForm("province", value)} />
-              <AddressInput label="市" required value={form.city} onChange={(value) => updateForm("city", value)} />
-              <AddressInput label="区/县" required value={form.district} onChange={(value) => updateForm("district", value)} />
+              <RegionSelect
+                label="省"
+                onChange={selectProvince}
+                options={CHINA_REGION_TREE}
+                placeholder="请选择省份"
+                required
+                value={form.provinceCode}
+              />
+              <RegionSelect
+                disabled={!selectedProvince}
+                label="市"
+                onChange={selectCity}
+                options={selectedProvince?.cities || []}
+                placeholder="请选择城市"
+                required
+                value={form.cityCode}
+              />
+              <RegionSelect
+                disabled={!selectedCity}
+                extraOption={{ code: OTHER_DISTRICT_CODE, name: "其他区/县" }}
+                label="区/县"
+                onChange={selectDistrict}
+                options={districtOptions}
+                placeholder="请选择区/县"
+                required
+                value={form.districtCode}
+              />
             </div>
+            {form.districtCode === OTHER_DISTRICT_CODE ? (
+              <AddressInput
+                label="其他区/县名称"
+                required
+                value={form.districtCustom}
+                onChange={(value) => {
+                  updateForm("districtCustom", value);
+                  updateForm("district", value);
+                }}
+              />
+            ) : null}
             <AddressTextarea label="详细地址" required value={form.detailAddress} onChange={(value) => updateForm("detailAddress", value)} />
             <div className="grid gap-3 sm:grid-cols-2">
               <AddressInput inputMode="numeric" label="邮编（可选）" maxLength={10} pattern="[0-9]{0,10}" value={form.postalCode} onChange={(value) => updateForm("postalCode", value)} />
@@ -341,6 +442,51 @@ function AddressInput({
   );
 }
 
+function RegionSelect({
+  disabled = false,
+  extraOption,
+  label,
+  onChange,
+  options,
+  placeholder,
+  required = false,
+  value,
+}: {
+  disabled?: boolean;
+  extraOption?: ProvinceOption | CityOption | DistrictOption;
+  label: string;
+  onChange: (value: string) => void;
+  options: Array<ProvinceOption | CityOption | DistrictOption>;
+  placeholder: string;
+  required?: boolean;
+  value: string;
+}) {
+  return (
+    <label className="block text-sm font-semibold">
+      {label}
+      <select
+        className="field-input mt-2 py-2"
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        value={value}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option.code} value={option.code}>
+            {option.name}
+          </option>
+        ))}
+        {extraOption ? (
+          <option key={extraOption.code} value={extraOption.code}>
+            {extraOption.name}
+          </option>
+        ) : null}
+      </select>
+    </label>
+  );
+}
+
 function AddressTextarea({
   label,
   onChange,
@@ -364,4 +510,16 @@ function AddressTextarea({
       />
     </label>
   );
+}
+
+function findProvinceByName(name: string) {
+  return CHINA_REGION_TREE.find((province) => province.name === name) || null;
+}
+
+function findCityByName(provinceName: string, cityName: string) {
+  return findProvinceByName(provinceName)?.cities.find((city) => city.name === cityName) || null;
+}
+
+function findDistrictByName(provinceName: string, cityName: string, districtName: string) {
+  return findCityByName(provinceName, cityName)?.districts.find((district) => district.name === districtName) || null;
 }

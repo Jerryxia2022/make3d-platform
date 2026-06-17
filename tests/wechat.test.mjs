@@ -197,7 +197,8 @@ test("wechat keyword customer service creates service request", async () => {
   assert.equal(requests.length, 1);
   assert.equal(requests[0].openid, "openid-service");
   assert.equal(requests[0].phone, "13800000000");
-  assert.equal(requests[0].status, "待处理");
+  assert.equal(requests[0].status, "pending");
+  assert.equal(requests[0].source, "wechat_keyword");
 
   db.close();
 });

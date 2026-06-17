@@ -10,7 +10,7 @@ import { maskOpenid } from "@/backend/wechat";
 import { AdminCustomerServiceStatusButton } from "@/frontend/components/AdminCustomerServiceStatusButton";
 import { AdminLogoutButton } from "@/frontend/components/AdminLogoutButton";
 import { AdminBrand } from "@/frontend/components/BrandLogo";
-import { StatusPill } from "@/frontend/components/UiPrimitives";
+import { getStatusLabel, StatusPill } from "@/frontend/components/UiPrimitives";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export default async function AdminCustomerServicePage({
@@ -75,7 +75,7 @@ export default async function AdminCustomerServicePage({
               <option value="">全部状态</option>
               {CUSTOMER_SERVICE_REQUEST_STATUSES.map((status) => (
                 <option key={status} value={status}>
-                  {status}
+                  {getStatusLabel(status)}
                 </option>
               ))}
             </select>
@@ -94,7 +94,7 @@ export default async function AdminCustomerServicePage({
           <table className="admin-table w-full min-w-[1120px] border-collapse text-left text-sm">
             <thead>
               <tr>
-                {["客户", "手机号", "openid", "消息内容", "关联订单", "状态", "创建时间", "操作"].map((header) => (
+                {["客户", "手机号", "openid", "来源/分类", "消息内容", "关联订单", "状态", "创建时间", "处理", "操作"].map((header) => (
                   <th className="px-4 py-3 font-semibold" key={header}>
                     {header}
                   </th>
@@ -107,6 +107,10 @@ export default async function AdminCustomerServicePage({
                   <td className="px-4 py-3">{request.customerName || "-"}</td>
                   <td className="px-4 py-3">{request.phone || "-"}</td>
                   <td className="px-4 py-3">{maskOpenid(request.openid)}</td>
+                  <td className="px-4 py-3">
+                    <p>{formatSource(request.source)}</p>
+                    <p className="mt-1 text-xs text-graphite">{formatCategory(request.category)}</p>
+                  </td>
                   <td className="max-w-md px-4 py-3">
                     <p className="whitespace-pre-wrap leading-6">{request.message}</p>
                   </td>
@@ -124,16 +128,24 @@ export default async function AdminCustomerServicePage({
                   </td>
                   <td className="px-4 py-3">{formatDate(request.createdAt)}</td>
                   <td className="px-4 py-3">
+                    <p className="text-xs text-graphite">内部：{request.adminNote || "-"}</p>
+                    <p className="mt-1 text-xs text-graphite">客户：{request.customerVisibleReply || "-"}</p>
+                    <p className="mt-1 text-xs text-graphite">处理人：{request.handledBy || "-"}</p>
+                    <p className="mt-1 text-xs text-graphite">处理时间：{request.handledAt ? formatDate(request.handledAt) : "-"}</p>
+                  </td>
+                  <td className="px-4 py-3">
                     <AdminCustomerServiceStatusButton
-                      disabled={request.status === "已处理"}
+                      adminNote={request.adminNote}
+                      customerVisibleReply={request.customerVisibleReply}
                       requestId={request.id}
+                      status={request.status}
                     />
                   </td>
                 </tr>
               ))}
               {requests.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-graphite" colSpan={8}>
+                  <td className="px-4 py-8 text-center text-graphite" colSpan={10}>
                     暂无客服请求
                   </td>
                 </tr>
@@ -148,4 +160,31 @@ export default async function AdminCustomerServicePage({
 
 function formatDate(value: string) {
   return formatBeijingDateTime(value);
+}
+
+function formatSource(value?: string | null) {
+  const labels: Record<string, string> = {
+    wechat_keyword: "公众号关键词",
+    website_floating: "网站浮窗",
+    quote_page: "报价页",
+    order_page: "订单详情",
+    payment_page: "付款页",
+  };
+
+  return value ? labels[value] || value : "-";
+}
+
+function formatCategory(value?: string | null) {
+  const labels: Record<string, string> = {
+    quote: "报价问题",
+    file: "文件问题",
+    payment: "付款问题",
+    production: "生产进度",
+    logistics: "物流发货",
+    after_sales: "售后问题",
+    invoice: "发票问题",
+    other: "其他",
+  };
+
+  return value ? labels[value] || value : "-";
 }

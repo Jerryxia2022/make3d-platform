@@ -15,11 +15,25 @@ export async function POST(request: Request) {
 
     try {
       updatePaymentSettings(db, {
-        wechatQrPath: getOptionalString(body.wechatQrPath),
-        alipayQrPath: getOptionalString(body.alipayQrPath),
-        xianyuUrl: getOptionalString(body.xianyuUrl),
-        taobaoUrl: getOptionalString(body.taobaoUrl),
-        otherNote: getOptionalString(body.otherNote),
+        wechatQrPath: getOptionalString(body.wechatQrImagePath || body.wechatQrPath),
+        alipayQrPath: getOptionalString(body.alipayQrImagePath || body.alipayQrPath),
+        wechatEnabled: Boolean(body.wechatEnabled),
+        wechatDisplayName: getOptionalString(body.wechatDisplayName) || "微信转账",
+        wechatQrImagePath: getOptionalString(body.wechatQrImagePath || body.wechatQrPath),
+        wechatPaymentInstruction: getOptionalString(body.wechatPaymentInstruction),
+        alipayEnabled: Boolean(body.alipayEnabled),
+        alipayDisplayName: getOptionalString(body.alipayDisplayName) || "支付宝转账",
+        alipayQrImagePath: getOptionalString(body.alipayQrImagePath || body.alipayQrPath),
+        alipayPaymentInstruction: getOptionalString(body.alipayPaymentInstruction),
+        bankEnabled: Boolean(body.bankEnabled),
+        bankAccountName: getOptionalString(body.bankAccountName),
+        bankName: getOptionalString(body.bankName),
+        bankBranch: getOptionalString(body.bankBranch),
+        bankAccount: getOptionalString(body.bankAccount),
+        bankPaymentInstruction: getOptionalString(body.bankPaymentInstruction),
+        paymentNotice: getOptionalString(body.paymentNotice),
+        customerServiceHours: getOptionalString(body.customerServiceHours),
+        serviceAccountQrPath: getOptionalString(body.serviceAccountQrPath),
       });
 
       return NextResponse.json({ ok: true });

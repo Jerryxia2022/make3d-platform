@@ -6,9 +6,11 @@ import {
   getOrderById,
   getOrderStatusLogsByOrderId,
   getSliceJobsByOrderId,
+  listOrderPaymentsByOrderId,
   openDatabase,
   type OrderDetail,
   type OrderFileRecord,
+  type OrderPaymentRecord,
   type OrderStatusLogRecord,
   type SliceJobRecord,
 } from "@/backend/database";
@@ -40,6 +42,7 @@ export default async function AdminOrderDetailPage({
     const order = getOrderById(db, Number(id));
     const sliceJobs = getSliceJobsByOrderId(db, order.id);
     const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
+    const paymentRecords = listOrderPaymentsByOrderId(db, order.id);
     const wechatAccount = getBoundWechatAccountByCustomerId(db, order.customerId);
     const latestWechatNotification = getLatestWechatNotificationByOrderId(db, order.id);
     const quoteDefaultPrice = order.finalPrice ?? order.payablePrice ?? order.estimatedPrice ?? order.estimatedPriceMax;
@@ -83,7 +86,9 @@ export default async function AdminOrderDetailPage({
                 priceAdjustmentReason={order.priceAdjustmentReason}
                 productionNote={order.productionNote}
               />
-              {order.status === "待付款" ? <AdminPaymentConfirmForm orderId={order.id} /> : null}
+              {order.status === "待付款" ? (
+                <AdminPaymentConfirmForm expectedAmount={quoteDefaultPrice || 0} orderId={order.id} />
+              ) : null}
               <AdminStatusForm
                 actualFinishAt={order.actualFinishAt}
                 actualStartAt={order.actualStartAt}
@@ -218,6 +223,7 @@ export default async function AdminOrderDetailPage({
               <Detail label="确认人" value={order.paymentConfirmedBy || "-"} />
               <Detail label="付款备注" value={order.paymentNote || "-"} />
             </dl>
+            <PaymentRecords records={paymentRecords} />
           </section>
 
           <section className="surface-card mt-6 p-6">
@@ -366,6 +372,46 @@ function StatusHistory({ logs }: { logs: OrderStatusLogRecord[] }) {
               <td className="py-3 pr-4 font-semibold">{log.toStatus}</td>
               <td className="py-3 pr-4">{log.operator}</td>
               <td className="py-3 pr-4">{log.note || "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PaymentRecords({ records }: { records: OrderPaymentRecord[] }) {
+  if (records.length === 0) {
+    return <p className="mt-5 text-sm text-graphite">暂无付款记录</p>;
+  }
+
+  return (
+    <div className="mt-5 overflow-x-auto">
+      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+        <thead className="border-b border-ink/10 text-graphite">
+          <tr>
+            {["到账时间", "方式", "应收", "实收", "付款人", "流水/备注", "确认人"].map((header) => (
+              <th className="py-2 pr-4 font-semibold" key={header}>
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((record) => (
+            <tr className="border-b border-ink/10" key={record.id}>
+              <td className="py-2 pr-4">{formatOptionalDate(record.paidAt)}</td>
+              <td className="py-2 pr-4">{formatPaymentMethod(record.paymentMethod)}</td>
+              <td className="py-2 pr-4">{formatCents(record.expectedAmountCents)}</td>
+              <td className="py-2 pr-4">{formatCents(record.paidAmountCents)}</td>
+              <td className="py-2 pr-4">{record.payerName || "-"}</td>
+              <td className="py-2 pr-4">
+                {record.platformTradeNo || record.payerReference || record.paymentNote || "-"}
+                {record.paymentDifferenceReason ? (
+                  <p className="mt-1 text-xs text-coral">差额原因：{record.paymentDifferenceReason}</p>
+                ) : null}
+              </td>
+              <td className="py-2 pr-4">{record.confirmedBy || "-"}</td>
             </tr>
           ))}
         </tbody>
@@ -532,6 +578,21 @@ function formatPaymentStatus(value: string | null) {
   }
 
   return "未付款";
+}
+
+function formatCents(value: number | null) {
+  return value == null ? "-" : `¥${(value / 100).toFixed(2)}`;
+}
+
+function formatPaymentMethod(value: string | null) {
+  const labels: Record<string, string> = {
+    wechat: "微信转账",
+    alipay: "支付宝转账",
+    bank_transfer: "银行转账",
+    manual: "人工确认",
+  };
+
+  return value ? labels[value] || value : "-";
 }
 
 function formatWeight(value: number | null) {

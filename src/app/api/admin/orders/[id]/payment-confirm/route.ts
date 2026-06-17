@@ -24,6 +24,12 @@ export async function POST(
         status: "已付款",
         paymentMethod: getOptionalString(body.paymentMethod),
         paymentNote: getOptionalString(body.paymentNote),
+        paidAmount: getOptionalNumber(body.paidAmount),
+        paidAt: getOptionalString(body.paidAt),
+        payerName: getOptionalString(body.payerName),
+        payerReference: getOptionalString(body.payerReference),
+        platformTradeNo: getOptionalString(body.platformTradeNo),
+        paymentDifferenceReason: getOptionalString(body.paymentDifferenceReason),
         operator: "admin",
       });
 
@@ -49,4 +55,9 @@ export async function POST(
 
 function getOptionalString(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function getOptionalNumber(value: unknown) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
 }

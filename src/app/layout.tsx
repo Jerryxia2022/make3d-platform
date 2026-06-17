@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OnlineConsultWidget } from "@/frontend/components/OnlineConsultWidget";
 import { SiteFooter } from "@/frontend/components/SiteFooter";
 import "./globals.css";
 
@@ -40,6 +41,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         {children}
+        <OnlineConsultWidget />
         <SiteFooter />
       </body>
     </html>

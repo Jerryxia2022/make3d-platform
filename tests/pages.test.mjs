@@ -285,21 +285,27 @@ test("customer address book page and APIs manage owned addresses only", async ()
   assert.match(managerSource, /确定删除该地址吗？/);
   assert.match(managerSource, /\/api\/account\/addresses\/\$\{address\.id\}\/default/);
   assert.match(managerSource, /mainlandPhoneHtmlPattern/);
+  assert.match(managerSource, /CHINA_REGION_TREE/);
+  assert.match(managerSource, /OTHER_DISTRICT_CODE/);
+  assert.match(managerSource, /请选择省份/);
   assert.match(managerSource, /maxLength=\{10\}/);
 
   assert.match(addressApiSource, /getCustomerFromRequestCookie/);
   assert.match(addressApiSource, /createCustomerAddress/);
   assert.match(addressApiSource, /listCustomerAddresses/);
-  assert.match(addressApiSource, /手机号必须为中国大陆 11 位手机号/);
-  assert.match(addressApiSource, /地址标签最多 10 个字符/);
+  assert.match(addressApiSource, /validateAndNormalizeCustomerAddressInput/);
+  assert.match(addressApiSource, /readCustomerAddressInput/);
   assert.match(addressItemApiSource, /updateCustomerAddress/);
   assert.match(addressItemApiSource, /deleteCustomerAddress/);
+  assert.match(addressItemApiSource, /validateAndNormalizeCustomerAddressInput/);
   assert.match(addressItemApiSource, /session\.customerId/);
   assert.match(addressDefaultApiSource, /setCustomerDefaultAddress/);
   assert.match(addressDefaultApiSource, /session\.customerId/);
 
   assert.match(databaseSource, /CREATE TABLE IF NOT EXISTS customer_addresses/);
   assert.match(databaseSource, /CUSTOMER_ADDRESS_LIMIT = 5/);
+  assert.match(databaseSource, /province_code/);
+  assert.match(databaseSource, /district_custom/);
   assert.match(databaseSource, /idx_customer_addresses_default/);
   assert.match(databaseSource, /createCustomerAddress/);
   assert.match(databaseSource, /setCustomerDefaultAddress/);
@@ -795,7 +801,6 @@ test("manual payment confirmation workflow pages avoid customer proof upload", a
   const adminDetailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
   const adminFinalQuoteSource = await readSource("src/frontend/components/AdminFinalQuoteForm.tsx");
   const adminPaymentConfirmSource = await readSource("src/frontend/components/AdminPaymentConfirmForm.tsx");
-  const adminPaymentSettingsFormSource = await readSource("src/frontend/components/AdminPaymentSettingsForm.tsx");
   const paymentConfirmSource = await readSource("src/app/api/admin/orders/[id]/payment-confirm/route.ts");
   const finalQuoteSource = await readSource("src/app/api/admin/orders/[id]/final-quote/route.ts");
 
@@ -807,17 +812,22 @@ test("manual payment confirmation workflow pages avoid customer proof upload", a
   assert.match(customerConfirmSource, /付款完成后，工作人员核对到账后会更新订单状态。/);
   assert.match(customerPaymentSource, /微信转账/);
   assert.match(customerPaymentSource, /支付宝转账/);
-  assert.match(customerPaymentSource, /闲鱼链接/);
-  assert.match(customerPaymentSource, /淘宝链接/);
+  assert.match(customerPaymentSource, /银行转账/);
+  assert.match(customerPaymentSource, /在线付款资料正在配置中/);
+  assert.doesNotMatch(customerPaymentSource, /闲鱼链接|淘宝链接/);
   assert.doesNotMatch(customerDetailSource, /付款凭证|paymentProof|上传截图|我已付款/);
   assert.doesNotMatch(customerConfirmSource, /付款凭证|paymentProof|上传截图|我已付款/);
   assert.doesNotMatch(customerPaymentSource, /付款凭证|paymentProof|上传截图|我已付款/);
 
   assert.match(adminFinalQuoteSource, /确认报价并通知客户/);
   assert.match(adminPaymentConfirmSource, /确认到账/);
+  assert.match(adminPaymentConfirmSource, /实收金额/);
+  assert.match(adminPaymentConfirmSource, /差额原因/);
   assert.match(adminDetailSource, /付款时请备注：订单编号\/手机号/);
+  assert.match(adminDetailSource, /PaymentRecords/);
   assert.match(paymentConfirmSource, /updateOrderStatusAndNotify/);
   assert.match(paymentConfirmSource, /status: "已付款"/);
+  assert.match(paymentConfirmSource, /paidAmount/);
   assert.match(paymentConfirmSource, /paymentNote/);
   assert.match(paymentConfirmSource, /wechatStatus/);
   assert.match(finalQuoteSource, /confirmOrderFinalQuote/);
@@ -829,12 +839,14 @@ test("admin payment settings page and API exist", async () => {
   const formSource = await readSource("src/frontend/components/AdminPaymentSettingsForm.tsx");
   const apiSource = await readSource("src/app/api/admin/settings/payment/route.ts");
 
-  assert.match(formSource, /微信收款二维码图片路径/);
-  assert.match(formSource, /支付宝收款二维码图片路径/);
-  assert.match(formSource, /闲鱼付款链接/);
-  assert.match(formSource, /淘宝付款链接/);
+  assert.match(formSource, /微信收款码图片路径/);
+  assert.match(formSource, /支付宝收款码图片路径/);
+  assert.match(formSource, /银行转账/);
+  assert.match(formSource, /付款方式默认关闭/);
+  assert.doesNotMatch(formSource, /闲鱼付款链接|淘宝付款链接/);
   assert.match(pageSource, /AdminPaymentSettingsForm/);
   assert.match(apiSource, /updatePaymentSettings/);
+  assert.match(apiSource, /bankEnabled/);
   assert.match(apiSource, /requireAdminSession/);
 });
 

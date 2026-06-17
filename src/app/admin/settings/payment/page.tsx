@@ -26,8 +26,8 @@ export default async function AdminPaymentSettingsPage() {
         <p className="eyebrow mt-6">Payment Settings</p>
         <h1 className="mt-3 text-4xl font-bold">付款设置</h1>
         <p className="mt-4 text-sm leading-6 text-graphite">
-          这里仅配置客户待付款页面展示的收款码路径和外部付款链接。客户不能上传付款截图，
-          到账核对仍由管理员在订单详情页人工确认。
+          这里配置客户待付款页面展示的微信、支付宝和银行转账资料。默认不启用任何付款方式，
+          客户不能上传付款截图，到账核对仍由管理员在订单详情页人工确认。
         </p>
         <AdminPaymentSettingsForm settings={settings} />
       </section>

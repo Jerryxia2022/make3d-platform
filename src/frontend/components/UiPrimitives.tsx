@@ -1,5 +1,5 @@
 export function StatusPill({ className = "", status }: { className?: string; status: string }) {
-  return <span className={`status-pill ${getStatusTone(status)} ${className}`}>{status}</span>;
+  return <span className={`status-pill ${getStatusTone(status)} ${className}`}>{getStatusLabel(status)}</span>;
 }
 
 export function InfoTile({ label, value }: { label: string; value: string }) {
@@ -29,7 +29,24 @@ export function getStatusTone(status: string) {
     已拒绝: "status-gray",
     待处理: "status-orange",
     已处理: "status-mint",
+    pending: "status-orange",
+    processing: "status-blue",
+    waiting_customer: "status-yellow",
+    resolved: "status-mint",
+    closed: "status-gray",
   };
 
   return tones[status] || "status-gray";
+}
+
+export function getStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "待处理",
+    processing: "处理中",
+    waiting_customer: "待客户补充",
+    resolved: "已处理",
+    closed: "已关闭",
+  };
+
+  return labels[status] || status;
 }

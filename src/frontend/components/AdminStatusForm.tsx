@@ -6,7 +6,12 @@ import { ORDER_STATUSES, type OrderStatus } from "@/backend/orderStatus";
 
 const PRINTER_OPTIONS = ["", "P1S-01", "P1S-02", "P1S-03", "P1S-04", "P1S-05", "P1S-06"];
 const SHIPPING_COMPANIES = ["", "顺丰", "圆通", "韵达", "中通", "京东", "其他"];
-const PAYMENT_METHODS = ["", "微信转账", "支付宝转账", "闲鱼付款", "淘宝付款", "其他人工沟通"];
+const PAYMENT_METHODS = [
+  { value: "", label: "未填写" },
+  { value: "wechat", label: "微信转账" },
+  { value: "alipay", label: "支付宝转账" },
+  { value: "bank_transfer", label: "银行转账" },
+];
 
 export function AdminStatusForm({
   orderId,
@@ -148,8 +153,8 @@ export function AdminStatusForm({
                 value={paymentMethod}
               >
                 {PAYMENT_METHODS.map((item) => (
-                  <option key={item || "empty"} value={item}>
-                    {item || "未填写"}
+                  <option key={item.value || "empty"} value={item.value}>
+                    {item.label}
                   </option>
                 ))}
               </select>
