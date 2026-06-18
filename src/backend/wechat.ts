@@ -62,6 +62,60 @@ const WECHAT_ORDER_NOTIFY_STATUSES = new Set([
   "已完成",
 ]);
 
+export const WECHAT_MENU_CLICK_KEYS = [
+  "MAKE3D_PAYMENT_HELP",
+  "MAKE3D_ORDER_HELP",
+  "MAKE3D_CUSTOMER_SERVICE",
+  "MAKE3D_SERVICE_SCOPE",
+  "MAKE3D_FAQ",
+] as const;
+
+export const WECHAT_MENU_CLICK_REPLIES: Record<(typeof WECHAT_MENU_CLICK_KEYS)[number], string> = {
+  MAKE3D_PAYMENT_HELP: [
+    "付款方式将在订单最终报价确认后显示。",
+    "请登录网站查看待付款订单：",
+    `${getAppUrl()}/account`,
+    "",
+    "如付款资料尚未启用，请发送“人工”联系客服确认。",
+  ].join("\n"),
+  MAKE3D_ORDER_HELP: [
+    "请登录网站查看订单状态：",
+    `${getAppUrl()}/account`,
+    "",
+    "如需人工查询，请发送：",
+    "人工 + 订单号 + 问题说明",
+  ].join("\n"),
+  MAKE3D_CUSTOMER_SERVICE: [
+    "已进入人工客服流程。",
+    "",
+    "请继续发送：",
+    "",
+    "1. 订单号",
+    "2. 联系手机号",
+    "3. 需要咨询的问题",
+  ].join("\n"),
+  MAKE3D_SERVICE_SCOPE: [
+    "Make3D提供：",
+    "",
+    "* FDM 3D打印",
+    "* 模型修改与打印",
+    "* 小批量零件试制",
+    "* 工装夹具与研发咨询",
+    "",
+    "复杂模型、STEP/STP、多实体或超尺寸文件需要人工确认。",
+  ].join("\n"),
+  MAKE3D_FAQ: [
+    "常用关键词：",
+    "报价｜订单｜付款｜人工",
+    "",
+    "在线报价：",
+    `${getAppUrl()}/quote`,
+    "",
+    "我的订单：",
+    `${getAppUrl()}/account`,
+  ].join("\n"),
+};
+
 let accessTokenCache:
   | {
       accessToken: string;
@@ -362,6 +416,16 @@ async function handleWechatEvent(db: DatabaseSync, message: WechatInboundMessage
     return "success";
   }
 
+  if (message.event === "click") {
+    if (message.eventKey === "MAKE3D_CUSTOMER_SERVICE") {
+      return createWechatMenuCustomerServiceReply(db, message);
+    }
+
+    if (isWechatMenuClickKey(message.eventKey)) {
+      return buildWechatTextReply(message, WECHAT_MENU_CLICK_REPLIES[message.eventKey]);
+    }
+  }
+
   if (message.event === "click" && matchesAny(message.eventKey, ["人工", "客服", "联系"])) {
     return createCustomerServiceRequestReply(db, message, message.eventKey || "人工客服");
   }
@@ -437,6 +501,44 @@ function createCustomerServiceRequestReply(
     message,
     "已收到人工客服请求，请留下订单号、手机号和问题，我们会尽快联系您。",
   );
+}
+
+function createWechatMenuCustomerServiceReply(db: DatabaseSync, message: WechatInboundMessage) {
+  const account = getWechatAccountByOpenid(db, message.fromUserName);
+
+  if (!hasRecentWechatMenuCustomerServiceRequest(db, message.fromUserName)) {
+    createCustomerServiceRequest(db, {
+      customerId: account?.customerId ?? null,
+      openid: message.fromUserName,
+      message: "菜单：联系客服",
+      source: "wechat",
+      category: "customer_service",
+    });
+  }
+
+  return buildWechatTextReply(message, WECHAT_MENU_CLICK_REPLIES.MAKE3D_CUSTOMER_SERVICE);
+}
+
+function hasRecentWechatMenuCustomerServiceRequest(db: DatabaseSync, openid: string) {
+  const row = db
+    .prepare(
+      `SELECT id
+       FROM customer_service_requests
+       WHERE openid = ?
+         AND source = 'wechat'
+         AND category = 'customer_service'
+         AND status IN ('pending', 'processing', 'waiting_customer')
+         AND created_at >= datetime('now', '-10 minutes')
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(openid);
+
+  return Boolean(row);
+}
+
+function isWechatMenuClickKey(value: string): value is (typeof WECHAT_MENU_CLICK_KEYS)[number] {
+  return WECHAT_MENU_CLICK_KEYS.includes(value as (typeof WECHAT_MENU_CLICK_KEYS)[number]);
 }
 
 async function getWechatAccessToken() {

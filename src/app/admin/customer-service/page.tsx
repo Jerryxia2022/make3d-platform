@@ -164,6 +164,7 @@ function formatDate(value: string) {
 
 function formatSource(value?: string | null) {
   const labels: Record<string, string> = {
+    wechat: "公众号菜单",
     wechat_keyword: "公众号关键词",
     website_floating: "网站浮窗",
     quote_page: "报价页",

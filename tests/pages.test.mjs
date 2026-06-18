@@ -329,8 +329,9 @@ test("wechat account binding explains keyword service mode", async () => {
   assert.match(menuScriptSource, /Wechat menu API creation is disabled/);
   assert.match(menuScriptSource, /certified account with custom menu API permission/);
   assert.match(menuScriptSource, /This is non-blocking/);
-  assert.match(menuScriptSource, /常见问题/);
-  assert.match(menuScriptSource, /官网首页/);
+  assert.match(menuScriptSource, /地址管理/);
+  assert.match(menuScriptSource, /订单帮助/);
+  assert.match(menuScriptSource, /官方网站/);
   assert.match(readmeSource, /不把 `npm run wechat:menu` 作为部署或验证必需步骤/);
 });
 

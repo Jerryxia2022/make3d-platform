@@ -22,6 +22,8 @@ import {
   buildWechatOrderStatusContent,
   handleWechatMessage,
   notifyWechatOrderStatus,
+  WECHAT_MENU_CLICK_KEYS,
+  WECHAT_MENU_CLICK_REPLIES,
   verifyWechatServerRequest,
   verifyWechatSignature,
 } from "../src/backend/wechat.ts";
@@ -199,6 +201,50 @@ test("wechat keyword customer service creates service request", async () => {
   assert.equal(requests[0].phone, "13800000000");
   assert.equal(requests[0].status, "pending");
   assert.equal(requests[0].source, "wechat_keyword");
+
+  db.close();
+});
+
+test("wechat menu click events reply with configured guidance", async () => {
+  const db = initDatabase(":memory:");
+
+  for (const key of WECHAT_MENU_CLICK_KEYS) {
+    const reply = await handleWechatMessage(
+      db,
+      createWechatXml({
+        MsgType: "event",
+        Event: "CLICK",
+        EventKey: key,
+        FromUserName: `openid-${key}`,
+      }),
+    );
+
+    assert.match(reply, new RegExp(escapeRegExp(WECHAT_MENU_CLICK_REPLIES[key].split("\n")[0])));
+  }
+
+  db.close();
+});
+
+test("wechat customer service menu creates one recent request only", async () => {
+  const db = initDatabase(":memory:");
+  const xml = createWechatXml({
+    MsgType: "event",
+    Event: "CLICK",
+    EventKey: "MAKE3D_CUSTOMER_SERVICE",
+    FromUserName: "openid-menu-service",
+  });
+
+  const firstReply = await handleWechatMessage(db, xml);
+  const secondReply = await handleWechatMessage(db, xml);
+  const requests = searchCustomerServiceRequests(db, {});
+
+  assert.match(firstReply, /已进入人工客服流程/);
+  assert.match(secondReply, /已进入人工客服流程/);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].openid, "openid-menu-service");
+  assert.equal(requests[0].source, "wechat");
+  assert.equal(requests[0].category, "customer_service");
+  assert.equal(requests[0].message, "菜单：联系客服");
 
   db.close();
 });
@@ -457,6 +503,10 @@ function createWechatXml(fields) {
 
 function signWechat(token, timestamp, nonce) {
   return createHash("sha1").update([token, timestamp, nonce].sort().join("")).digest("hex");
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function snapshotWechatEnv() {
