@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function SuccessPage() {
   return (
-    <main className="flex min-h-screen items-center px-6 py-8 text-ink">
+    <main className="flex min-h-screen items-center bg-[#f6f7f9] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <section className="surface-card mx-auto w-full max-w-3xl p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-mint">
           Make3D

@@ -7,7 +7,7 @@ export async function CustomerAuthBar({ returnTo = "/" }: { returnTo?: string } 
   const logoutAction = `/api/account/logout?next=${encodeURIComponent(returnTo)}`;
 
   return (
-    <nav className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-0 py-3 text-sm font-semibold text-ink sm:px-2">
+    <nav className="mx-auto flex w-full max-w-[1450px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-ink shadow-sm sm:px-4">
       <BrandLogo />
       <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
         {customer ? (

@@ -45,7 +45,7 @@ export function WechatBindCard({
   }
 
   return (
-    <section className="surface-card mt-8 p-6">
+    <section className="surface-card mt-5 p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- Public brand icon is a fixed SVG used as a compact account badge. */}

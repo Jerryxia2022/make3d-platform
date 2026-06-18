@@ -31,14 +31,14 @@ export default async function AdminCustomerServicePage({
   db.close();
 
   return (
-    <main className="min-h-screen px-6 py-8 text-ink">
-      <section className="mx-auto w-full max-w-7xl">
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-[1450px] py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <AdminBrand />
             <h1 className="mt-3 text-4xl font-bold">人工客服请求</h1>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link className="font-semibold text-graphite" href="/admin/orders">
               订单列表
             </Link>
@@ -52,7 +52,7 @@ export default async function AdminCustomerServicePage({
           </div>
         </div>
 
-        <form className="surface-card mt-6 grid gap-3 p-4 lg:grid-cols-[1fr_220px_auto]" method="get">
+        <form className="surface-card mt-5 grid gap-3 p-4 lg:grid-cols-[1fr_220px_auto]" method="get">
           <div className="notice-warning px-4 py-3 text-sm leading-6 lg:col-span-3">
             当前公众号采用关键词服务模式，客户可发送 报价 / 订单 / 付款 / 人工 获取对应服务。发送“人工”后会在此生成客服请求。
           </div>
@@ -90,12 +90,12 @@ export default async function AdminCustomerServicePage({
           </div>
         </form>
 
-        <div className="table-shell mt-6">
+        <div className="table-shell mt-5">
           <table className="admin-table w-full min-w-[1120px] border-collapse text-left text-sm">
             <thead>
               <tr>
                 {["客户", "手机号", "openid", "来源/分类", "消息内容", "关联订单", "状态", "创建时间", "处理", "操作"].map((header) => (
-                  <th className="px-4 py-3 font-semibold" key={header}>
+                  <th className="px-3 py-2.5 font-semibold" key={header}>
                     {header}
                   </th>
                 ))}
@@ -104,17 +104,17 @@ export default async function AdminCustomerServicePage({
             <tbody>
               {requests.map((request) => (
                 <tr className="border-t border-ink/10 align-top" key={request.id}>
-                  <td className="px-4 py-3">{request.customerName || "-"}</td>
-                  <td className="px-4 py-3">{request.phone || "-"}</td>
-                  <td className="px-4 py-3">{maskOpenid(request.openid)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">{request.customerName || "-"}</td>
+                  <td className="px-3 py-2.5">{request.phone || "-"}</td>
+                  <td className="px-3 py-2.5">{maskOpenid(request.openid)}</td>
+                  <td className="px-3 py-2.5">
                     <p>{formatSource(request.source)}</p>
                     <p className="mt-1 text-xs text-graphite">{formatCategory(request.category)}</p>
                   </td>
-                  <td className="max-w-md px-4 py-3">
+                  <td className="max-w-md px-3 py-2.5">
                     <p className="whitespace-pre-wrap leading-6">{request.message}</p>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     {request.orderId && request.orderNo ? (
                       <Link className="font-semibold text-coral" href={`/admin/orders/${request.orderId}`}>
                         {request.orderNo}
@@ -123,17 +123,17 @@ export default async function AdminCustomerServicePage({
                       "-"
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <StatusPill status={request.status} />
                   </td>
-                  <td className="px-4 py-3">{formatDate(request.createdAt)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">{formatDate(request.createdAt)}</td>
+                  <td className="px-3 py-2.5">
                     <p className="text-xs text-graphite">内部：{request.adminNote || "-"}</p>
                     <p className="mt-1 text-xs text-graphite">客户：{request.customerVisibleReply || "-"}</p>
                     <p className="mt-1 text-xs text-graphite">处理人：{request.handledBy || "-"}</p>
                     <p className="mt-1 text-xs text-graphite">处理时间：{request.handledAt ? formatDate(request.handledAt) : "-"}</p>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <AdminCustomerServiceStatusButton
                       adminNote={request.adminNote}
                       customerVisibleReply={request.customerVisibleReply}

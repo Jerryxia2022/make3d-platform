@@ -21,9 +21,9 @@ export default async function AccountAddressesPage() {
     const addresses = listCustomerAddresses(db, customer.id);
 
     return (
-      <main className="min-h-screen px-6 py-10 text-ink">
+      <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
         <CustomerAuthBar returnTo="/account/addresses" />
-        <section className="mx-auto w-full max-w-6xl">
+        <section className="mx-auto w-full max-w-[1280px] py-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <Link className="font-semibold text-graphite" href="/account">

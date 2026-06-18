@@ -27,14 +27,14 @@ export default async function AdminOrdersPage({
   db.close();
 
   return (
-    <main className="min-h-screen px-6 py-8 text-ink">
-      <section className="mx-auto w-full max-w-7xl">
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-[1450px] py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <AdminBrand />
             <h1 className="mt-3 text-4xl font-bold">订单列表</h1>
           </div>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link className="font-semibold text-graphite" href="/">
               返回首页
             </Link>
@@ -51,7 +51,7 @@ export default async function AdminOrdersPage({
           </div>
         </div>
 
-        <form className="surface-card mt-8 grid gap-3 p-4 md:grid-cols-[1fr_220px_auto]" method="get">
+        <form className="surface-card mt-5 grid gap-3 p-4 md:grid-cols-[1fr_220px_auto]" method="get">
           <label className="text-sm font-semibold">
             搜索订单
             <input
@@ -88,7 +88,7 @@ export default async function AdminOrdersPage({
 
         <QuickStatusLinks activeStatus={filters.status || ""} />
 
-        <div className="table-shell mt-8">
+        <div className="table-shell mt-5">
           <table className="admin-table w-full min-w-[1320px] border-collapse text-left text-sm">
             <thead>
               <tr>
@@ -106,7 +106,7 @@ export default async function AdminOrdersPage({
                   "配送方式",
                   "状态",
                 ].map((header) => (
-                  <th className="px-4 py-3 font-semibold" key={header}>
+                  <th className="px-3 py-2.5 font-semibold" key={header}>
                     {header}
                   </th>
                 ))}
@@ -115,22 +115,22 @@ export default async function AdminOrdersPage({
             <tbody>
               {orders.map((order) => (
                 <tr className="border-t border-ink/10" key={order.id}>
-                  <td className="px-4 py-3 font-semibold">
+                  <td className="px-3 py-2.5 font-semibold">
                     <Link className="text-coral" href={`/admin/orders/${order.id}`}>
                       {order.orderNo}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">{formatDate(order.createdAt)}</td>
-                  <td className="px-4 py-3">{order.customerName}</td>
-                  <td className="px-4 py-3">{order.phone}</td>
-                  <td className="px-4 py-3">{order.wechat}</td>
-                  <td className="px-4 py-3">{order.material}</td>
-                  <td className="px-4 py-3">{order.quantity}</td>
-                  <td className="px-4 py-3">{formatPrice(order)}</td>
-                  <td className="px-4 py-3">{formatMoney(order.finalPrice)}</td>
-                  <td className="px-4 py-3">{formatLeadTime(order)}</td>
-                  <td className="px-4 py-3">{order.shippingMethod || "-"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">{formatDate(order.createdAt)}</td>
+                  <td className="px-3 py-2.5">{order.customerName}</td>
+                  <td className="px-3 py-2.5">{order.phone}</td>
+                  <td className="px-3 py-2.5">{order.wechat}</td>
+                  <td className="px-3 py-2.5">{order.material}</td>
+                  <td className="px-3 py-2.5">{order.quantity}</td>
+                  <td className="px-3 py-2.5">{formatPrice(order)}</td>
+                  <td className="px-3 py-2.5">{formatMoney(order.finalPrice)}</td>
+                  <td className="px-3 py-2.5">{formatLeadTime(order)}</td>
+                  <td className="px-3 py-2.5">{order.shippingMethod || "-"}</td>
+                  <td className="px-3 py-2.5">
                     <StatusPill status={order.status} />
                   </td>
                 </tr>

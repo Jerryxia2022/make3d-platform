@@ -217,7 +217,7 @@ export function AddressBookManager({
   }
 
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+    <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
       <section className="surface-card p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -255,7 +255,7 @@ export function AddressBookManager({
             </div>
           ) : (
             addresses.map((address) => (
-              <article className="surface-card p-4" key={address.id}>
+              <article className="surface-card p-4 transition hover:border-orange-200 hover:shadow-md" key={address.id}>
                 <div className="flex flex-wrap items-center gap-2">
                   {address.label ? (
                     <span className="status-pill status-gray">
@@ -305,7 +305,7 @@ export function AddressBookManager({
       </section>
 
       {(canCreate || isEditing) ? (
-        <section className="surface-card p-5 lg:sticky lg:top-6">
+        <section className="surface-card p-5 lg:sticky lg:top-5">
           <h2 className="text-xl font-bold">{formTitle}</h2>
           <form className="mt-5 space-y-4" onSubmit={submitAddress}>
             <AddressInput label="收件人姓名" required value={form.recipientName} onChange={(value) => updateForm("recipientName", value)} />

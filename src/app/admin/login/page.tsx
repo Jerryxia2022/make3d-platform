@@ -7,7 +7,7 @@ export default function AdminLoginPage({
   searchParams?: Promise<{ error?: string }>;
 }) {
   return (
-    <main className="flex min-h-screen items-center px-6 py-8 text-ink">
+    <main className="flex min-h-screen items-center bg-[#f6f7f9] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <section className="surface-card mx-auto w-full max-w-md p-8">
         <AdminBrand />
         <h1 className="mt-4 text-3xl font-bold">管理员登录</h1>

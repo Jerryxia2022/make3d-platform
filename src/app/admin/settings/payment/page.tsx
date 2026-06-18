@@ -15,7 +15,7 @@ export default async function AdminPaymentSettingsPage() {
   db.close();
 
   return (
-    <main className="min-h-screen px-6 py-8 text-ink">
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto w-full max-w-3xl">
         <div className="flex items-center justify-between gap-4">
           <AdminBrand />

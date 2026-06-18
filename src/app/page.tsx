@@ -45,15 +45,15 @@ const faqs = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen text-ink">
-      <section className="px-6 py-8">
+    <main className="min-h-screen bg-[#f6f7f9] text-ink">
+      <section className="px-4 py-5 sm:px-6 lg:px-8">
         <CustomerAuthBar />
-        <div className="mx-auto grid w-full max-w-7xl items-center gap-8 py-10 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="mx-auto grid w-full max-w-7xl items-center gap-6 py-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <p className="eyebrow">
               Make3D Manufacturing Service
             </p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-bold leading-tight sm:text-5xl">
+            <h1 className="mt-4 max-w-3xl text-3xl font-bold leading-[1.12] sm:text-4xl lg:text-[42px]">
               从模型上传到样机交付，Make3D 提供快速 3D 打印、模型修改和小型研发制造服务。
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-graphite">
@@ -95,12 +95,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section-band px-6 py-10">
+      <section className="section-band px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle eyebrow="Service Intake" title="选择你的需求类型" />
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
             {serviceCards.map((service, index) => (
-              <article className="surface-card hover-lift flex min-h-64 flex-col p-5" key={service.href}>
+              <article className="surface-card hover-lift flex min-h-56 flex-col p-5" key={service.href}>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-coral">{service.meta}</p>
                   {index === 0 ? (
@@ -118,7 +118,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="px-6 py-10">
+      <section className="px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle eyebrow="Workflow" title="服务流程" />
           <div className="mt-6 grid gap-3 md:grid-cols-4">
@@ -132,7 +132,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section-band px-6 py-10">
+      <section className="section-band px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[280px_1fr]">
           <SectionTitle eyebrow="Use Cases" title="常见适用场景" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -145,7 +145,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="px-6 py-10">
+      <section className="px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle eyebrow="FAQ" title="常见问题" />
           <div className="mt-5 grid gap-3 lg:grid-cols-3">
@@ -159,7 +159,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <div className="px-6 pb-12">
+      <div className="px-4 pb-10 sm:px-6 lg:px-8">
         <ContactSection />
       </div>
     </main>

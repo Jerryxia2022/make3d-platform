@@ -35,14 +35,14 @@ export default async function AdminRequestsPage({
   db.close();
 
   return (
-    <main className="min-h-screen px-6 py-8 text-ink">
-      <section className="mx-auto w-full max-w-7xl">
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-[1450px] py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <AdminBrand />
             <h1 className="mt-3 text-4xl font-bold">非标准需求</h1>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link className="font-semibold text-graphite" href="/admin/orders">
               订单列表
             </Link>
@@ -56,7 +56,7 @@ export default async function AdminRequestsPage({
           </div>
         </div>
 
-        <form className="surface-card mt-6 grid gap-3 p-4 lg:grid-cols-[1fr_210px_210px_auto]" method="get">
+        <form className="surface-card mt-5 grid gap-3 p-4 lg:grid-cols-[1fr_210px_210px_auto]" method="get">
           <label className="text-sm font-semibold">
             搜索需求
             <input
@@ -106,12 +106,12 @@ export default async function AdminRequestsPage({
           </div>
         </form>
 
-        <div className="table-shell mt-6">
+        <div className="table-shell mt-5">
           <table className="admin-table w-full min-w-[1100px] border-collapse text-left text-sm">
             <thead>
               <tr>
                 {["需求类型", "项目名称", "客户", "手机号", "预算", "状态", "提交时间", "操作"].map((header) => (
-                  <th className="px-4 py-3 font-semibold" key={header}>
+                  <th className="px-3 py-2.5 font-semibold" key={header}>
                     {header}
                   </th>
                 ))}
@@ -120,19 +120,19 @@ export default async function AdminRequestsPage({
             <tbody>
               {requests.map((request) => (
                 <tr className="border-t border-ink/10" key={request.id}>
-                  <td className="px-4 py-3">{formatRequestType(request.requestType)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">{formatRequestType(request.requestType)}</td>
+                  <td className="px-3 py-2.5">
                     <p className="font-semibold">{request.projectName}</p>
                     <p className="mt-1 text-xs text-graphite">{request.fileCount} 个附件</p>
                   </td>
-                  <td className="px-4 py-3">{request.customerName}</td>
-                  <td className="px-4 py-3">{request.phone}</td>
-                  <td className="px-4 py-3">{request.budgetRange}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">{request.customerName}</td>
+                  <td className="px-3 py-2.5">{request.phone}</td>
+                  <td className="px-3 py-2.5">{request.budgetRange}</td>
+                  <td className="px-3 py-2.5">
                     <StatusPill status={request.status} />
                   </td>
-                  <td className="px-4 py-3">{formatDate(request.createdAt)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">{formatDate(request.createdAt)}</td>
+                  <td className="px-3 py-2.5">
                     <Link className="btn-primary px-3 py-2 text-xs" href={`/admin/requests/${request.id}`}>
                       查看详情
                     </Link>

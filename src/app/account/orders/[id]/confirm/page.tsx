@@ -32,7 +32,7 @@ export default async function CustomerOrderConfirmPage({
     const paymentSettings = getPaymentSettings(db);
 
     return (
-      <main className="min-h-screen px-6 py-10 text-ink">
+      <main className="min-h-screen bg-[#f6f7f9] px-4 py-8 text-ink sm:px-6 lg:px-8">
         <CustomerAuthBar returnTo={`/account/orders/${order.id}/confirm`} />
         <section className="mx-auto w-full max-w-6xl">
           <Link className="font-semibold text-graphite" href={`/account/orders/${order.id}`}>
@@ -48,7 +48,7 @@ export default async function CustomerOrderConfirmPage({
             </p>
           </div>
 
-          <section className="mt-8 grid gap-6 lg:grid-cols-3">
+          <section className="mt-5 grid gap-5 lg:grid-cols-3">
             <div className="surface-card p-6">
               <h2 className="text-xl font-bold">订单信息</h2>
               <dl className="mt-5 grid gap-4 text-sm">
@@ -77,7 +77,7 @@ export default async function CustomerOrderConfirmPage({
           </section>
 
           {order.status === "待付款" ? (
-            <section className="notice-warning mt-8 p-6">
+            <section className="notice-warning mt-5 p-5">
               <h2 className="text-xl font-bold">付款说明</h2>
               <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                 <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
@@ -93,7 +93,7 @@ export default async function CustomerOrderConfirmPage({
             </section>
           ) : null}
 
-          <section className="surface-card mt-8 p-6">
+          <section className="surface-card mt-5 p-5">
             <h2 className="text-xl font-bold">文件列表</h2>
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-[760px] border-collapse text-left text-sm">
@@ -123,7 +123,7 @@ export default async function CustomerOrderConfirmPage({
             </div>
           </section>
 
-          <section className="surface-card mt-8 p-6">
+          <section className="surface-card mt-5 p-5">
             <h2 className="text-xl font-bold">收货信息</h2>
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
               <Detail label="收件人" value={order.recipientName || order.customerName} />

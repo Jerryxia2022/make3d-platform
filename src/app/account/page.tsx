@@ -37,9 +37,9 @@ export default async function AccountPage() {
         : null;
 
     return (
-      <main className="min-h-screen px-6 py-10 text-ink">
+      <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
         <CustomerAuthBar returnTo="/" />
-        <section className="mx-auto w-full max-w-6xl">
+        <section className="mx-auto w-full max-w-[1280px] py-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="eyebrow">Make3D 会员</p>
@@ -47,7 +47,7 @@ export default async function AccountPage() {
             </div>
           </div>
 
-          <section className="surface-card mt-8 p-6">
+          <section className="surface-card mt-6 p-5">
             <h2 className="text-xl font-bold">用户资料</h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Detail label="姓名" value={customer.name} />
@@ -57,7 +57,7 @@ export default async function AccountPage() {
             </div>
           </section>
 
-          <section className="surface-card mt-8 p-6">
+          <section className="surface-card mt-5 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">地址簿</h2>
@@ -71,7 +71,7 @@ export default async function AccountPage() {
             </div>
           </section>
 
-          <section className="surface-card mt-8 p-6">
+          <section className="surface-card mt-5 p-5">
             <h2 className="text-xl font-bold">修改密码</h2>
             <p className="mt-2 text-sm text-graphite">用于保护报价、订单和收货信息。</p>
             <ChangePasswordForm />
@@ -85,7 +85,7 @@ export default async function AccountPage() {
             subscribed={Boolean(wechatAccount?.subscribed)}
           />
 
-          <section className="surface-card mt-8 p-6">
+          <section className="surface-card mt-5 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">我的订单</h2>
@@ -116,9 +116,9 @@ function OrderTable({ orders, compact = false }: { orders: OrderRecord[]; compac
   }
 
   return (
-    <div className={compact ? "mt-5 grid gap-3 lg:grid-cols-2" : "mt-5 grid gap-4 lg:grid-cols-2"}>
+    <div className={compact ? "mt-5 grid gap-3 lg:grid-cols-2" : "mt-5 grid gap-3 lg:grid-cols-2"}>
       {orders.map((order) => (
-        <article className="surface-card p-4" key={order.id}>
+        <article className="surface-card p-4 transition hover:border-orange-200 hover:shadow-md" key={order.id}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <Link className="font-bold text-coral" href={`/account/orders/${order.id}`}>

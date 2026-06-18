@@ -18,10 +18,10 @@ export default async function DesignRequestPage() {
     : null;
 
   return (
-    <main className="min-h-screen px-6 py-8 text-ink">
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
       <CustomerAuthBar returnTo="/request/design" />
-      <section className="mx-auto grid w-full max-w-7xl gap-6 py-8 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-8 lg:self-start">
+      <section className="mx-auto grid w-full max-w-[1180px] gap-5 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-5 lg:self-start">
           <Link className="text-sm font-semibold text-graphite" href="/">
             返回首页
           </Link>
@@ -36,7 +36,7 @@ export default async function DesignRequestPage() {
           <GuideBlock title="适合什么需求" items={fitItems} />
           <GuideBlock title="不适合什么需求" items={unfitItems} />
 
-          <div className="surface-card mt-5 p-4 text-sm leading-6 text-graphite">
+          <div className="surface-card mt-4 p-4 text-sm leading-6 text-graphite">
             <p className="font-semibold text-ink">响应时间</p>
             <p className="mt-2">通常 24 小时内评估。复杂项目建议提供图纸、样品或关键尺寸。</p>
             <p className="mt-2">工作日晚上和周末优先处理复杂沟通。</p>
@@ -56,7 +56,7 @@ export default async function DesignRequestPage() {
 
 function GuideBlock({ items, title }: { items: string[]; title: string }) {
   return (
-    <div className="surface-card mt-5 p-4">
+    <div className="surface-card mt-4 p-4">
       <h2 className="font-bold">{title}</h2>
       <ul className="mt-3 space-y-2 text-sm leading-6 text-graphite">
         {items.map((item) => (

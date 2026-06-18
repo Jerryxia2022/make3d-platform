@@ -688,22 +688,49 @@ export function QuoteForm({
 
   return (
     <form
-      className="surface-card grid gap-5 p-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:p-5"
+      className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start"
       onSubmit={handleSubmit}
     >
       <div className="space-y-5">
-      <section>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">在线自动报价</h2>
+            <p className="mt-1 text-sm leading-6 text-graphite">
+              上传 STL 文件后自动估算重量、时间和价格，材料和颜色调整不需要重复切片。
+            </p>
+          </div>
+          <span className="status-pill status-orange self-start">推荐</span>
+        </div>
+        <div className="p-6">
         <div
-          className="relative flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed border-ink/25 bg-paper/70 px-5 py-7 text-center"
+          className="relative flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-[#fbfcfd] px-5 py-9 text-center transition-colors hover:border-orange-300 hover:bg-white"
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
         >
-          <p className="text-lg font-bold">拖拽模型文件到这里</p>
-          <p className="mt-3 max-w-md text-sm leading-6 text-graphite">
+          <div className="mb-4 flex size-11 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-700">
+            ↑
+          </div>
+          <p className="text-base font-bold">将 STL 文件拖拽到此处</p>
+          <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
             支持 .stl / .step / .stp，最多一次上传 5 个文件，单文件最大 50MB。
           </p>
+          <button
+            className="btn-primary mt-5 px-5 py-3"
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) {
+                setError(guestUploadGateMessage);
+                return;
+              }
+              fileInputRef.current?.click();
+            }}
+            type="button"
+          >
+            选择 STL 文件
+          </button>
           {disabled ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/85 px-6 text-center">
+            <div className="absolute inset-0 flex items-center justify-center bg-white px-6 text-center">
               <p className="max-w-sm text-base font-bold text-ink">
                 {guestUploadGateMessage}
               </p>
@@ -726,24 +753,16 @@ export function QuoteForm({
           ref={fileInputRef}
           type="file"
         />
-        <button
-          className="btn-secondary mt-4 w-full"
-          disabled={disabled}
-          onClick={() => {
-            if (disabled) {
-              setError(guestUploadGateMessage);
-              return;
-            }
-            fileInputRef.current?.click();
-          }}
-          type="button"
-        >
-          选择文件
-        </button>
+        </div>
       </section>
 
       {fileEstimates.length > 0 ? (
-        <section className="space-y-3">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
+            <h2 className="text-base font-bold">已上传文件（{fileEstimates.length}）</h2>
+            <p className="text-xs font-semibold text-slate-500">自动切片结果会临时保留 24 小时</p>
+          </div>
+          <div className="space-y-3 p-4">
           {fileEstimates.map(({ item, dimensions, estimate }) => {
             const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
             const displayDimensions = stlDimensions[item.id] || dimensions;
@@ -751,7 +770,7 @@ export function QuoteForm({
             const fileSubtotal = getFileSubtotalPrice(quote, files.length, item.quantity, item.material);
 
             return (
-            <article className="surface-card p-3" key={item.id}>
+            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={item.id}>
               <input
                 name="fileDimensionX"
                 type="hidden"
@@ -767,8 +786,9 @@ export function QuoteForm({
                 type="hidden"
                 value={formatDimensionFormValue(displayDimensions?.z)}
               />
-              <div className="grid gap-4 sm:grid-cols-[9.75rem_1fr]">
+              <div className="grid gap-4 sm:grid-cols-[9rem_1fr]">
                 <StlModelPreview
+                  compact
                   color={item.color}
                   dimensions={displayDimensions}
                   file={item.file instanceof File ? item.file : undefined}
@@ -811,16 +831,16 @@ export function QuoteForm({
                       ) : null}
                     </div>
                     <button
-                      className="self-start text-sm font-semibold text-coral"
+                      className="btn-danger self-start px-3 py-2 text-xs"
                       disabled={disabled}
                       onClick={() => removeFile(item.id)}
                       type="button"
                     >
-                      删除该文件
+                      删除
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <label className="block text-sm font-semibold">
                       材料
                       <select
@@ -883,9 +903,10 @@ export function QuoteForm({
             </article>
             );
           })}
+          </div>
         </section>
       ) : (
-        <section className="surface-soft p-5">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold">文件卡片区域</h2>
           <p className="mt-3 text-sm text-graphite">
             上传模型后会在这里显示文件名、尺寸、材料、颜色、数量、报价状态和单件打印价。
@@ -894,99 +915,21 @@ export function QuoteForm({
       )}
 
       <section className="surface-card p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold">选择收货地址</h2>
-            <p className="mt-2 text-sm text-graphite">
-              报价页只能选择地址簿中的收货地址，地址修改请进入账户地址簿。
-            </p>
-          </div>
-          <Link className="text-sm font-semibold text-coral" href="/account/addresses">
-            管理地址簿
-          </Link>
+        <div>
+          <h2 className="text-lg font-bold">订单备注</h2>
+          <p className="mt-2 text-sm text-graphite">
+            补充层高、强度、表面效果、支撑方式、分件打印或加急需求，工程师确认报价时会一并查看。
+          </p>
         </div>
         <input name="wechat" type="hidden" defaultValue={customer?.wechat || ""} />
         <input name="email" type="hidden" defaultValue={customer?.email || ""} />
         <input name="customerName" type="hidden" defaultValue={customer?.name || ""} />
         <input name="phone" type="hidden" defaultValue={customer?.phone || ""} />
 
-        <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
-          配送方式
-          <select
-            className="field-input mt-2"
-            disabled={disabled}
-            id="shippingMethod"
-            name="shippingMethod"
-            onChange={(event) => setShippingMethod(event.target.value)}
-            value={shippingMethod}
-          >
-            {shippingMethods.map((method) => (
-              <option key={method} value={method}>
-                {method}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {hasAddresses ? (
-          <>
-            <label className="mt-4 block text-sm font-semibold" htmlFor="addressId">
-              收货地址
-              <select
-                className="field-input mt-2"
-                disabled={disabled}
-                id="addressId"
-                name="addressId"
-                onChange={(event) => setSelectedAddressId(event.target.value)}
-                required
-                value={selectedAddressId}
-              >
-                {addresses.map((address) => (
-                  <option key={address.id} value={address.id}>
-                    {address.label ? `${address.label} - ` : ""}
-                    {address.recipientName} / {address.phone} / {formatCustomerAddress(address)}
-                    {address.isDefault ? " / 默认地址" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedAddress ? (
-              <div className="surface-soft mt-4 p-4 text-sm">
-                <div className="flex flex-wrap gap-2">
-                  {selectedAddress.label ? (
-                    <span className="status-pill status-gray">
-                      {selectedAddress.label}
-                    </span>
-                  ) : null}
-                  {selectedAddress.isDefault ? (
-                    <span className="status-pill status-orange">
-                      默认地址
-                    </span>
-                  ) : null}
-                </div>
-                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <AddressPreviewItem label="收件人" value={selectedAddress.recipientName} />
-                  <AddressPreviewItem label="电话" value={selectedAddress.phone} />
-                  <AddressPreviewItem label="地址" value={formatCustomerAddress(selectedAddress)} wide />
-                  <AddressPreviewItem label="邮编" value={selectedAddress.postalCode || "-"} />
-                </dl>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="notice-warning mt-4 p-4">
-            <p className="text-sm font-semibold text-coral">请先添加收货地址后再提交订单。</p>
-            <Link className="btn-primary mt-3 px-4 py-2" href="/account/addresses">
-              添加地址
-            </Link>
-          </div>
-        )}
-
         <label className="mt-4 block text-sm font-semibold">
           备注
           <textarea
-          className="field-input mt-2 min-h-24"
+            className="field-input mt-2 min-h-24"
             disabled={disabled}
             name="remark"
             placeholder="补充特殊层高、强度、表面效果、支撑方式、分件打印、加急等要求"
@@ -997,8 +940,12 @@ export function QuoteForm({
       </div>
 
       <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-      <section className="surface-card p-5">
-        <h2 className="text-lg font-bold">订单汇总</h2>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white p-0 shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold">订单汇总</h2>
+          <p className="mt-1 text-xs text-graphite">自动报价完成后可直接提交订单</p>
+        </div>
+        <div className="p-5">
         {hasPendingQuotes ? (
           <p className="notice-warning mt-3 px-4 py-3 text-sm font-semibold">
             文件正在自动切片，完成后将更新总价。调整材料和颜色不会重新切片。
@@ -1025,31 +972,120 @@ export function QuoteForm({
           />
           <SummaryItem label="材料和颜色摘要" value={formatOptionSummary(files)} />
         </dl>
+
+        <div className="mt-5 border-t border-slate-200 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold">选择收货地址</h3>
+              <p className="mt-1 text-xs leading-5 text-graphite">
+                报价页只选择地址簿中的地址，提交后会保存地址快照。
+              </p>
+            </div>
+            <Link className="text-xs font-bold text-coral" href="/account/addresses">
+              管理地址簿
+            </Link>
+          </div>
+
+          <label className="mt-4 block text-sm font-semibold" htmlFor="shippingMethod">
+            配送方式
+            <select
+              className="field-input mt-2"
+              disabled={disabled}
+              id="shippingMethod"
+              name="shippingMethod"
+              onChange={(event) => setShippingMethod(event.target.value)}
+              value={shippingMethod}
+            >
+              {shippingMethods.map((method) => (
+                <option key={method} value={method}>
+                  {method}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {hasAddresses ? (
+            <>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="addressId">
+                收货地址
+                <select
+                  className="field-input mt-2"
+                  disabled={disabled}
+                  id="addressId"
+                  name="addressId"
+                  onChange={(event) => setSelectedAddressId(event.target.value)}
+                  required
+                  value={selectedAddressId}
+                >
+                  {addresses.map((address) => (
+                    <option key={address.id} value={address.id}>
+                      {address.label ? `${address.label} - ` : ""}
+                      {address.recipientName} / {address.phone} / {formatCustomerAddress(address)}
+                      {address.isDefault ? " / 默认地址" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedAddress ? (
+                <div className="surface-soft mt-4 p-4 text-sm">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAddress.label ? (
+                      <span className="status-pill status-gray">
+                        {selectedAddress.label}
+                      </span>
+                    ) : null}
+                    {selectedAddress.isDefault ? (
+                      <span className="status-pill status-orange">
+                        默认地址
+                      </span>
+                    ) : null}
+                  </div>
+                  <dl className="mt-3 grid gap-2">
+                    <AddressPreviewItem label="收件人" value={selectedAddress.recipientName} />
+                    <AddressPreviewItem label="电话" value={selectedAddress.phone} />
+                    <AddressPreviewItem label="地址" value={formatCustomerAddress(selectedAddress)} />
+                    <AddressPreviewItem label="邮编" value={selectedAddress.postalCode || "-"} />
+                  </dl>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="notice-warning mt-4 p-4">
+              <p className="text-sm font-semibold text-coral">请先添加收货地址后再提交订单。</p>
+              <Link className="btn-primary mt-3 px-4 py-2" href="/account/addresses">
+                添加地址
+              </Link>
+            </div>
+          )}
+        </div>
+
         <p className="mt-4 text-sm font-semibold text-coral">最终价格以人工确认为准。</p>
         <p className="mt-2 text-sm text-graphite">
           如需加急，请在备注中说明，加急可能产生额外费用。
         </p>
+
+        {error ? (
+          <p className="notice-warning mt-4 px-4 py-3 text-sm font-semibold">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          className="btn-primary mt-5 w-full py-3"
+          disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled || !hasAddresses}
+          type="submit"
+        >
+          {isSubmitted
+            ? "已提交"
+            : hasPendingQuotes
+              ? "报价计算中..."
+              : isSubmitting
+                ? "提交中..."
+                : "提交订单"}
+        </button>
+        </div>
       </section>
-
-      {error ? (
-        <p className="notice-warning px-4 py-3 text-sm font-semibold">
-          {error}
-        </p>
-      ) : null}
-
-      <button
-        className="btn-primary w-full"
-        disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled || !hasAddresses}
-        type="submit"
-      >
-        {isSubmitted
-          ? "已提交"
-          : hasPendingQuotes
-            ? "报价计算中..."
-            : isSubmitting
-              ? "提交中..."
-              : "提交订单"}
-      </button>
       </aside>
     </form>
   );
@@ -1153,9 +1189,15 @@ function SummaryItem({
   value: string;
 }) {
   return (
-    <div className={highlight ? "notice-warning px-4 py-3" : "metric-tile px-4 py-3"}>
-      <dt className="font-semibold text-graphite">{label}</dt>
-      <dd className={highlight ? "mt-1 text-2xl font-bold text-coral" : "mt-1 font-semibold text-ink"}>
+    <div
+      className={
+        highlight
+          ? "rounded-lg border border-orange-200 bg-orange-50/70 px-4 py-3 sm:col-span-2"
+          : "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+      }
+    >
+      <dt className="font-semibold text-slate-500">{label}</dt>
+      <dd className={highlight ? "mt-1 text-2xl font-bold text-slate-900" : "mt-1 font-semibold text-slate-900"}>
         {value}
       </dd>
     </div>

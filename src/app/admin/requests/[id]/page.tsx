@@ -29,7 +29,7 @@ export default async function AdminRequestDetailPage({
     const logs = getServiceRequestLogsByRequestId(db, request.id);
 
     return (
-      <main className="min-h-screen px-6 py-8 text-ink">
+      <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
         <section className="mx-auto w-full max-w-7xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>

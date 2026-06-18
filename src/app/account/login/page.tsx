@@ -5,7 +5,7 @@ import { BrandLogo } from "@/frontend/components/BrandLogo";
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen px-6 py-10 text-ink">
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <CustomerAuthBar />
       <section className="surface-card mx-auto max-w-md p-6">
         <div className="mb-6 flex justify-center">
