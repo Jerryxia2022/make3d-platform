@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { extname } from "node:path";
 import {
   createOrderWithFiles,
   createSliceJob,
@@ -128,6 +129,7 @@ export async function POST(request: Request) {
         };
         const estimate = estimateFileBySize(upload.filesize, material, dimensions);
         const sliceQuote = sliceQuotes[index];
+        const manualReviewReason = getManualReviewReason(upload.filename, sliceQuote, estimate);
         const estimatedFilePrice =
           sliceQuote?.status === "success"
             ? roundMoney(sliceQuote.materialFee + sliceQuote.timeFee)
@@ -144,9 +146,9 @@ export async function POST(request: Request) {
           estimatedPriceMax: estimatedFilePrice,
           estimatedLeadTimeMinHours: estimate.leadTimeMinHours,
           estimatedLeadTimeMaxHours: estimate.leadTimeMaxHours,
-          riskNotice: estimate.riskNotice,
-          riskLevel: estimate.riskLevel,
-          requiresManualConfirmation: estimate.requiresManualConfirmation,
+          riskNotice: manualReviewReason || estimate.riskNotice,
+          riskLevel: manualReviewReason ? "danger" : estimate.riskLevel,
+          requiresManualConfirmation: Boolean(manualReviewReason || estimate.requiresManualConfirmation),
           materialSalesRate: estimate.materialSalesRate,
           materialCostRate: estimate.materialCostRate,
           quantity,
@@ -390,6 +392,7 @@ function isValidQuantity(value: number) {
 
 function getSliceQuoteList(formData: FormData) {
   const statuses = getStringList(formData, "fileSliceStatus");
+  const messages = getStringList(formData, "fileSliceMessage");
   const filamentWeights = getNumberList(formData, "fileFilamentWeightG");
   const printTimes = getNumberList(formData, "filePrintTimeSeconds");
   const rawMms = getNullableNumberList(formData, "fileRawFilamentUsedMm");
@@ -402,6 +405,7 @@ function getSliceQuoteList(formData: FormData) {
 
   return statuses.map((status, index) => ({
     status,
+    message: messages[index] || "",
     filamentWeightG: filamentWeights[index] || 0,
     printTimeSeconds: printTimes[index] || 0,
     rawFilamentUsedMm: rawMms[index],
@@ -412,6 +416,32 @@ function getSliceQuoteList(formData: FormData) {
     materialFee: materialFees[index] || 0,
     timeFee: timeFees[index] || 0,
   }));
+}
+
+function getManualReviewReason(
+  filename: string,
+  sliceQuote: ReturnType<typeof getSliceQuoteList>[number] | undefined,
+  estimate: ReturnType<typeof estimateFileBySize>,
+) {
+  const extension = extname(filename).toLowerCase();
+
+  if (extension === ".step" || extension === ".stp") {
+    return "该模型需要人工确认后报价。原因：STEP/STP 文件暂不自动切片。";
+  }
+
+  if (sliceQuote?.status === "manual") {
+    return sliceQuote.message || "该模型需要人工确认后报价。";
+  }
+
+  if (sliceQuote?.status === "failed") {
+    return sliceQuote.message || "该模型需要人工确认后报价。原因：自动切片失败。";
+  }
+
+  if (estimate.requiresManualConfirmation) {
+    return estimate.riskNotice || "该模型需要人工确认后报价。";
+  }
+
+  return "";
 }
 
 function getStringList(formData: FormData, key: string) {

@@ -1444,6 +1444,7 @@ function appendSliceQuoteFormData(
 ) {
   const result = quote?.status === "success" ? quote.result : null;
   formData.append("fileSliceStatus", quote?.status || "manual");
+  formData.append("fileSliceMessage", quote?.message || "");
   formData.append("fileFilamentWeightG", formatNullableNumber(result?.filamentWeightG));
   formData.append("filePrintTimeSeconds", formatNullableNumber(result?.printTimeSeconds));
   formData.append("fileRawFilamentUsedMm", formatNullableNumber(result?.rawFilamentUsedMm));

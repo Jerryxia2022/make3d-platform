@@ -411,6 +411,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /onDrop={handleDrop}/);
   assert.match(formSource, /\/api\/quote\/slice/);
   assert.match(formSource, /fileSliceStatus/);
+  assert.match(formSource, /fileSliceMessage/);
   assert.match(formSource, /fileFilamentWeightG/);
   assert.match(formSource, /filePrintTimeSeconds/);
   assert.match(formSource, /fileQuantities/);
@@ -493,6 +494,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /getFileSubtotalPrice/);
   assert.match(formSource, /quote\.result\.printTimeSeconds \* quote\.quantity/);
   assert.match(formSource, /getMaterialRate\(material\)/);
+  assert.match(formSource, /fileSliceMessage/);
 });
 
 test("quote form restores active drafts without re-slicing saved results", async () => {
@@ -766,6 +768,9 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /shippingRemark: getString\(formData, "shippingRemark"\)/);
   assert.match(apiSource, /createOrderWithFiles/);
   assert.match(apiSource, /getSliceQuoteList/);
+  assert.match(apiSource, /getManualReviewReason/);
+  assert.match(apiSource, /STEP\/STP 文件暂不自动切片/);
+  assert.match(apiSource, /自动切片失败/);
   assert.match(apiSource, /createSliceJob/);
   assert.match(apiSource, /updateSliceJobSuccess/);
   assert.match(apiSource, /calculateAutoLeadTimeHours/);
@@ -777,6 +782,8 @@ test("customer APIs require login before quote slicing and order submission", as
   const orderSource = await readSource("src/app/api/orders/route.ts");
 
   assert.match(sliceSource, /getCustomerFromRequestCookie/);
+  assert.match(sliceSource, /analyzeStlTopology/);
+  assert.match(sliceSource, /该文件包含多个独立实体，需要人工确认后报价。/);
   assert.match(sliceSource, /status\), 401\)|}, 401\)/);
   assert.match(orderSource, /getCustomerFromRequest/);
   assert.match(orderSource, /status: 401/);

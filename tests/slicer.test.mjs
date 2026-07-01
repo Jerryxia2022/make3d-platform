@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   buildPrusaSlicerArgs,
@@ -8,6 +11,7 @@ import {
   parseGcodeMetadata,
   runPrusaSlicer,
 } from "../src/backend/slicer.ts";
+import { analyzeStlTopology } from "../src/backend/stlAnalysis.ts";
 
 test("parses PrusaSlicer G-code printing time and filament weight from tail comments", () => {
   const metadata = parseGcodeMetadata(`
@@ -54,6 +58,34 @@ test("converts PrusaSlicer filament volume in cm3 to grams", () => {
   assert.equal(metadata.rawFilamentUsedCm3, 12.5);
   assert.equal(metadata.materialDensity, 1.27);
   assert.equal(metadata.filamentWeightSource, "cm3");
+});
+
+test("detects multiple independent STL components before automatic slicing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "make3d-stl-"));
+  const singlePath = join(dir, "single.stl");
+  const multiPath = join(dir, "multi.stl");
+
+  try {
+    await writeFile(singlePath, createBinaryStl([
+      [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+      [[1, 0, 0], [1, 1, 0], [0, 1, 0]],
+    ]));
+    await writeFile(multiPath, createBinaryStl([
+      [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+      [[10, 10, 0], [11, 10, 0], [10, 11, 0]],
+    ]));
+
+    assert.deepEqual(await analyzeStlTopology(singlePath), {
+      componentCount: 1,
+      triangleCount: 2,
+    });
+    assert.deepEqual(await analyzeStlTopology(multiPath), {
+      componentCount: 2,
+      triangleCount: 2,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("prefers volume-derived PETG weight over slicer gram output when volume is available", () => {
@@ -181,3 +213,23 @@ test("PrusaSlicer is disabled by default and refuses execution", async () => {
     }
   }
 });
+
+function createBinaryStl(triangles) {
+  const buffer = Buffer.alloc(84 + triangles.length * 50);
+  buffer.write("make3d-test", 0, "ascii");
+  buffer.writeUInt32LE(triangles.length, 80);
+
+  triangles.forEach((triangle, triangleIndex) => {
+    const base = 84 + triangleIndex * 50;
+    let offset = base + 12;
+
+    for (const vertex of triangle) {
+      buffer.writeFloatLE(vertex[0], offset);
+      buffer.writeFloatLE(vertex[1], offset + 4);
+      buffer.writeFloatLE(vertex[2], offset + 8);
+      offset += 12;
+    }
+  });
+
+  return buffer;
+}

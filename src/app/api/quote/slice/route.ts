@@ -6,6 +6,7 @@ import { calculateAutoFilePrice } from "@/backend/autoPricing";
 import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
 import { addQuoteDraftFile, openDatabase } from "@/backend/database";
 import { getPrusaSlicerConfig, runPrusaSlicer } from "@/backend/slicer";
+import { analyzeStlTopology } from "@/backend/stlAnalysis";
 import { saveUploadFile, type SavedUpload } from "@/backend/uploads";
 
 export const runtime = "nodejs";
@@ -80,6 +81,50 @@ export async function POST(request: Request) {
         saved_upload: savedFile,
         draft_file_id: draftFileId,
         error: "Only STL files support automatic slicing",
+      });
+    }
+
+    try {
+      const analysis = await analyzeStlTopology(savedFile.filepath);
+
+      if (analysis.componentCount > 1) {
+        const draftFileId = saveQuoteDraftFile({
+          customerId: customer.customerId,
+          originalFilename: file.name,
+          savedFile,
+          material,
+          color,
+          quantity,
+          sliceStatus: "manual",
+          errorMessage: "该文件包含多个独立实体，需要人工确认后报价。",
+        });
+
+        return jsonResponse({
+          success: true,
+          message: "该文件包含多个独立实体，需要人工确认后报价。",
+          saved_upload: savedFile,
+          draft_file_id: draftFileId,
+          error: "Multiple independent STL bodies",
+        });
+      }
+    } catch (error) {
+      const draftFileId = saveQuoteDraftFile({
+        customerId: customer.customerId,
+        originalFilename: file.name,
+        savedFile,
+        material,
+        color,
+        quantity,
+        sliceStatus: "manual",
+        errorMessage: error instanceof Error ? error.message : "模型网格异常，需要人工确认后报价。",
+      });
+
+      return jsonResponse({
+        success: true,
+        message: "模型网格异常，需要人工确认后报价。",
+        saved_upload: savedFile,
+        draft_file_id: draftFileId,
+        error: "STL topology analysis failed",
       });
     }
 
