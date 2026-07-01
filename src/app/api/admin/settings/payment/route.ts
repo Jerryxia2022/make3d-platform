@@ -34,6 +34,9 @@ export async function POST(request: Request) {
         paymentNotice: getOptionalString(body.paymentNotice),
         customerServiceHours: getOptionalString(body.customerServiceHours),
         serviceAccountQrPath: getOptionalString(body.serviceAccountQrPath),
+        publicSecurityRecordNumber: getOptionalString(body.publicSecurityRecordNumber),
+        publicSecurityRecordUrl: getOptionalString(body.publicSecurityRecordUrl),
+        publicSecurityRecordEnabled: Boolean(body.publicSecurityRecordEnabled),
       });
 
       return NextResponse.json({ ok: true });

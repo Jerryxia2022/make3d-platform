@@ -62,22 +62,29 @@ test("front pages show customer auth state while admin pages stay independent", 
   assert.doesNotMatch(adminOrdersSource, /CustomerAuthBar/);
 });
 
-test("global footer reads ICP filing number from environment", async () => {
+test("global footer shows official company ICP filing information", async () => {
   const layoutSource = await readSource("src/app/layout.tsx");
   const footerSource = await readSource("src/frontend/components/SiteFooter.tsx");
+  const siteConfigSource = await readSource("src/shared/siteConfig.ts");
   const envExample = await readSource(".env.example");
   const productionEnvExample = await readSource(".env.production.example");
 
   assert.match(layoutSource, /SiteFooter/);
   assert.match(layoutSource, /<SiteFooter \/>/);
-  assert.match(footerSource, /process\.env\.NEXT_PUBLIC_ICP_BEIAN\?\.trim\(\)/);
-  assert.match(footerSource, /beian\.miit\.gov\.cn/);
+  assert.match(footerSource, /SITE_CONFIG\.legalEntityName/);
+  assert.match(footerSource, /SITE_CONFIG\.filingSiteName/);
+  assert.match(footerSource, /SITE_CONFIG\.icpFilingNumber/);
+  assert.match(siteConfigSource, /beian\.miit\.gov\.cn/);
   assert.match(footerSource, /target="_blank"/);
   assert.match(footerSource, /rel="noopener noreferrer"/);
-  assert.match(footerSource, /&copy; 2026 Make3D/);
-  assert.match(footerSource, /icpBeian \?/);
+  assert.match(footerSource, /&copy; 2026/);
+  assert.match(siteConfigSource, /西安瑞淞增材技术有限公司/);
+  assert.match(siteConfigSource, /瑞淞增材制造服务/);
+  assert.match(siteConfigSource, /陕ICP备2026016776号-1/);
+  assert.doesNotMatch(siteConfigSource, new RegExp(`陕ICP备202601${"4335"}号-1`));
+  assert.doesNotMatch(footerSource, new RegExp(`公网${"安备"}|${"0000000"}0000000`));
   assert.match(envExample, /NEXT_PUBLIC_ICP_BEIAN=/);
-  assert.match(productionEnvExample, /NEXT_PUBLIC_ICP_BEIAN=陕ICP备2026014335号-1/);
+  assert.match(productionEnvExample, /NEXT_PUBLIC_ICP_BEIAN=陕ICP备2026016776号-1/);
 });
 
 test("brand logo assets are generated and applied to public entry points", async () => {

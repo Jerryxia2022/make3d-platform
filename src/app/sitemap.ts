@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const appUrl = process.env.APP_URL || "https://make3d.com.cn";
+import { SITE_CONFIG } from "@/shared/siteConfig";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
@@ -12,7 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/account/register",
     "/account/forgot-password",
   ].map((path) => ({
-    url: `${appUrl}${path}`,
+    url: `${SITE_CONFIG.appUrl}${path}`,
     lastModified: new Date(),
     changeFrequency: path === "" ? "weekly" : "monthly",
     priority: path === "" ? 1 : 0.7,

@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const appUrl = process.env.APP_URL || "https://make3d.com.cn";
+import { SITE_CONFIG } from "@/shared/siteConfig";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -11,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/admin", "/api"],
       },
     ],
-    sitemap: `${appUrl}/sitemap.xml`,
+    sitemap: `${SITE_CONFIG.appUrl}/sitemap.xml`,
   };
 }

@@ -157,6 +157,9 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "bank_account",
     "payment_notice",
     "service_account_qr_path",
+    "public_security_record_number",
+    "public_security_record_url",
+    "public_security_record_enabled",
   ]) {
     assert.equal(paymentColumns.includes(column), true);
   }
@@ -283,6 +286,9 @@ test("returns payment settings as a plain object for client components", () => {
     paymentNotice: null,
     customerServiceHours: "工作日晚上和周末优先处理复杂沟通",
     serviceAccountQrPath: "/brand/make3d-service-qrcode.png",
+    publicSecurityRecordNumber: null,
+    publicSecurityRecordUrl: null,
+    publicSecurityRecordEnabled: false,
   });
 
   db.close();

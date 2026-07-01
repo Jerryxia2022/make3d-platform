@@ -47,6 +47,7 @@ test("SEO sitemap, robots, and metadata are configured", async () => {
 
   assert.match(layout, /metadataBase/);
   assert.match(layout, /Make3D 3D打印与小型研发制造服务/);
+  assert.match(layout, /SITE_CONFIG\.filingSiteName/);
   assert.match(layout, /openGraph/);
   assert.match(sitemap, /\/quote/);
   assert.match(sitemap, /\/request\/design/);

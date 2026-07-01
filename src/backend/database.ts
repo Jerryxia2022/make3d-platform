@@ -556,6 +556,9 @@ export type PaymentSettings = {
   paymentNotice: string | null;
   customerServiceHours: string | null;
   serviceAccountQrPath: string | null;
+  publicSecurityRecordNumber: string | null;
+  publicSecurityRecordUrl: string | null;
+  publicSecurityRecordEnabled: boolean;
 };
 
 export type OrderPaymentInput = {
@@ -806,6 +809,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
       payment_notice TEXT,
       customer_service_hours TEXT,
       service_account_qr_path TEXT,
+      public_security_record_number TEXT,
+      public_security_record_url TEXT,
+      public_security_record_enabled INTEGER NOT NULL DEFAULT 0,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -1141,6 +1147,9 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["payment_notice", "TEXT"],
     ["customer_service_hours", "TEXT"],
     ["service_account_qr_path", "TEXT"],
+    ["public_security_record_number", "TEXT"],
+    ["public_security_record_url", "TEXT"],
+    ["public_security_record_enabled", "INTEGER NOT NULL DEFAULT 0"],
     ["updated_at", "DATETIME"],
   ]);
   db.prepare("INSERT OR IGNORE INTO payment_settings (id) VALUES (1)").run();
@@ -2963,7 +2972,10 @@ export function getPaymentSettings(db: DatabaseSync): PaymentSettings {
         bank_payment_instruction AS bankPaymentInstruction,
         payment_notice AS paymentNotice,
         customer_service_hours AS customerServiceHours,
-        service_account_qr_path AS serviceAccountQrPath
+        service_account_qr_path AS serviceAccountQrPath,
+        public_security_record_number AS publicSecurityRecordNumber,
+        public_security_record_url AS publicSecurityRecordUrl,
+        public_security_record_enabled AS publicSecurityRecordEnabled
       FROM payment_settings
       WHERE id = 1`,
     )
@@ -2972,6 +2984,7 @@ export function getPaymentSettings(db: DatabaseSync): PaymentSettings {
         wechatEnabled?: 0 | 1 | boolean | null;
         alipayEnabled?: 0 | 1 | boolean | null;
         bankEnabled?: 0 | 1 | boolean | null;
+        publicSecurityRecordEnabled?: 0 | 1 | boolean | null;
         otherNote?: string | null;
       })
     | undefined;
@@ -2996,6 +3009,9 @@ export function getPaymentSettings(db: DatabaseSync): PaymentSettings {
     paymentNotice: row?.paymentNotice ?? row?.otherNote ?? null,
     customerServiceHours: row?.customerServiceHours ?? "工作日晚上和周末优先处理复杂沟通",
     serviceAccountQrPath: row?.serviceAccountQrPath ?? "/brand/make3d-service-qrcode.png",
+    publicSecurityRecordNumber: row?.publicSecurityRecordNumber ?? null,
+    publicSecurityRecordUrl: row?.publicSecurityRecordUrl ?? null,
+    publicSecurityRecordEnabled: Boolean(row?.publicSecurityRecordEnabled),
   };
 }
 
@@ -3025,6 +3041,9 @@ export function updatePaymentSettings(db: DatabaseSync, input: PaymentSettings) 
            payment_notice = ?,
            customer_service_hours = ?,
            service_account_qr_path = ?,
+           public_security_record_number = ?,
+           public_security_record_url = ?,
+           public_security_record_enabled = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
     )
@@ -3049,6 +3068,9 @@ export function updatePaymentSettings(db: DatabaseSync, input: PaymentSettings) 
       normalizeOptionalText(input.paymentNotice),
       normalizeOptionalText(input.customerServiceHours),
       normalizeOptionalText(input.serviceAccountQrPath) || "/brand/make3d-service-qrcode.png",
+      normalizeOptionalText(input.publicSecurityRecordNumber),
+      normalizeOptionalText(input.publicSecurityRecordUrl),
+      input.publicSecurityRecordEnabled ? 1 : 0,
     );
 
   return result.changes > 0;

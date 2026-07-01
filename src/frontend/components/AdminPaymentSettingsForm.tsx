@@ -24,6 +24,9 @@ export function AdminPaymentSettingsForm({ settings }: { settings: PaymentSettin
     paymentNotice: settings.paymentNotice || "",
     customerServiceHours: settings.customerServiceHours || "",
     serviceAccountQrPath: settings.serviceAccountQrPath || "/brand/make3d-service-qrcode.png",
+    publicSecurityRecordNumber: settings.publicSecurityRecordNumber || "",
+    publicSecurityRecordUrl: settings.publicSecurityRecordUrl || "",
+    publicSecurityRecordEnabled: settings.publicSecurityRecordEnabled,
   });
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -105,6 +108,20 @@ export function AdminPaymentSettingsForm({ settings }: { settings: PaymentSettin
         <TextInput label="客服响应时间" onChange={(value) => updateField("customerServiceHours", value)} placeholder="工作日晚上和周末优先处理复杂沟通" value={form.customerServiceHours} />
       </div>
       <TextArea label="客户付款页统一提示" onChange={(value) => updateField("paymentNotice", value)} placeholder="客户不能上传付款截图，到账后由管理员人工确认。" value={form.paymentNotice} />
+
+      <PaymentMethodSection
+        checked={form.publicSecurityRecordEnabled}
+        onToggle={(value) => updateField("publicSecurityRecordEnabled", value)}
+        title="公安联网备案"
+      >
+        <div className="notice-warning px-4 py-3 text-sm leading-6">
+          未取得正式公安联网备案号前请保持关闭。关闭时客户页面不会显示任何公安备案占位内容。
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <TextInput label="公安备案号" onChange={(value) => updateField("publicSecurityRecordNumber", value)} placeholder="取得后填写正式备案号" value={form.publicSecurityRecordNumber} />
+          <TextInput label="公安备案链接" onChange={(value) => updateField("publicSecurityRecordUrl", value)} placeholder="取得后填写官方链接" value={form.publicSecurityRecordUrl} />
+        </div>
+      </PaymentMethodSection>
 
       <button className="btn-primary w-full px-5 py-3" disabled={isSubmitting} type="submit">
         {isSubmitting ? "保存中..." : "保存付款设置"}
