@@ -98,7 +98,9 @@ test("wechat subscribe event replies with onboarding guidance", async () => {
     }),
   );
 
-  assert.match(reply, /欢迎关注 Make3D/);
+  assert.match(reply, /欢迎关注瑞淞Make3D快速制造/);
+  assert.match(reply, /在线报价｜我的订单｜地址管理｜联系客服/);
+  assert.match(reply, /STEP\/STP、多实体、超尺寸或需要拆分/);
   assert.equal(db.prepare("SELECT subscribed FROM wechat_accounts WHERE openid = ?").get("openid-subscribe").subscribed, 1);
 
   db.close();
@@ -182,6 +184,47 @@ test("wechat keyword quote replies with quote link", async () => {
   }
 });
 
+test("wechat basic keywords reply with safe operation guidance", async () => {
+  const previousAppUrl = process.env.APP_URL;
+  const db = initDatabase(":memory:");
+
+  try {
+    process.env.APP_URL = "https://make3d.com.cn";
+    const quoteReply = await handleWechatMessage(
+      db,
+      createWechatXml({ MsgType: "text", Content: "报价", FromUserName: "openid-keyword-quote" }),
+    );
+    const orderReply = await handleWechatMessage(
+      db,
+      createWechatXml({ MsgType: "text", Content: "订单", FromUserName: "openid-keyword-order" }),
+    );
+    const paymentReply = await handleWechatMessage(
+      db,
+      createWechatXml({ MsgType: "text", Content: "付款", FromUserName: "openid-keyword-payment" }),
+    );
+    const faqReply = await handleWechatMessage(
+      db,
+      createWechatXml({ MsgType: "text", Content: "常见问题", FromUserName: "openid-keyword-faq" }),
+    );
+    const helloReply = await handleWechatMessage(
+      db,
+      createWechatXml({ MsgType: "text", Content: "你好", FromUserName: "openid-keyword-hello" }),
+    );
+
+    assert.match(quoteReply, /https:\/\/make3d\.com\.cn\/quote/);
+    assert.match(orderReply, /https:\/\/make3d\.com\.cn\/account/);
+    assert.match(paymentReply, /付款方式/);
+    assert.match(faqReply, /https:\/\/make3d\.com\.cn\/quote/);
+    assert.match(helloReply, /报价/);
+    assert.match(helloReply, /订单/);
+    assert.match(helloReply, /付款/);
+    assert.match(helloReply, /人工/);
+  } finally {
+    restoreEnv({ APP_URL: previousAppUrl });
+    db.close();
+  }
+});
+
 test("wechat keyword customer service creates service request", async () => {
   const db = initDatabase(":memory:");
 
@@ -201,6 +244,27 @@ test("wechat keyword customer service creates service request", async () => {
   assert.equal(requests[0].phone, "13800000000");
   assert.equal(requests[0].status, "pending");
   assert.equal(requests[0].source, "wechat_keyword");
+
+  db.close();
+});
+
+test("wechat keyword customer service avoids duplicate recent requests", async () => {
+  const db = initDatabase(":memory:");
+  const xml = createWechatXml({
+    MsgType: "text",
+    Content: "人工 TEST-M3D-001 模型需要拆分",
+    FromUserName: "openid-service-dedupe",
+  });
+
+  const firstReply = await handleWechatMessage(db, xml);
+  const secondReply = await handleWechatMessage(db, xml);
+  const requests = searchCustomerServiceRequests(db, {});
+
+  assert.match(firstReply, /已收到人工客服请求/);
+  assert.match(secondReply, /已收到人工客服请求/);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].openid, "openid-service-dedupe");
+  assert.equal(requests[0].message, "人工 TEST-M3D-001 模型需要拆分");
 
   db.close();
 });

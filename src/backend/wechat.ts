@@ -52,6 +52,21 @@ export type WechatVerificationResult = {
 };
 
 const BIND_CODE_PATTERN = /^M3D-\d{6}$/i;
+const SERVICE_ACCOUNT_BRAND_NAME = "瑞淞Make3D快速制造";
+const WECHAT_ONBOARDING_REPLY = [
+  `欢迎关注${SERVICE_ACCOUNT_BRAND_NAME}。`,
+  "",
+  "您可以通过底部菜单使用：",
+  "在线报价｜我的订单｜地址管理｜联系客服",
+  "",
+  "也可以发送：",
+  "“报价”——进入在线报价",
+  "“订单”——查看我的订单",
+  "“付款”——查看付款说明",
+  "“人工”——联系人工客服",
+  "",
+  "复杂模型、STEP/STP、多实体、超尺寸或需要拆分的文件，将转人工确认。",
+].join("\n");
 const WECHAT_ORDER_NOTIFY_STATUSES = new Set([
   "待付款",
   "已付款",
@@ -402,7 +417,7 @@ async function handleWechatEvent(db: DatabaseSync, message: WechatInboundMessage
 
     return buildWechatTextReply(
       message,
-      "欢迎关注 Make3D。您可以点击菜单进入在线报价，或登录网站生成绑定码后发送给公众号完成账号绑定。",
+      WECHAT_ONBOARDING_REPLY,
     );
   }
 
@@ -476,6 +491,10 @@ async function handleWechatText(db: DatabaseSync, message: WechatInboundMessage)
     );
   }
 
+  if (matchesAny(content, ["常见问题", "FAQ", "faq"])) {
+    return buildWechatTextReply(message, WECHAT_MENU_CLICK_REPLIES.MAKE3D_FAQ);
+  }
+
   return buildWechatTextReply(
     message,
     "您可以回复“报价”“订单”“付款”或“人工”，获取对应服务入口。",
@@ -488,14 +507,16 @@ function createCustomerServiceRequestReply(
   content: string,
 ) {
   const account = getWechatAccountByOpenid(db, message.fromUserName);
-  createCustomerServiceRequest(db, {
-    customerId: account?.customerId ?? null,
-    openid: message.fromUserName,
-    phone: extractPhone(content),
-    message: content,
-    source: "wechat_keyword",
-    category: "other",
-  });
+  if (!hasRecentWechatKeywordCustomerServiceRequest(db, message.fromUserName, content)) {
+    createCustomerServiceRequest(db, {
+      customerId: account?.customerId ?? null,
+      openid: message.fromUserName,
+      phone: extractPhone(content),
+      message: content,
+      source: "wechat_keyword",
+      category: "other",
+    });
+  }
 
   return buildWechatTextReply(
     message,
@@ -533,6 +554,28 @@ function hasRecentWechatMenuCustomerServiceRequest(db: DatabaseSync, openid: str
        LIMIT 1`,
     )
     .get(openid);
+
+  return Boolean(row);
+}
+
+function hasRecentWechatKeywordCustomerServiceRequest(
+  db: DatabaseSync,
+  openid: string,
+  message: string,
+) {
+  const row = db
+    .prepare(
+      `SELECT id
+       FROM customer_service_requests
+       WHERE openid = ?
+         AND source = 'wechat_keyword'
+         AND message = ?
+         AND status IN ('pending', 'processing', 'waiting_customer')
+         AND created_at >= datetime('now', '-10 minutes')
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(openid, message);
 
   return Boolean(row);
 }

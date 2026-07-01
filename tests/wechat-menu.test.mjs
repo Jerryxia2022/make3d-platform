@@ -43,7 +43,7 @@ test("every wechat menu CLICK key has a callback reply handler", async () => {
 test("old personal official account cannot pass certified service account guard", () => {
   assert.equal(
     isExpectedCertifiedServiceAccount({
-      nickname: "西安3D打印",
+      nickname: "旧个人公众号",
       wx_verify_info: { qualification_verify: false, naming_verify: false },
     }),
     false,
