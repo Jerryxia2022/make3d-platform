@@ -512,6 +512,7 @@ test("quote form restores active drafts without re-slicing saved results", async
   const draftFileSource = await readSource("src/app/api/quote/draft/files/[id]/route.ts");
   const draftDownloadSource = await readSource("src/app/api/quote/draft/files/[id]/download/route.ts");
   const orderSource = await readSource("src/app/api/orders/route.ts");
+  const uploadsSource = await readSource("src/backend/uploads.ts");
 
   assert.match(databaseSource, /QUOTE_DRAFT_TTL_MS = 24 \* 60 \* 60 \* 1000/);
   assert.match(databaseSource, /CREATE TABLE IF NOT EXISTS quote_drafts/);
@@ -544,6 +545,10 @@ test("quote form restores active drafts without re-slicing saved results", async
   assert.match(draftSource, /getCustomerFromRequestCookie/);
   assert.match(draftFileSource, /updateQuoteDraftFile/);
   assert.match(draftFileSource, /deleteQuoteDraftFile/);
+  assert.match(draftFileSource, /deleteSavedUploadArtifacts/);
+  assert.match(uploadsSource, /getUploadCleanupFailureLogPath/);
+  assert.match(uploadsSource, /upload-cleanup-failures\.jsonl/);
+  assert.match(uploadsSource, /recordUploadCleanupFailure/);
   assert.match(draftDownloadSource, /getQuoteDraftFileForCustomer/);
   assert.match(draftDownloadSource, /readFile/);
   assert.match(orderSource, /markActiveQuoteDraftSubmitted\(db, customer\.id\)/);

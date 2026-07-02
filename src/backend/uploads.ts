@@ -1,5 +1,5 @@
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { appendFile, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, join } from "node:path";
 import { basename, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -46,6 +46,10 @@ export function getUploadDir() {
 
 export function getGcodeDir() {
   return process.env.GCODE_DIR || join(process.cwd(), "gcode");
+}
+
+export function getUploadCleanupFailureLogPath() {
+  return process.env.UPLOAD_CLEANUP_LOG_PATH || join(process.cwd(), "data", "upload-cleanup-failures.jsonl");
 }
 
 export function isAllowedUploadFilename(filename: string) {
@@ -152,6 +156,14 @@ export async function deleteSavedUploadArtifacts(upload: Pick<SavedUpload, "file
     }
   }
 
+  if (result.failed.length > 0) {
+    await recordUploadCleanupFailure({
+      filename: upload.filename,
+      failed: result.failed,
+      skipped: result.skipped,
+    });
+  }
+
   return result;
 }
 
@@ -225,5 +237,28 @@ async function deleteFileInsideRoot(filePath: string, rootDir: string, label: st
       error: error instanceof Error ? error.message : "unknown",
     });
     return "failed" as const;
+  }
+}
+
+async function recordUploadCleanupFailure(record: {
+  filename: string;
+  failed: string[];
+  skipped: string[];
+}) {
+  const logPath = getUploadCleanupFailureLogPath();
+  const safeRecord = {
+    createdAt: new Date().toISOString(),
+    filename: basename(record.filename),
+    failed: record.failed,
+    skipped: record.skipped,
+  };
+
+  try {
+    await mkdir(dirname(logPath), { recursive: true });
+    await appendFile(logPath, `${JSON.stringify(safeRecord)}\n`, "utf8");
+  } catch (error) {
+    console.error("Failed to record upload cleanup failure", {
+      error: error instanceof Error ? error.message : "unknown",
+    });
   }
 }
