@@ -8,18 +8,18 @@ import {
   getShippingFee,
 } from "../src/backend/autoPricing.ts";
 
-test("calculates automatic file quote with material, labor minimum, and packaging share", () => {
+test("calculates automatic file quote with material, labor minimum, unit minimum, and packaging share", () => {
   const price = calculateAutoFilePrice({
     material: "PLA",
-    filamentWeightG: 40,
-    printTimeSeconds: 2 * 60 * 60,
-    packagingShare: 3,
+    filamentWeightG: 1,
+    printTimeSeconds: 60,
+    packagingShare: 0,
   });
 
-  assert.equal(price.materialFee, 10);
+  assert.equal(price.materialFee, 0.25);
   assert.equal(price.laborFee, 5);
-  assert.equal(price.packagingShare, 3);
-  assert.equal(price.estimatedPrice, 18);
+  assert.equal(price.packagingShare, 0);
+  assert.equal(price.estimatedPrice, 5.25);
 });
 
 test("calculates exact slicer quote with fixed packaging and rounded delivery lead time", () => {
@@ -44,7 +44,7 @@ test("keeps the longest file on one machine and shares remaining lead time", () 
   );
 });
 
-test("applies order minimum and supported shipping rules", () => {
+test("applies supported shipping rules without a whole-order minimum", () => {
   assert.equal(getShippingFee("普通快递"), 10);
   assert.equal(getShippingFee("顺丰快递"), 18);
   assert.equal(getShippingFee("到店自取"), 10);
@@ -58,15 +58,20 @@ test("applies order minimum and supported shipping rules", () => {
     filePrices: [18],
     shippingMethod: "西安本地跑腿",
   });
-  const pickupMinimum = calculateAutoOrderPrice({
+  const pickup = calculateAutoOrderPrice({
     filePrices: [8],
     shippingMethod: "到店自取",
+  });
+  const empty = calculateAutoOrderPrice({
+    filePrices: [],
+    shippingMethod: "普通快递",
   });
 
   assert.equal(ordinary.estimatedPrice, 28);
   assert.equal(ordinary.shippingFee, 10);
-  assert.equal(courier.estimatedPrice, 20);
+  assert.equal(courier.estimatedPrice, 18);
   assert.equal(courier.shippingFee, null);
   assert.equal(courier.requiresManualShipping, true);
-  assert.equal(pickupMinimum.estimatedPrice, 20);
+  assert.equal(pickup.estimatedPrice, 18);
+  assert.equal(empty.estimatedPrice, 0);
 });

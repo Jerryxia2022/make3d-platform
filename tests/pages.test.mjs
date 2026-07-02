@@ -213,17 +213,24 @@ test("customer account center shows profile, compact orders, and owned order det
   assert.match(confirmSource, /formatAddress\(order\)/);
 });
 
-test("quote page shows FDM guidance instead of pricing explanation", async () => {
+test("quote page shows compact FDM, material, process and manual-review sidebar", async () => {
   const source = await readSource("src/app/quote/page.tsx");
 
   assert.match(source, /getCurrentCustomer/);
-  assert.match(source, /href="\/account\/login"/);
-  assert.match(source, /href="\/account\/register"/);
   assert.doesNotMatch(source, /QuoteLoginPrompt/);
 
-  assert.match(source, /FDM 是通过热熔材料逐层堆叠成型的3D打印工艺/);
-  assert.match(source, /价格计算按0\.4喷嘴，0\.2mm层高，50%填充率进行价格计算/);
-  assert.match(source, /如有特别要求，例如需改变喷嘴/);
+  assert.match(source, /FDM打印说明/);
+  assert.match(source, /FDM通过熔融材料逐层成型/);
+  assert.match(source, /默认报价按0\.4mm喷嘴、0\.2mm层高、50%填充计算/);
+  assert.match(source, /材料特性/);
+  assert.match(source, /MATERIAL_GUIDANCE\.map/);
+  assert.match(source, /工艺提示/);
+  assert.match(source, /需要人工确认？/);
+  assert.match(source, /STEP\/STP、多实体、破面、超尺寸/);
+  assert.match(source, /href="\/request\/design"/);
+  assert.match(source, /ContactSupportButton/);
+  assert.doesNotMatch(source, /设备能力|打印设备|P1S|评估时效/);
+  assert.doesNotMatch(source, /需要模型修改或工装夹具/);
   assert.doesNotMatch(source, /3MF/);
   assert.doesNotMatch(source, /价格和计费说明/);
   assert.doesNotMatch(source, /材料费/);
@@ -361,7 +368,6 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(quoteSource, /customer={quoteCustomer}/);
   assert.match(quoteSource, /listCustomerAddresses/);
   assert.match(quoteSource, /addresses={addresses}/);
-  assert.match(quoteSource, /登录后可上传模型文件，自动计算打印价格和预计交货期。/);
   assert.match(quoteSource, /xl:grid-cols-\[260px_minmax\(0,1fr\)\]/);
   assert.match(formSource, /disabled = false/);
   assert.match(formSource, /addresses = \[\]/);
@@ -489,7 +495,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.doesNotMatch(formSource, /预估价格区间/);
   assert.doesNotMatch(formSource, /打印时间/);
   assert.match(formSource, /如需加急，请在备注中说明，加急可能产生额外费用。/);
-  assert.match(formSource, /打印费合计/);
+  assert.match(formSource, /打印费用/);
   assert.match(formSource, /应付总价/);
   assert.match(formSource, /预计交货期/);
   assert.match(formSource, /最终价格以人工确认为准/);
@@ -501,6 +507,32 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /quote\.result\.printTimeSeconds \* quote\.quantity/);
   assert.match(formSource, /getMaterialRate\(material\)/);
   assert.match(formSource, /fileSliceMessage/);
+});
+
+test("quote form displays zero before valid auto quotes and removes the whole-order minimum", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const orderSource = await readSource("src/app/api/orders/route.ts");
+  const estimateSource = await readSource("src/frontend/lib/quote-estimates.ts");
+
+  assert.match(formSource, /applyMinimumPrintUnitPrice/);
+  assert.match(formSource, /calculateLinePrintTotal/);
+  assert.match(formSource, /const isZeroDisplay = !hasFiles \|\| isCalculating/);
+  assert.match(formSource, /formatMoney\(0\)/);
+  assert.match(formSource, /上传模型并完成报价后自动计算/);
+  assert.match(formSource, /正在生成报价/);
+  assert.match(formSource, /待人工确认/);
+  assert.match(formSource, /当前自动报价小计/);
+  assert.match(formSource, /报价完成后计入/);
+  assert.doesNotMatch(formSource, /Math\.max\(printFeeTotal \+ shippingAmount, 20\)/);
+  assert.doesNotMatch(formSource, /<h2 className="text-lg font-bold">材料特性<\/h2>/);
+
+  assert.match(orderSource, /calculateLinePrintTotal/);
+  assert.match(orderSource, /isSameMoney/);
+  assert.match(orderSource, /报价金额已更新，请刷新后重试/);
+  assert.match(orderSource, /请先上传模型并完成报价/);
+  assert.match(orderSource, /payablePrice: exactOrderPrice/);
+  assert.doesNotMatch(orderSource, /Math\.max\(autoPrintPrice \+ shippingAmount, 20\)/);
+  assert.doesNotMatch(estimateSource, /ORDER_MIN_PRICE/);
 });
 
 test("quote form restores active drafts without re-slicing saved results", async () => {
@@ -768,7 +800,7 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /isValidMainlandPhone\(phone\)/);
   assert.match(apiSource, /mainlandPhoneErrorMessage/);
   assert.match(apiSource, /packagingFee: estimate\.packagingFee/);
-  assert.match(apiSource, /shippingFee: shipping\.amount/);
+  assert.match(apiSource, /shippingFee: allFilesAutoQuoted \? shipping\.amount : null/);
   assert.match(apiSource, /shippingMethod: getString\(formData, "shippingMethod"\)/);
   assert.match(apiSource, /getCustomerAddressByIdForCustomer/);
   assert.match(apiSource, /getPositiveInteger\(formData, "addressId"\)/);

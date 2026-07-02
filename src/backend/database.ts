@@ -16,8 +16,8 @@ export type OrderInput = {
   quantity: number;
   remark?: string;
   estimatedPrice: number;
-  estimatedPriceMin?: number;
-  estimatedPriceMax?: number;
+  estimatedPriceMin?: number | null;
+  estimatedPriceMax?: number | null;
   estimatedLeadTimeMinHours?: number;
   estimatedLeadTimeMaxHours?: number;
   packagingFee?: number;
@@ -45,7 +45,7 @@ export type OrderInput = {
   shippingAddressSnapshot?: string | null;
   shippingRemark?: string;
   printFeeTotal?: number;
-  payablePrice?: number;
+  payablePrice?: number | null;
   estimatedLeadTimeHours?: number;
   finalPrice?: number | null;
   finalLeadTimeHours?: number | null;
@@ -78,8 +78,8 @@ export type OrderFileInput = {
   boundingBoxX?: number | null;
   boundingBoxY?: number | null;
   boundingBoxZ?: number | null;
-  estimatedPriceMin?: number;
-  estimatedPriceMax?: number;
+  estimatedPriceMin?: number | null;
+  estimatedPriceMax?: number | null;
   estimatedLeadTimeMinHours?: number;
   estimatedLeadTimeMaxHours?: number;
   riskNotice?: string;

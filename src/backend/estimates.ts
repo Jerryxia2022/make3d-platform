@@ -1,3 +1,5 @@
+import { applyMinimumPrintUnitPrice } from "../shared/pricing.ts";
+
 export type EstimateMaterial = "PLA" | "PETG" | "ABS" | string;
 
 export type DimensionsMm = {
@@ -20,7 +22,6 @@ export const PACKAGING_FEE = 3;
 export const PACKAGING_TIME_HOURS = 2;
 
 const MB = 1024 * 1024;
-const ORDER_MIN_PRICE = 20;
 
 export function estimateFileBySize(
   filesize: number,
@@ -39,8 +40,8 @@ export function estimateFileBySize(
     (material === "ABS" ? 1.15 : 1) * (dimensionRisk.priceMultiplier || 1);
 
   return {
-    priceMin: Math.ceil((materialMin + laborMin) * riskMultiplier),
-    priceMax: Math.ceil((materialMax + laborMax) * riskMultiplier),
+    priceMin: Math.ceil(applyMinimumPrintUnitPrice((materialMin + laborMin) * riskMultiplier)),
+    priceMax: Math.ceil(applyMinimumPrintUnitPrice((materialMax + laborMax) * riskMultiplier)),
     leadTimeMinHours: bucket.leadTimeMinHours,
     leadTimeMaxHours: bucket.leadTimeMaxHours,
     materialSalesRate,
@@ -56,14 +57,15 @@ export function estimateOrderSummary(files: EstimateFileInput[], shippingMethod:
     estimateFileBySize(file.filesize, file.material, file.dimensions),
   );
   const shipping = getShippingEstimate(shippingMethod);
-  const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
+  const hasFiles = files.length > 0;
+  const shippingAmount = hasFiles && shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
   const rawPriceMin =
     fileEstimates.reduce((total, estimate) => total + estimate.priceMin, 0) +
-    PACKAGING_FEE +
+    (hasFiles ? PACKAGING_FEE : 0) +
     shippingAmount;
   const rawPriceMax =
     fileEstimates.reduce((total, estimate) => total + estimate.priceMax, 0) +
-    PACKAGING_FEE +
+    (hasFiles ? PACKAGING_FEE : 0) +
     shippingAmount;
   const printTimeMin = fileEstimates.reduce(
     (total, estimate) => total + estimate.leadTimeMinHours,
@@ -75,8 +77,8 @@ export function estimateOrderSummary(files: EstimateFileInput[], shippingMethod:
   );
 
   return {
-    priceMin: Math.max(Math.ceil(rawPriceMin), ORDER_MIN_PRICE),
-    priceMax: Math.max(Math.ceil(rawPriceMax), ORDER_MIN_PRICE),
+    priceMin: Math.ceil(rawPriceMin),
+    priceMax: Math.ceil(rawPriceMax),
     leadTimeMinHours: Math.ceil(printTimeMin / DEVICE_COUNT + PACKAGING_TIME_HOURS),
     leadTimeMaxHours: Math.ceil(printTimeMax / DEVICE_COUNT + PACKAGING_TIME_HOURS),
     packagingFee: PACKAGING_FEE,

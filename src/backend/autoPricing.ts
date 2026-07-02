@@ -1,3 +1,5 @@
+import { applyMinimumPrintUnitPrice, roundMoney, safePositiveMoney } from "../shared/pricing.ts";
+
 export type AutoPricingMaterial = "PLA" | "PETG" | "ABS" | string;
 
 export type AutoFilePriceInput = {
@@ -21,20 +23,20 @@ const MATERIAL_RATES: Record<string, number> = {
 
 const LABOR_RATE_PER_HOUR = 1.5;
 const MIN_LABOR_FEE = 5;
-const ORDER_MIN_PRICE = 20;
 const DEFAULT_DEVICE_COUNT = 6;
 const DELIVERY_BUFFER_HOURS = 24;
 
 export function calculateAutoFilePrice(input: AutoFilePriceInput) {
   const materialFee = roundMoney(
-    safePositiveNumber(input.filamentWeightG) * getMaterialRate(input.material),
+    safePositiveMoney(input.filamentWeightG) * getMaterialRate(input.material),
   );
-  const printHours = safePositiveNumber(input.printTimeSeconds) / 3600;
+  const printHours = safePositiveMoney(input.printTimeSeconds) / 3600;
   const laborFee = roundMoney(Math.max(printHours * LABOR_RATE_PER_HOUR, MIN_LABOR_FEE));
   const packagingFee = roundMoney(
-    safePositiveNumber(input.packagingFee ?? input.packagingShare),
+    safePositiveMoney(input.packagingFee ?? input.packagingShare),
   );
-  const estimatedPrice = roundMoney(materialFee + laborFee + packagingFee);
+  const calculatedPrice = roundMoney(materialFee + laborFee + packagingFee);
+  const estimatedPrice = applyMinimumPrintUnitPrice(calculatedPrice);
 
   return {
     materialFee,
@@ -54,7 +56,7 @@ export function calculateAutoLeadTimeHours(
       typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0,
   );
   const safeDeviceCount = Number.isFinite(deviceCount) && deviceCount > 0 ? deviceCount : 1;
-  const printHours = usablePrintTimes.map((seconds) => safePositiveNumber(seconds) / 3600);
+  const printHours = usablePrintTimes.map((seconds) => safePositiveMoney(seconds) / 3600);
   const longestPrintHours = Math.max(...printHours);
   const remainingPrintHours = printHours.reduce((total, hours) => total + hours, 0) - longestPrintHours;
   const sharedRemainingHours = usablePrintTimes.length > 1 ? remainingPrintHours / safeDeviceCount : 0;
@@ -63,15 +65,15 @@ export function calculateAutoLeadTimeHours(
 }
 
 export function calculateAutoOrderPrice(input: AutoOrderPriceInput) {
-  const subtotal = input.filePrices.reduce((total, price) => total + safePositiveNumber(price), 0);
+  const subtotal = input.filePrices.reduce((total, price) => total + safePositiveMoney(price), 0);
   const shippingFee = getShippingFee(input.shippingMethod);
-  const shippingAmount = shippingFee ?? 0;
+  const shippingAmount = subtotal > 0 ? shippingFee ?? 0 : 0;
 
   return {
     subtotal: roundMoney(subtotal),
     shippingFee,
     requiresManualShipping: shippingFee == null,
-    estimatedPrice: roundMoney(Math.max(subtotal + shippingAmount, ORDER_MIN_PRICE)),
+    estimatedPrice: roundMoney(subtotal + shippingAmount),
   };
 }
 
@@ -91,10 +93,3 @@ export function getMaterialRate(material: AutoPricingMaterial) {
   return MATERIAL_RATES[String(material).toUpperCase()] ?? MATERIAL_RATES.PLA;
 }
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function safePositiveNumber(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
-}

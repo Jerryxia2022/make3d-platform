@@ -1,8 +1,9 @@
+import { applyMinimumPrintUnitPrice } from "../../shared/pricing.ts";
+
 export const MB = 1024 * 1024;
 export const DEVICE_COUNT = 6;
 export const PACKAGING_FEE = 3;
 export const PACKAGING_TIME_HOURS = 2;
-export const ORDER_MIN_PRICE = 20;
 export const DEFAULT_LEAD_TIME_MIN_HOURS = 48;
 export const DEFAULT_LEAD_TIME_MAX_HOURS = 72;
 
@@ -51,8 +52,8 @@ export function estimateFiles<T extends SelectedQuoteFile>(files: T[]) {
       dimensions,
       estimate: {
         ...estimate,
-        priceMin: Math.ceil(estimate.priceMin + packagingShare),
-        priceMax: Math.ceil(estimate.priceMax + packagingShare),
+        priceMin: Math.ceil(applyMinimumPrintUnitPrice(estimate.priceMin + packagingShare)),
+        priceMax: Math.ceil(applyMinimumPrintUnitPrice(estimate.priceMax + packagingShare)),
       },
     };
   });
@@ -71,8 +72,8 @@ export function estimateFileBySize(
   const riskMultiplier = (material === "ABS" ? 1.15 : 1) * risk.priceMultiplier;
 
   return {
-    priceMin: Math.ceil((bucket.weightMinGrams * salesRate + laborMin) * riskMultiplier),
-    priceMax: Math.ceil((bucket.weightMaxGrams * salesRate + laborMax) * riskMultiplier),
+    priceMin: Math.ceil(applyMinimumPrintUnitPrice((bucket.weightMinGrams * salesRate + laborMin) * riskMultiplier)),
+    priceMax: Math.ceil(applyMinimumPrintUnitPrice((bucket.weightMaxGrams * salesRate + laborMax) * riskMultiplier)),
     leadTimeMinHours: DEFAULT_LEAD_TIME_MIN_HOURS,
     leadTimeMaxHours: DEFAULT_LEAD_TIME_MAX_HOURS,
     riskNotice: risk.notice,
@@ -86,7 +87,6 @@ export function estimateOrderSummary(
 ) {
   const safeEstimates = Array.isArray(fileEstimates) ? fileEstimates : [];
   const shipping = getShippingEstimate(shippingMethod);
-  const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
   const filePriceMin = safeEstimates.reduce(
     (total, entry) => total + safePositiveNumber(entry.estimate?.priceMin),
     0,
@@ -95,10 +95,12 @@ export function estimateOrderSummary(
     (total, entry) => total + safePositiveNumber(entry.estimate?.priceMax),
     0,
   );
+  const hasPricedFiles = filePriceMin > 0 || filePriceMax > 0;
+  const shippingAmount = hasPricedFiles && shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
 
   return {
-    priceMin: Math.max(Math.ceil(filePriceMin + shippingAmount), ORDER_MIN_PRICE),
-    priceMax: Math.max(Math.ceil(filePriceMax + shippingAmount), ORDER_MIN_PRICE),
+    priceMin: Math.ceil(filePriceMin + shippingAmount),
+    priceMax: Math.ceil(filePriceMax + shippingAmount),
     leadTimeMinHours: DEFAULT_LEAD_TIME_MIN_HOURS,
     leadTimeMaxHours: DEFAULT_LEAD_TIME_MAX_HOURS,
     shippingFeeEstimate: shipping.label,

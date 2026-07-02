@@ -28,7 +28,7 @@ import {
   getDefaultAddress,
   type CustomerAddressView,
 } from "@/frontend/lib/customer-addresses";
-import { MATERIAL_GUIDANCE } from "@/shared/materialGuidance";
+import { applyMinimumPrintUnitPrice, calculateLinePrintTotal, roundMoney } from "@/shared/pricing";
 
 const materials = ["PLA", "PETG", "ABS"];
 const colors = ["黑", "白", "红", "蓝"];
@@ -598,7 +598,7 @@ export function QuoteForm({
     }
 
     if (files.length === 0) {
-      setError("请先上传模型文件");
+      setError("请先上传模型并完成报价");
       return;
     }
 
@@ -929,29 +929,6 @@ export function QuoteForm({
         </section>
       )}
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-bold">材料特性</h2>
-          <p className="mt-1 text-xs text-graphite">
-            以下为常见 FDM 材料参考值，实际性能会受模型结构、打印方向和参数影响。
-          </p>
-        </div>
-        <div className="grid gap-3 p-4 md:grid-cols-3">
-          {MATERIAL_GUIDANCE.map((item) => (
-            <article className="surface-soft p-4 text-sm" key={item.material}>
-              <h3 className="text-base font-bold">{item.material}</h3>
-              <dl className="mt-3 space-y-2 leading-5 text-graphite">
-                <MaterialFeature label="软化温度" value={item.softeningTemperature} />
-                <MaterialFeature label="强度" value={item.strength} />
-                <MaterialFeature label="韧性/刚性" value={item.toughness} />
-                <MaterialFeature label="适用" value={item.useCases} />
-                <MaterialFeature label="注意" value={item.notes} />
-              </dl>
-            </article>
-          ))}
-        </div>
-      </section>
-
       <section className="surface-card p-5">
         <div>
           <h2 className="text-lg font-bold">订单备注</h2>
@@ -996,12 +973,13 @@ export function QuoteForm({
         ) : null}
         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           <SummaryItem label="文件数量" value={`${files.length} 个`} />
-          <SummaryItem label="打印费合计" value={formatMoney(orderSummary.printFeeTotal)} />
+          <SummaryItem label={orderSummary.printFeeLabel} value={formatMoney(orderSummary.printFeeTotal)} />
           <SummaryItem label="配送方式" value={shippingMethod} />
           <SummaryItem label="配送费" value={orderSummary.shippingFeeLabel} />
           <SummaryItem
             highlight
             label="应付总价"
+            hint={orderSummary.payableHint}
             value={orderSummary.payableLabel}
           />
           <SummaryItem
@@ -1233,21 +1211,14 @@ function AddressPreviewItem({
   );
 }
 
-function MaterialFeature({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="font-semibold text-ink">{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
 function SummaryItem({
   highlight = false,
+  hint,
   label,
   value,
 }: {
   highlight?: boolean;
+  hint?: string | null;
   label: string;
   value: string;
 }) {
@@ -1263,6 +1234,7 @@ function SummaryItem({
       <dd className={highlight ? "mt-1 text-2xl font-bold text-slate-900" : "mt-1 font-semibold text-slate-900"}>
         {value}
       </dd>
+      {hint ? <dd className="mt-1 text-xs leading-5 text-slate-500">{hint}</dd> : null}
     </div>
   );
 }
@@ -1415,7 +1387,7 @@ function getFileDisplayPrice(
   const packagingShare = fileCount > 0 ? 3 / fileCount : 0;
 
   if (quote.status === "success" && quote.result) {
-    return roundMoney(
+    return applyMinimumPrintUnitPrice(
       calculateMaterialFee(quote.result.filamentWeightG, material) +
         quote.result.timeFee +
         packagingShare,
@@ -1441,7 +1413,7 @@ function getFileSubtotalPrice(
     return null;
   }
 
-  return roundMoney(unitPrice * getSafeQuantity(quantity));
+  return calculateLinePrintTotal(unitPrice, getSafeQuantity(quantity)).subtotalPrice;
 }
 
 function calculateMaterialFee(filamentWeightG: number, material: string) {
@@ -1464,8 +1436,8 @@ function buildOrderSummary(
 ) {
   const fallbackSummary = estimateOrderSummary(fileEstimates, shippingMethod);
   const shipping = getShippingFee(shippingMethod);
-  const shippingAmount = shipping.includedInAutoPrice ? shipping.amount : 0;
   const visibleQuotes = files.map((file) => getVisibleSliceQuote(file, sliceQuotes[file.id]));
+  const hasFiles = files.length > 0;
   const hasManualFile = visibleQuotes.some((quote) =>
     ["manual", "failed"].includes(quote.status),
   );
@@ -1481,10 +1453,22 @@ function buildOrderSummary(
     const price = getFileSubtotalPrice(quote, files.length, file.quantity, file.material);
     return total + (price || 0);
   }, 0);
+  const hasSuccessfulQuote = successfulQuotes.length > 0;
+  const allFilesQuoted = hasFiles && successfulQuotes.length === files.length;
+  const shippingAmount = allFilesQuoted && shipping.includedInAutoPrice ? shipping.amount : 0;
   const payable =
-    !hasManualFile && !isCalculating
-      ? roundMoney(Math.max(printFeeTotal + shippingAmount, 20))
+    allFilesQuoted && !hasManualFile && !isCalculating && shipping.includedInAutoPrice
+      ? roundMoney(printFeeTotal + shippingAmount)
       : null;
+  const isZeroDisplay = !hasFiles || isCalculating || (!hasSuccessfulQuote && !hasManualFile);
+  const payableLabel = isZeroDisplay ? formatMoney(0) : payable == null ? "待人工确认" : formatMoney(payable);
+  const payableHint = !hasFiles
+    ? "上传模型并完成报价后自动计算"
+    : isCalculating
+      ? "正在生成报价"
+      : hasManualFile
+        ? "人工确认后给出最终应付总价"
+        : null;
   const leadTimeLabel =
     successfulQuotes.length > 0
       ? `约${calculateLeadTimeHours(successfulQuotes.map((quote) => quote.result.printTimeSeconds * quote.quantity))}小时`
@@ -1494,8 +1478,10 @@ function buildOrderSummary(
 
   return {
     printFeeTotal,
-    shippingFeeLabel: shipping.label,
-    payableLabel: payable == null ? "需人工确认" : formatMoney(payable),
+    printFeeLabel: hasManualFile && hasSuccessfulQuote ? "当前自动报价小计" : "打印费用",
+    shippingFeeLabel: allFilesQuoted ? shipping.label : "报价完成后计入",
+    payableLabel,
+    payableHint,
     leadTimeLabel,
   };
 }
@@ -1774,8 +1760,4 @@ function getMaterialRate(material: string) {
     default:
       return 0.25;
   }
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
 }

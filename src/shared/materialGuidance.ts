@@ -1,5 +1,7 @@
 export type MaterialGuidance = {
   material: "PLA" | "PETG" | "ABS";
+  compactFeature: string;
+  compactUseCase: string;
   softeningTemperature: string;
   strength: string;
   toughness: string;
@@ -12,6 +14,8 @@ export const MATERIAL_GUIDANCE_UPDATED_AT = "2026-07-02";
 export const MATERIAL_GUIDANCE: MaterialGuidance[] = [
   {
     material: "PLA",
+    compactFeature: "成型稳定｜刚性较好",
+    compactUseCase: "适合外观件、模型和一般结构件",
     softeningTemperature: "约 55-65 C",
     strength: "刚性较好，承载冲击和高温环境需谨慎",
     toughness: "偏硬，韧性一般",
@@ -20,6 +24,8 @@ export const MATERIAL_GUIDANCE: MaterialGuidance[] = [
   },
   {
     material: "PETG",
+    compactFeature: "韧性较好｜耐温适中",
+    compactUseCase: "适合功能件、夹具和常规结构件",
     softeningTemperature: "约 70-85 C",
     strength: "综合强度较均衡，层间结合通常较好",
     toughness: "韧性较好，刚性低于 PLA",
@@ -28,6 +34,8 @@ export const MATERIAL_GUIDANCE: MaterialGuidance[] = [
   },
   {
     material: "ABS",
+    compactFeature: "耐热较好｜综合强度较高",
+    compactUseCase: "适合外壳、功能结构件和较高温环境",
     softeningTemperature: "约 90-105 C",
     strength: "耐热性和后处理空间较好",
     toughness: "韧性较好，打印收缩风险较高",

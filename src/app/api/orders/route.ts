@@ -24,6 +24,7 @@ import {
   type SavedUpload,
 } from "@/backend/uploads";
 import { isValidMainlandPhone, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
+import { calculateLinePrintTotal, isSameMoney, roundMoney, safePositiveMoney } from "@/shared/pricing";
 
 export const runtime = "nodejs";
 
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
     const fileCount = savedUploadRefs.length || uploadedFiles.length;
 
     if (fileCount === 0) {
-      return NextResponse.json({ error: "请上传模型文件" }, { status: 400 });
+      return NextResponse.json({ error: "请先上传模型并完成报价" }, { status: 400 });
     }
 
     if (fileCount > MAX_FILE_COUNT) {
@@ -163,26 +164,48 @@ export async function POST(request: Request) {
     const packagingShare = 3 / savedFiles.length;
     const savedFilesWithPackaging = savedFiles.map((file, index) => {
       const sliceQuote = sliceQuotes[index];
-      const filePrice =
-        sliceQuote?.status === "success"
-          ? roundMoney(sliceQuote.materialFee + sliceQuote.timeFee + packagingShare)
-          : file.estimatedPriceMax;
       const quantity = file.quantity || 1;
-      const subtotalPrice = roundMoney(filePrice * quantity);
+      const isAutoQuoted = sliceQuote?.status === "success" && !file.requiresManualConfirmation;
+
+      if (!isAutoQuoted) {
+        return {
+          ...file,
+          unitPrice: null,
+          subtotalPrice: null,
+          estimatedPriceMin: null,
+          estimatedPriceMax: null,
+        };
+      }
+
+      const calculatedUnitPrice = roundMoney(sliceQuote.materialFee + sliceQuote.timeFee + packagingShare);
+      const { unitPrice, subtotalPrice } = calculateLinePrintTotal(calculatedUnitPrice, quantity);
+      const submittedUnitPrice = fileUnitPrices[index];
+      const submittedSubtotalPrice = fileSubtotalPrices[index];
+
+      if (
+        submittedUnitPrice != null &&
+        submittedSubtotalPrice != null &&
+        (!isSameMoney(submittedUnitPrice, unitPrice) || !isSameMoney(submittedSubtotalPrice, subtotalPrice))
+      ) {
+        throw new Error("报价金额已更新，请刷新后重试");
+      }
 
       return {
         ...file,
-        unitPrice: filePrice,
+        unitPrice,
         subtotalPrice,
         estimatedPriceMin: subtotalPrice,
         estimatedPriceMax: subtotalPrice,
       };
     });
     const autoPrintPrice = savedFilesWithPackaging.reduce(
-      (total, file) => total + safePositiveNumber(file.estimatedPriceMax),
+      (total, file) => total + safePositiveMoney(file.subtotalPrice),
       0,
     );
-    const shippingAmount = shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
+    const allFilesAutoQuoted = savedFilesWithPackaging.every(
+      (file) => !file.requiresManualConfirmation && file.subtotalPrice != null,
+    );
+    const shippingAmount = allFilesAutoQuoted && shipping.includedInAutoPrice ? shipping.amount || 0 : 0;
     const successfulPrintTimes = sliceQuotes.flatMap((quote, index) =>
       quote?.status === "success"
         ? [quote.printTimeSeconds * (savedFilesWithPackaging[index]?.quantity || 1)]
@@ -193,7 +216,10 @@ export async function POST(request: Request) {
     const exactLeadTimeHours = allFilesSliced
       ? calculateAutoLeadTimeHours(successfulPrintTimes)
       : estimate.leadTimeMaxHours;
-    const exactOrderPrice = roundMoney(Math.max(autoPrintPrice + shippingAmount, 20));
+    const exactOrderPrice =
+      allFilesAutoQuoted && shipping.includedInAutoPrice
+        ? roundMoney(autoPrintPrice + shippingAmount)
+        : null;
     const totalQuantity = savedFilesWithPackaging.reduce(
       (total, file) => total + (file.quantity || 1),
       0,
@@ -243,13 +269,13 @@ export async function POST(request: Request) {
         color: firstFile.color,
         quantity: totalQuantity,
         remark: getString(formData, "remark"),
-        estimatedPrice: exactOrderPrice,
+        estimatedPrice: exactOrderPrice ?? autoPrintPrice,
         estimatedPriceMin: exactOrderPrice,
         estimatedPriceMax: exactOrderPrice,
         estimatedLeadTimeMinHours: exactLeadTimeHours,
         estimatedLeadTimeMaxHours: exactLeadTimeHours,
         packagingFee: estimate.packagingFee,
-        shippingFee: shipping.amount,
+        shippingFee: allFilesAutoQuoted ? shipping.amount : null,
         printFeeTotal: autoPrintPrice,
         payablePrice: exactOrderPrice,
         estimatedLeadTimeHours: exactLeadTimeHours,
@@ -461,10 +487,3 @@ function getNullableNumberList(formData: FormData, key: string) {
   });
 }
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function safePositiveNumber(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
-}

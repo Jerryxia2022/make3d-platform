@@ -60,7 +60,7 @@ test("estimates file price with labor minimum and dimension risks", () => {
   assert.equal(oversizedAbs.materialCostRate, 0.05);
 });
 
-test("estimates order total with packaging, fixed freight, minimum price and six-device lead time", () => {
+test("estimates order total with packaging, fixed freight and six-device lead time", () => {
   const summary = estimateOrderSummary(
     [
       { filesize: 4 * 1024 * 1024, material: "PLA", color: "黑" },

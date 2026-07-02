@@ -46,8 +46,8 @@ test("formats invalid numeric inputs without throwing", () => {
 
   const summary = estimateOrderSummary([{ estimate: null }, { estimate: {} }], "西安本地跑腿");
 
-  assert.equal(summary.priceMin, 20);
-  assert.equal(summary.priceMax, 20);
+  assert.equal(summary.priceMin, 0);
+  assert.equal(summary.priceMax, 0);
   assert.equal(summary.shippingFeeEstimate, "人工确认");
   assert.equal(formatLeadTimeRange(summary.leadTimeMinHours, summary.leadTimeMaxHours), "预计 48-72 小时");
 });
