@@ -56,16 +56,16 @@ export default async function AdminOrderDetailPage({
       order.finalLeadTimeHours ?? order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
 
     return (
-      <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
-        <section className="mx-auto grid w-full max-w-[1450px] gap-4 py-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-6">
-          <div className="flex items-center justify-between gap-4 xl:col-span-2">
+      <main className="bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1450px] items-center justify-between gap-4 py-4">
             <AdminBrand />
             <Link className="font-semibold text-graphite" href="/admin/orders">
               返回订单列表
             </Link>
           </div>
-          <div className="contents">
-            <section className="surface-card min-w-0 p-4 xl:col-start-1 xl:row-start-2">
+        <section className="orderPageGrid mx-auto grid w-full max-w-[1450px] gap-4 py-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-6">
+          <div className="orderMainColumn flex min-h-0 min-w-0 flex-col gap-4 self-start">
+            <section className="surface-card min-w-0 p-4">
               <p className="eyebrow">
                 {order.orderNo}
               </p>
@@ -89,37 +89,7 @@ export default async function AdminOrderDetailPage({
                 <Detail label="下一步" value={getNextAdminAction(order)} />
               </dl>
             </section>
-            <aside className="grid min-w-0 gap-3 xl:sticky xl:top-5 xl:col-start-2 xl:row-start-2 xl:row-span-[20] xl:self-start">
-              <AdminFinalQuoteForm
-                finalLeadTimeHours={quoteDefaultLeadTime}
-                finalPrice={quoteDefaultPrice}
-                orderId={order.id}
-                priceAdjustmentReason={order.priceAdjustmentReason}
-                productionNote={order.productionNote}
-              />
-              {order.status === "待付款" ? (
-                <AdminPaymentConfirmForm expectedAmount={quoteDefaultPrice || 0} orderId={order.id} />
-              ) : null}
-              <AdminStatusForm
-                actualFinishAt={order.actualFinishAt}
-                actualStartAt={order.actualStartAt}
-                adminRemark={order.adminRemark}
-                assignedPrinter={order.assignedPrinter}
-                estimatedFinishAt={order.estimatedFinishAt}
-                estimatedStartAt={order.estimatedStartAt}
-                internalNote={order.internalNote}
-                orderId={order.id}
-                productionNote={order.productionNote}
-                shippedAt={order.shippedAt}
-                shippingCompany={order.shippingCompany}
-                shippingNote={order.shippingNote}
-                status={order.status}
-                trackingNumber={order.trackingNumber}
-              />
-            </aside>
-          </div>
-
-          <div className="grid min-w-0 gap-4 lg:grid-cols-2 xl:col-start-1">
+            <div className="orderInfoGrid grid min-w-0 gap-4 lg:grid-cols-2">
             <section className="surface-card p-4">
               <h2 className="text-xl font-bold">订单信息</h2>
               <dl className="mt-4 grid gap-3 text-sm">
@@ -155,61 +125,6 @@ export default async function AdminOrderDetailPage({
             </section>
 
             <section className="surface-card p-4">
-              <h2 className="text-xl font-bold">微信公众号</h2>
-              <dl className="mt-4 grid gap-3 text-sm">
-                <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
-                <Detail label="绑定时间" value={formatOptionalDate(wechatAccount?.updatedAt || null)} />
-                <Detail label="openid" value={maskOpenid(wechatAccount?.openid)} />
-                <Detail label="最近通知类型" value={latestWechatNotification?.type || "-"} />
-                <Detail label="最近通知时间" value={formatOptionalDate(latestWechatNotification?.createdAt || null)} />
-                <Detail label="通知状态" value={latestWechatNotification?.sendStatus || "-"} />
-                <Detail label="错误码" value={latestWechatNotification?.errorCode || "-"} />
-                <Detail label="重试次数" value={String(latestWechatNotification?.retryCount ?? 0)} />
-                <Detail
-                  label="通知错误"
-                  value={
-                    wechatAccount?.openid
-                      ? latestWechatNotification?.errorMessage || "-"
-                      : "客户未绑定公众号"
-                  }
-                />
-              </dl>
-              <NotificationDiagnostics notifications={wechatNotifications} />
-            </section>
-
-            <section className="surface-card p-4">
-              <h2 className="text-xl font-bold">模型与报价</h2>
-              <dl className="mt-4 grid gap-3 text-sm">
-                <Detail label="材料" value={order.material} />
-                <Detail label="颜色" value={order.color || "-"} />
-                <Detail label="数量" value={String(order.quantity)} />
-                <Detail label="文件数" value={`${order.files.length} 个`} />
-                <Detail label="自动报价" value={formatAutomaticPrice(order)} />
-                <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
-              </dl>
-            </section>
-          </div>
-
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-xl font-bold">生产管理</h2>
-                <p className="mt-1 text-sm text-graphite">排产、打印、后处理和内部交付信息。</p>
-              </div>
-              <StatusPill status={order.status} />
-            </div>
-            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <Detail label="分配打印机" value={order.assignedPrinter || "-"} />
-              <Detail label="预计开始时间" value={formatOptionalDate(order.estimatedStartAt)} />
-              <Detail label="预计完成时间" value={formatOptionalDate(order.estimatedFinishAt)} />
-              <Detail label="实际开始时间" value={formatOptionalDate(order.actualStartAt)} />
-              <Detail label="实际完成时间" value={formatOptionalDate(order.actualFinishAt)} />
-              <Detail label="生产备注" value={order.productionNote || "-"} />
-              <Detail label="内部备注" value={order.internalNote || "-"} />
-            </dl>
-          </section>
-
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <h2 className="text-xl font-bold">配送与物流</h2>
             <div className="notice-success mt-4 p-4 text-sm">
               <p className="font-bold">收货信息</p>
@@ -239,7 +154,63 @@ export default async function AdminOrderDetailPage({
             </dl>
           </section>
 
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
+            <section className="surface-card p-4">
+              <h2 className="text-xl font-bold">微信公众号</h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
+                <Detail label="绑定时间" value={formatOptionalDate(wechatAccount?.updatedAt || null)} />
+                <Detail label="openid" value={maskOpenid(wechatAccount?.openid)} />
+                <Detail label="最近通知类型" value={latestWechatNotification?.type || "-"} />
+                <Detail label="最近通知时间" value={formatOptionalDate(latestWechatNotification?.createdAt || null)} />
+                <Detail label="通知状态" value={latestWechatNotification?.sendStatus || "-"} />
+                <Detail label="错误码" value={latestWechatNotification?.errorCode || "-"} />
+                <Detail label="重试次数" value={String(latestWechatNotification?.retryCount ?? 0)} />
+                <Detail
+                  label="通知错误"
+                  value={
+                    wechatAccount?.openid
+                      ? latestWechatNotification?.errorMessage || "-"
+                      : "客户未绑定公众号"
+                  }
+                />
+              </dl>
+              <NotificationDiagnostics notifications={wechatNotifications} />
+            </section>
+
+            <section className="surface-card p-4 lg:col-span-2">
+              <h2 className="text-xl font-bold">模型与报价</h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <Detail label="材料" value={order.material} />
+                <Detail label="颜色" value={order.color || "-"} />
+                <Detail label="数量" value={String(order.quantity)} />
+                <Detail label="文件数" value={`${order.files.length} 个`} />
+                <Detail label="自动报价" value={formatAutomaticPrice(order)} />
+                <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
+              </dl>
+            </section>
+          </div>
+
+          <section className="surface-card min-w-0 p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold">生产管理</h2>
+                <p className="mt-1 text-sm text-graphite">排产、打印、后处理和内部交付信息。</p>
+              </div>
+              <StatusPill status={order.status} />
+            </div>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <Detail label="分配打印机" value={order.assignedPrinter || "-"} />
+              <Detail label="预计开始时间" value={formatOptionalDate(order.estimatedStartAt)} />
+              <Detail label="预计完成时间" value={formatOptionalDate(order.estimatedFinishAt)} />
+              <Detail label="实际开始时间" value={formatOptionalDate(order.actualStartAt)} />
+              <Detail label="实际完成时间" value={formatOptionalDate(order.actualFinishAt)} />
+              <Detail label="生产备注" value={order.productionNote || "-"} />
+              <Detail label="内部备注" value={order.internalNote || "-"} />
+            </dl>
+          </section>
+
+
+          <section className="surface-card min-w-0 p-5">
             <h2 className="text-xl font-bold">付款核对</h2>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
@@ -258,7 +229,7 @@ export default async function AdminOrderDetailPage({
             <PaymentRecords records={paymentRecords} />
           </section>
 
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
+          <section className="surface-card min-w-0 p-5">
             <h2 className="text-xl font-bold">备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-graphite">{order.remark || "无备注"}</p>
             <h3 className="mt-6 text-base font-bold">生产备注</h3>
@@ -267,12 +238,12 @@ export default async function AdminOrderDetailPage({
             <p className="mt-3 whitespace-pre-wrap text-graphite">{order.adminRemark || "无备注"}</p>
           </section>
 
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
+          <section className="surface-card min-w-0 p-5">
             <h2 className="text-xl font-bold">状态历史</h2>
             <StatusHistory logs={statusLogs} />
           </section>
 
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
+          <section className="surface-card min-w-0 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">自动切片报价</h2>
@@ -291,7 +262,7 @@ export default async function AdminOrderDetailPage({
             <SliceJobResults jobs={sliceJobs} />
           </section>
 
-          <section className="surface-card min-w-0 p-5 xl:col-start-1">
+          <section className="surface-card min-w-0 p-5">
             <h2 className="text-xl font-bold">上传文件</h2>
             <div className="mt-4 space-y-3">
               {order.files.map((file) => (
@@ -341,6 +312,36 @@ export default async function AdminOrderDetailPage({
               ))}
             </div>
           </section>
+          </div>
+
+          <aside className="orderActionColumn flex min-w-0 flex-col gap-3 self-start xl:sticky xl:top-5">
+              <AdminFinalQuoteForm
+                finalLeadTimeHours={quoteDefaultLeadTime}
+                finalPrice={quoteDefaultPrice}
+                orderId={order.id}
+                priceAdjustmentReason={order.priceAdjustmentReason}
+                productionNote={order.productionNote}
+              />
+              {order.status === "待付款" ? (
+                <AdminPaymentConfirmForm expectedAmount={quoteDefaultPrice || 0} orderId={order.id} />
+              ) : null}
+              <AdminStatusForm
+                actualFinishAt={order.actualFinishAt}
+                actualStartAt={order.actualStartAt}
+                adminRemark={order.adminRemark}
+                assignedPrinter={order.assignedPrinter}
+                estimatedFinishAt={order.estimatedFinishAt}
+                estimatedStartAt={order.estimatedStartAt}
+                internalNote={order.internalNote}
+                orderId={order.id}
+                productionNote={order.productionNote}
+                shippedAt={order.shippedAt}
+                shippingCompany={order.shippingCompany}
+                shippingNote={order.shippingNote}
+                status={order.status}
+                trackingNumber={order.trackingNumber}
+              />
+            </aside>
         </section>
       </main>
     );

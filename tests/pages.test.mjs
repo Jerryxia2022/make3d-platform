@@ -824,9 +824,16 @@ test("admin order status API records admin workflow and notifies customers", asy
 test("admin order detail keeps core cards in the main content column", async () => {
   const source = await readSource("src/app/admin/orders/[id]/page.tsx");
 
+  assert.match(source, /orderPageGrid/);
+  assert.match(source, /orderMainColumn/);
+  assert.match(source, /orderActionColumn/);
+  assert.match(source, /orderInfoGrid/);
   assert.match(source, /xl:grid-cols-\[minmax\(0,1fr\)_360px\]/);
   assert.match(source, /xl:sticky xl:top-5/);
-  assert.match(source, /lg:grid-cols-2 xl:col-start-1/);
+  assert.match(source, /lg:grid-cols-2/);
+  assert.match(source, /lg:col-span-2/);
+  assert.doesNotMatch(source, /className="contents"/);
+  assert.doesNotMatch(source, /xl:col-start|xl:row-start|row-span/);
   assert.match(source, /TEST账号/);
   assert.match(source, /NotificationDiagnostics/);
   assert.match(source, /maskPhone/);
