@@ -34,10 +34,20 @@ export async function POST(
       }
 
       const order = getOrderById(db, orderId);
-      await notifyCustomerOrderStatus(order);
-      await notifyWechatOrderStatus(db, order);
+      const emailError = await notifyCustomerOrderStatus(order)
+        .then(() => null)
+        .catch((error) => error instanceof Error ? error.message : "email notification failed");
+      const wechatResult = await notifyWechatOrderStatus(db, order)
+        .catch((error) => ({
+          sent: false,
+          error: error instanceof Error ? error : new Error("wechat notification failed"),
+        }));
 
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        emailError,
+        wechatStatus: formatWechatStatus(wechatResult),
+      });
     } finally {
       db.close();
     }
@@ -73,4 +83,8 @@ function parseOptionalInteger(value: unknown) {
 
 function getOptionalString(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function formatWechatStatus(result: { sent: boolean; reason?: string; error?: Error }) {
+  return result.sent ? "sent" : result.reason || result.error?.message || null;
 }

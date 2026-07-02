@@ -245,6 +245,7 @@ export type CustomerRecord = {
   wechat: string;
   email: string | null;
   defaultAddress: string | null;
+  isTestAccount: boolean;
   createdAt: string;
 };
 
@@ -270,6 +271,11 @@ export type WechatNotificationRecord = {
   content: string;
   sendStatus: string;
   errorMessage: string | null;
+  sentAt: string | null;
+  platformMessageId: string | null;
+  errorCode: string | null;
+  retryCount: number;
+  idempotencyKey: string | null;
   createdAt: string;
 };
 
@@ -739,6 +745,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       wechat TEXT NOT NULL,
       email TEXT,
       default_address TEXT,
+      is_test_account INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -924,6 +931,11 @@ export function initDatabase(dbPath = getDatabasePath()) {
       content TEXT NOT NULL,
       send_status TEXT NOT NULL,
       error_message TEXT,
+      sent_at DATETIME,
+      platform_message_id TEXT,
+      error_code TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      idempotency_key TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
@@ -1105,6 +1117,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["admin_remark", "TEXT"],
     ["updated_at", "DATETIME"],
   ]);
+  ensureColumns(db, "customers", [["is_test_account", "INTEGER NOT NULL DEFAULT 0"]]);
   ensureColumns(db, "customer_addresses", [
     ["customer_id", "INTEGER"],
     ["recipient_name", "TEXT"],
@@ -1222,8 +1235,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["content", "TEXT"],
     ["send_status", "TEXT"],
     ["error_message", "TEXT"],
+    ["sent_at", "DATETIME"],
+    ["platform_message_id", "TEXT"],
+    ["error_code", "TEXT"],
+    ["retry_count", "INTEGER NOT NULL DEFAULT 0"],
+    ["idempotency_key", "TEXT"],
     ["created_at", "DATETIME"],
   ]);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_notifications_idempotency
+      ON wechat_notifications(idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_wechat_notifications_order_created
+      ON wechat_notifications(order_id, created_at DESC);
+  `);
   ensureColumns(db, "customer_service_requests", [
     ["customer_id", "INTEGER"],
     ["openid", "TEXT"],
@@ -2580,6 +2605,17 @@ export function updateOrderStatus(
     return false;
   }
 
+  const paidStatus = ORDER_STATUSES[2];
+  const productionStatusSet = new Set<string>(ORDER_STATUSES.slice(3, 8));
+
+  if (status === paidStatus && current.paymentStatus === "paid") {
+    throw new Error("已完成到账确认的订单不能重复确认付款");
+  }
+
+  if (productionStatusSet.has(status) && current.paymentStatus !== "paid") {
+    throw new Error("未付款不能进入生产流程");
+  }
+
   assertAllowedStatusUpdate(current.status, status, current.finalPrice);
 
   const shippingCompany =
@@ -3139,6 +3175,22 @@ export function getCustomerById(db: DatabaseSync, id: number) {
   return customer ? normalizeCustomer(customer) : null;
 }
 
+export function markCustomerTestAccount(db: DatabaseSync, customerId: number, isTestAccount = true) {
+  const result = db
+    .prepare("UPDATE customers SET is_test_account = ? WHERE id = ?")
+    .run(isTestAccount ? 1 : 0, customerId);
+
+  return result.changes > 0;
+}
+
+export function listProtectedTestCustomerIds(db: DatabaseSync) {
+  return (
+    db
+      .prepare("SELECT id FROM customers WHERE is_test_account = 1 ORDER BY id")
+      .all() as Array<{ id: number }>
+  ).map((row) => row.id);
+}
+
 export function getCustomerBySessionToken(db: DatabaseSync, token?: string) {
   const session = verifyCustomerSessionToken(token);
   return session ? getCustomerById(db, session.customerId) : null;
@@ -3303,6 +3355,11 @@ export function createWechatNotification(
     content: string;
     sendStatus: string;
     errorMessage?: string | null;
+    sentAt?: string | null;
+    platformMessageId?: string | null;
+    errorCode?: string | null;
+    retryCount?: number | null;
+    idempotencyKey?: string | null;
   },
 ) {
   const result = db
@@ -3314,8 +3371,13 @@ export function createWechatNotification(
         type,
         content,
         send_status,
-        error_message
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        error_message,
+        sent_at,
+        platform_message_id,
+        error_code,
+        retry_count,
+        idempotency_key
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.customerId ?? null,
@@ -3325,9 +3387,25 @@ export function createWechatNotification(
       input.content,
       input.sendStatus,
       normalizeOptionalText(input.errorMessage),
+      normalizeOptionalText(input.sentAt),
+      normalizeOptionalText(input.platformMessageId),
+      normalizeOptionalText(input.errorCode),
+      Math.max(0, Math.floor(input.retryCount ?? 0)),
+      normalizeOptionalText(input.idempotencyKey),
     );
 
   return Number(result.lastInsertRowid);
+}
+
+export function getWechatNotificationByIdempotencyKey(
+  db: DatabaseSync,
+  idempotencyKey: string,
+): WechatNotificationRecord | null {
+  const notification = db
+    .prepare(wechatNotificationSelectSql("WHERE idempotency_key = ? LIMIT 1"))
+    .get(idempotencyKey);
+
+  return notification ? normalizeWechatNotificationRecord(notification) : null;
 }
 
 export function getLatestWechatNotificationByOrderId(
@@ -3338,7 +3416,7 @@ export function getLatestWechatNotificationByOrderId(
     .prepare(wechatNotificationSelectSql("WHERE order_id = ? ORDER BY created_at DESC, id DESC LIMIT 1"))
     .get(orderId);
 
-  return notification ? (notification as WechatNotificationRecord) : null;
+  return notification ? normalizeWechatNotificationRecord(notification) : null;
 }
 
 export function listWechatNotificationsByOrderId(
@@ -3347,7 +3425,8 @@ export function listWechatNotificationsByOrderId(
 ): WechatNotificationRecord[] {
   return db
     .prepare(wechatNotificationSelectSql("WHERE order_id = ? ORDER BY created_at DESC, id DESC"))
-    .all(orderId) as WechatNotificationRecord[];
+    .all(orderId)
+    .map(normalizeWechatNotificationRecord) as WechatNotificationRecord[];
 }
 
 export function createCustomerServiceRequest(
@@ -3931,6 +4010,7 @@ function customerSelectSql(suffix: string) {
     wechat,
     email,
     default_address AS defaultAddress,
+    is_test_account AS isTestAccount,
     created_at AS createdAt
   FROM customers
   ${suffix}`;
@@ -3989,6 +4069,11 @@ function wechatNotificationSelectSql(suffix: string) {
     content,
     send_status AS sendStatus,
     error_message AS errorMessage,
+    sent_at AS sentAt,
+    platform_message_id AS platformMessageId,
+    error_code AS errorCode,
+    retry_count AS retryCount,
+    idempotency_key AS idempotencyKey,
     created_at AS createdAt
   FROM wechat_notifications
   ${suffix}`;
@@ -4042,7 +4127,19 @@ function customerServiceRequestSelectSql(suffix: string) {
 }
 
 function normalizeCustomer(customer: unknown) {
-  return customer as CustomerRecord;
+  const record = customer as Record<string, unknown> & { isTestAccount?: 0 | 1 | boolean };
+  return {
+    ...record,
+    isTestAccount: Boolean(record.isTestAccount),
+  } as CustomerRecord;
+}
+
+function normalizeWechatNotificationRecord(notification: unknown) {
+  const record = notification as Record<string, unknown> & { retryCount?: number | null };
+  return {
+    ...record,
+    retryCount: Number(record.retryCount ?? 0),
+  } as WechatNotificationRecord;
 }
 
 function normalizeWechatAccountRecord(account: unknown) {

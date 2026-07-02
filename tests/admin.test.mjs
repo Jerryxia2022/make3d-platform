@@ -245,7 +245,7 @@ test("admin manually confirms payment and blocks unsafe payment transitions", ()
   );
   assert.throws(
     () => confirmOrderPayment(db, order.id, { paymentNote: "重复确认", operator: "admin" }),
-    /只有待付款订单可以确认到账/,
+    /\u4e0d\u80fd\u91cd\u590d\u786e\u8ba4\u4ed8\u6b3e/,
   );
 
   const canceled = createFixtureOrder(db);

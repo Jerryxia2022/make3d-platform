@@ -11,13 +11,18 @@ import {
   createOrderWithFile,
   createWechatBindCode,
   getOrderById,
+  getOrderByIdForCustomer,
+  getWechatNotificationByIdempotencyKey,
   getWechatAccountByCustomerId,
   initDatabase,
   listWechatNotificationsByOrderId,
+  markCustomerTestAccount,
+  listProtectedTestCustomerIds,
   searchCustomerServiceRequests,
   updateOrderStatus,
 } from "../src/backend/database.ts";
 import { updateOrderStatusAndNotify } from "../src/backend/orderWorkflow.ts";
+import { ORDER_STATUSES } from "../src/backend/orderStatus.ts";
 import {
   buildWechatOrderStatusContent,
   handleWechatMessage,
@@ -118,6 +123,30 @@ test("generates 30 minute wechat bind codes for logged-in customers", () => {
   assert.equal(bindCode.expiresAt, now + 30 * 60 * 1000);
   assert.equal(account?.bindCode, bindCode.bindCode);
   assert.equal(account?.bindCodeExpiresAt, bindCode.expiresAt);
+
+  db.close();
+});
+
+test("persistent test account flag does not change customer permissions or binding checks", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const otherCustomer = createCustomerAccount(db, {
+    ...createCustomerFixture(),
+    phone: "13900000000",
+    email: "other@example.com",
+  });
+
+  assert.equal(markCustomerTestAccount(db, customer.id, true), true);
+  assert.deepEqual(listProtectedTestCustomerIds(db), [customer.id]);
+  assert.throws(() => getOrderByIdForCustomer(db, 999, customer.id), /\u8ba2\u5355\u4e0d\u5b58\u5728/);
+
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-test-account" });
+  const account = getWechatAccountByCustomerId(db, customer.id);
+  const otherAccount = getWechatAccountByCustomerId(db, otherCustomer.id);
+
+  assert.equal(account?.openid, "openid-test-account");
+  assert.equal(otherAccount?.openid ?? null, null);
 
   db.close();
 });
@@ -439,6 +468,70 @@ test("sends wechat notification for bound customer status updates", async () => 
     assert.equal(scheduledResult.skipped, true);
     assert.equal(scheduledResult.reason, "status_not_supported");
     assert.equal(sent.length, 1);
+  } finally {
+    restoreEnv(previous);
+    db.close();
+  }
+});
+
+test("wechat order notifications are idempotent per customer order and status", async () => {
+  const previous = snapshotWechatEnv();
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-idempotent" });
+  const order = createPayableOrder(db, customer.id);
+  const sent = [];
+
+  try {
+    process.env.WECHAT_MP_ENABLED = "true";
+    const detail = getOrderById(db, order.id);
+    const first = await notifyWechatOrderStatus(db, detail, {
+      sendText: async (openid, content) => sent.push({ openid, content }),
+    });
+    const second = await notifyWechatOrderStatus(db, detail, {
+      sendText: async (openid, content) => sent.push({ openid, content }),
+    });
+    const notifications = listWechatNotificationsByOrderId(db, order.id);
+
+    assert.equal(first.sent, true);
+    assert.equal(second.skipped, true);
+    assert.equal(second.reason, "duplicate");
+    assert.equal(sent.length, 1);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].idempotencyKey.includes(`${customer.id}:${order.id}:payment_pending`), true);
+    assert.equal(getWechatNotificationByIdempotencyKey(db, notifications[0].idempotencyKey).id, notifications[0].id);
+  } finally {
+    restoreEnv(previous);
+    db.close();
+  }
+});
+
+test("wechat notification failures are recorded without rolling back order state", async () => {
+  const previous = snapshotWechatEnv();
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, createCustomerFixture());
+  const { bindCode } = createWechatBindCode(db, customer.id);
+  bindWechatAccountByCode(db, { bindCode, openid: "openid-fail-record" });
+  const order = createPayableOrder(db, customer.id);
+
+  try {
+    process.env.WECHAT_MP_ENABLED = "true";
+    const paidStatus = ORDER_STATUSES[2];
+    const result = await updateOrderStatusAndNotify(db, order.id, {
+      status: paidStatus,
+      operator: "admin",
+      paymentMethod: "manual",
+    });
+    const notifications = listWechatNotificationsByOrderId(db, order.id);
+
+    assert.equal(result.updated, true);
+    assert.equal(getOrderById(db, order.id).status, paidStatus);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].sendStatus, "skipped");
+    assert.equal(notifications[0].errorCode, "wechat_config_missing");
+    assert.equal(notifications[0].retryCount, 0);
+    assert.match(notifications[0].idempotencyKey, /payment_confirmed/);
   } finally {
     restoreEnv(previous);
     db.close();

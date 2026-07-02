@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   getBoundWechatAccountByCustomerId,
+  getCustomerById,
   getLatestWechatNotificationByOrderId,
   getOrderById,
   getOrderStatusLogsByOrderId,
   getSliceJobsByOrderId,
+  listWechatNotificationsByOrderId,
   listOrderPaymentsByOrderId,
   openDatabase,
   type OrderDetail,
@@ -13,6 +15,7 @@ import {
   type OrderPaymentRecord,
   type OrderStatusLogRecord,
   type SliceJobRecord,
+  type WechatNotificationRecord,
 } from "@/backend/database";
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { maskOpenid } from "@/backend/wechat";
@@ -44,38 +47,49 @@ export default async function AdminOrderDetailPage({
     const sliceJobs = getSliceJobsByOrderId(db, order.id);
     const statusLogs = getOrderStatusLogsByOrderId(db, order.id);
     const paymentRecords = listOrderPaymentsByOrderId(db, order.id);
+    const customer = order.customerId ? getCustomerById(db, order.customerId) : null;
     const wechatAccount = getBoundWechatAccountByCustomerId(db, order.customerId);
     const latestWechatNotification = getLatestWechatNotificationByOrderId(db, order.id);
+    const wechatNotifications = listWechatNotificationsByOrderId(db, order.id);
     const quoteDefaultPrice = order.finalPrice ?? order.payablePrice ?? order.estimatedPrice ?? order.estimatedPriceMax;
     const quoteDefaultLeadTime =
       order.finalLeadTimeHours ?? order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
 
     return (
       <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
-        <section className="mx-auto w-full max-w-[1450px] py-4">
-          <div className="flex items-center justify-between gap-4">
+        <section className="mx-auto grid w-full max-w-[1450px] gap-4 py-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-6">
+          <div className="flex items-center justify-between gap-4 xl:col-span-2">
             <AdminBrand />
             <Link className="font-semibold text-graphite" href="/admin/orders">
               返回订单列表
             </Link>
           </div>
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_25rem] xl:items-start">
-            <section className="surface-card p-4">
+          <div className="contents">
+            <section className="surface-card min-w-0 p-4 xl:col-start-1 xl:row-start-2">
               <p className="eyebrow">
                 {order.orderNo}
               </p>
               <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h1 className="text-3xl font-bold">订单详情</h1>
-                <StatusPill status={order.status} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-bold">订单详情</h1>
+                  {customer?.isTestAccount ? <span className="status-pill status-orange">TEST账号</span> : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill status={order.status} />
+                  <InternalStagePill status={order.status} />
+                </div>
               </div>
-              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
                 <Detail label="当前状态" value={order.status} />
+                <Detail label="内部阶段" value={getInternalStageLabel(order.status)} />
                 <Detail label="最终金额" value={formatMoney(quoteDefaultPrice)} />
-                <Detail label="客户" value={`${order.customerName} / ${order.phone}`} />
+                <Detail label="客户" value={order.customerName} />
+                <Detail label="电话" value={maskPhone(order.phone)} />
+                <Detail label="最终交期" value={formatLeadTimeHours(quoteDefaultLeadTime)} />
                 <Detail label="下一步" value={getNextAdminAction(order)} />
               </dl>
             </section>
-            <div className="grid gap-3">
+            <aside className="grid min-w-0 gap-3 xl:sticky xl:top-5 xl:col-start-2 xl:row-start-2 xl:row-span-[20] xl:self-start">
               <AdminFinalQuoteForm
                 finalLeadTimeHours={quoteDefaultLeadTime}
                 finalPrice={quoteDefaultPrice}
@@ -102,10 +116,10 @@ export default async function AdminOrderDetailPage({
                 status={order.status}
                 trackingNumber={order.trackingNumber}
               />
-            </div>
+            </aside>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2 xl:col-start-1">
             <section className="surface-card p-4">
               <h2 className="text-xl font-bold">订单信息</h2>
               <dl className="mt-4 grid gap-3 text-sm">
@@ -144,8 +158,13 @@ export default async function AdminOrderDetailPage({
               <h2 className="text-xl font-bold">微信公众号</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="绑定状态" value={wechatAccount?.openid ? "已绑定" : "未绑定"} />
+                <Detail label="绑定时间" value={formatOptionalDate(wechatAccount?.updatedAt || null)} />
                 <Detail label="openid" value={maskOpenid(wechatAccount?.openid)} />
+                <Detail label="最近通知类型" value={latestWechatNotification?.type || "-"} />
+                <Detail label="最近通知时间" value={formatOptionalDate(latestWechatNotification?.createdAt || null)} />
                 <Detail label="通知状态" value={latestWechatNotification?.sendStatus || "-"} />
+                <Detail label="错误码" value={latestWechatNotification?.errorCode || "-"} />
+                <Detail label="重试次数" value={String(latestWechatNotification?.retryCount ?? 0)} />
                 <Detail
                   label="通知错误"
                   value={
@@ -155,6 +174,7 @@ export default async function AdminOrderDetailPage({
                   }
                 />
               </dl>
+              <NotificationDiagnostics notifications={wechatNotifications} />
             </section>
 
             <section className="surface-card p-4">
@@ -170,7 +190,7 @@ export default async function AdminOrderDetailPage({
             </section>
           </div>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">生产管理</h2>
@@ -189,7 +209,7 @@ export default async function AdminOrderDetailPage({
             </dl>
           </section>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <h2 className="text-xl font-bold">配送与物流</h2>
             <div className="notice-success mt-4 p-4 text-sm">
               <p className="font-bold">收货信息</p>
@@ -219,7 +239,7 @@ export default async function AdminOrderDetailPage({
             </dl>
           </section>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <h2 className="text-xl font-bold">付款核对</h2>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
@@ -238,7 +258,7 @@ export default async function AdminOrderDetailPage({
             <PaymentRecords records={paymentRecords} />
           </section>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <h2 className="text-xl font-bold">备注</h2>
             <p className="mt-4 whitespace-pre-wrap text-graphite">{order.remark || "无备注"}</p>
             <h3 className="mt-6 text-base font-bold">生产备注</h3>
@@ -247,12 +267,12 @@ export default async function AdminOrderDetailPage({
             <p className="mt-3 whitespace-pre-wrap text-graphite">{order.adminRemark || "无备注"}</p>
           </section>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <h2 className="text-xl font-bold">状态历史</h2>
             <StatusHistory logs={statusLogs} />
           </section>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold">自动切片报价</h2>
@@ -271,7 +291,7 @@ export default async function AdminOrderDetailPage({
             <SliceJobResults jobs={sliceJobs} />
           </section>
 
-          <section className="surface-card mt-4 p-5">
+          <section className="surface-card min-w-0 p-5 xl:col-start-1">
             <h2 className="text-xl font-bold">上传文件</h2>
             <div className="mt-4 space-y-3">
               {order.files.map((file) => (
@@ -357,6 +377,51 @@ function StatusPill({ status }: { status: string }) {
       {status}
     </span>
   );
+}
+
+function InternalStagePill({ status }: { status: string }) {
+  return <span className="status-pill status-gray">{getInternalStageLabel(status)}</span>;
+}
+
+function NotificationDiagnostics({ notifications }: { notifications: WechatNotificationRecord[] }) {
+  if (notifications.length === 0) {
+    return <p className="mt-4 text-sm text-graphite">暂无通知记录</p>;
+  }
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-ink/10 pt-3 text-xs">
+      {notifications.slice(0, 3).map((notification) => (
+        <div className="surface-soft p-3" key={notification.id}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-bold">{notification.type}</span>
+            <span className="status-pill status-gray">{notification.sendStatus}</span>
+          </div>
+          <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+            <Detail label="时间" value={formatOptionalDate(notification.sentAt || notification.createdAt)} />
+            <Detail label="openid" value={maskOpenid(notification.openid)} />
+            <Detail label="错误码" value={notification.errorCode || "-"} />
+            <Detail label="重试" value={String(notification.retryCount ?? 0)} />
+          </dl>
+          {notification.errorMessage ? (
+            <p className="mt-2 break-words text-coral">{notification.errorMessage}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getInternalStageLabel(status: string) {
+  const known = ["待确认", "待付款", "已付款", "排产中", "生产中", "后处理", "已发货", "已完成"];
+  return known.includes(status) ? status : "未识别阶段";
+}
+
+function maskPhone(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return value.replace(/(1[3-9]\d)\d{4}(\d{4})/, "$1****$2");
 }
 
 function StatusHistory({ logs }: { logs: OrderStatusLogRecord[] }) {

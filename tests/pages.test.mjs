@@ -821,6 +821,19 @@ test("admin order status API records admin workflow and notifies customers", asy
   assert.match(source, /wechatStatus/);
 });
 
+test("admin order detail keeps core cards in the main content column", async () => {
+  const source = await readSource("src/app/admin/orders/[id]/page.tsx");
+
+  assert.match(source, /xl:grid-cols-\[minmax\(0,1fr\)_360px\]/);
+  assert.match(source, /xl:sticky xl:top-5/);
+  assert.match(source, /lg:grid-cols-2 xl:col-start-1/);
+  assert.match(source, /TEST账号/);
+  assert.match(source, /NotificationDiagnostics/);
+  assert.match(source, /maskPhone/);
+  assert.match(source, /formatShippingCopyBlock\(order\)/);
+  assert.match(source, /shippingCityCustom \|\| order\.shippingCity/);
+});
+
 test("manual payment confirmation workflow pages avoid customer proof upload", async () => {
   const accountSource = await readSource("src/app/account/page.tsx");
   const customerDetailSource = await readSource("src/app/account/orders/[id]/page.tsx");

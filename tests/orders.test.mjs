@@ -8,6 +8,8 @@ import {
   CUSTOMER_ADDRESS_LIMIT,
   QUOTE_DRAFT_TTL_MS,
   addQuoteDraftFile,
+  confirmOrderFinalQuote,
+  confirmOrderPayment,
   createCustomerAddress,
   createOrderWithFile,
   createCustomerAccount,
@@ -30,10 +32,12 @@ import {
   markActiveQuoteDraftSubmitted,
   setCustomerDefaultAddress,
   updateCustomerAddress,
+  updateOrderStatus,
   updateQuoteDraftFile,
   updateSliceJobFailure,
   updateSliceJobSuccess,
 } from "../src/backend/database.ts";
+import { ORDER_STATUSES } from "../src/backend/orderStatus.ts";
 import {
   MAX_UPLOAD_BYTES,
   isAllowedUploadFilename,
@@ -257,6 +261,42 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   ]) {
     assert.equal(addressColumns.includes(column), true);
   }
+
+  db.close();
+});
+
+test("order workflow blocks unpaid production and duplicate payment confirmation", () => {
+  const db = initDatabase(":memory:");
+  const order = createOrderWithFile(db, {
+    customerName: "TEST workflow",
+    phone: "13800000000",
+    wechat: "make3d",
+    email: "workflow@example.com",
+    material: "PLA",
+    color: "white",
+    quantity: 1,
+    estimatedPrice: 30,
+    file: {
+      filename: "workflow.stl",
+      filepath: "/uploads/workflow.stl",
+      filesize: 128,
+    },
+  });
+  const paidStatus = ORDER_STATUSES[2];
+  const productionStatus = ORDER_STATUSES[4];
+
+  confirmOrderFinalQuote(db, order.id, { finalPrice: 88, operator: "admin" });
+  assert.throws(
+    () => updateOrderStatus(db, order.id, { status: productionStatus, operator: "admin" }),
+    /未付款不能进入生产流程/,
+  );
+
+  assert.equal(confirmOrderPayment(db, order.id, { paymentMethod: "manual", operator: "admin" }), true);
+  assert.equal(getOrderById(db, order.id).status, paidStatus);
+  assert.throws(
+    () => confirmOrderPayment(db, order.id, { paymentMethod: "manual", operator: "admin" }),
+    /不能重复确认付款/,
+  );
 
   db.close();
 });

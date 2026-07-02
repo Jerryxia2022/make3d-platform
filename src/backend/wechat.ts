@@ -6,6 +6,7 @@ import {
   createWechatNotification,
   getBoundWechatAccountByCustomerId,
   getWechatAccountByOpenid,
+  getWechatNotificationByIdempotencyKey,
   markWechatSubscribed,
   touchWechatAccountMessage,
   type OrderRecord,
@@ -323,30 +324,47 @@ export async function notifyWechatOrderStatus(
   }
 
   const content = buildWechatOrderStatusContent(order);
+  const notificationType = getWechatOrderNotificationType(order.status);
+  const idempotencyKey = buildWechatNotificationIdempotencyKey(order, notificationType);
+  const existingNotification = getWechatNotificationByIdempotencyKey(db, idempotencyKey);
+
+  if (existingNotification) {
+    return {
+      sent: existingNotification.sendStatus === "sent",
+      skipped: true,
+      reason: "duplicate",
+      notificationId: existingNotification.id,
+    };
+  }
 
   if (!client && !hasWechatSendConfig()) {
     const notificationId = createWechatNotification(db, {
       customerId: order.customerId,
       openid: account.openid,
       orderId: order.id,
-      type: "order_status",
+      type: notificationType,
       content,
       sendStatus: "skipped",
       errorMessage: "WECHAT_MP_APP_ID or WECHAT_MP_APP_SECRET is missing",
+      errorCode: "wechat_config_missing",
+      idempotencyKey,
     });
 
     return { sent: false, skipped: true, reason: "wechat_config_missing", notificationId };
   }
 
   try {
-    await (client || createWechatMessageClient()).sendText(account.openid, content);
+    const sendResult = await (client || createWechatMessageClient()).sendText(account.openid, content);
     const notificationId = createWechatNotification(db, {
       customerId: order.customerId,
       openid: account.openid,
       orderId: order.id,
-      type: "order_status",
+      type: notificationType,
       content,
       sendStatus: "sent",
+      sentAt: new Date().toISOString(),
+      platformMessageId: extractWechatPlatformMessageId(sendResult),
+      idempotencyKey,
     });
 
     return { sent: true, notificationId };
@@ -356,14 +374,53 @@ export async function notifyWechatOrderStatus(
       customerId: order.customerId,
       openid: account.openid,
       orderId: order.id,
-      type: "order_status",
+      type: notificationType,
       content,
       sendStatus: "failed",
       errorMessage: normalizedError.message,
+      errorCode: extractWechatErrorCode(normalizedError.message),
+      idempotencyKey,
     });
 
     return { sent: false, notificationId, error: normalizedError };
   }
+}
+
+function getWechatOrderNotificationType(status: string) {
+  const index = Array.from(WECHAT_ORDER_NOTIFY_STATUSES).indexOf(status);
+  const types = [
+    "payment_pending",
+    "payment_confirmed",
+    "production_started",
+    "shipped",
+    "completed",
+  ];
+
+  return types[index] || "order_status";
+}
+
+function buildWechatNotificationIdempotencyKey(order: OrderRecord, type: string) {
+  return [
+    order.customerId ?? "guest",
+    order.id,
+    type,
+    order.status,
+  ].join(":");
+}
+
+function extractWechatPlatformMessageId(result: unknown) {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const record = result as Record<string, unknown>;
+  const value = record.msgid ?? record.msg_id ?? record.message_id;
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
+}
+
+function extractWechatErrorCode(message: string) {
+  const match = message.match(/(?:errcode=|errcode[:：]?\\s*)(\\d+)/i);
+  return match?.[1] || null;
 }
 
 export function maskOpenid(openid?: string | null) {
