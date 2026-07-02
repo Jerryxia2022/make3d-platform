@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
-import { deleteQuoteDraftFile, openDatabase, updateQuoteDraftFile } from "@/backend/database";
+import {
+  deleteQuoteDraftFile,
+  getQuoteDraftFileForCustomer,
+  openDatabase,
+  updateQuoteDraftFile,
+} from "@/backend/database";
+import { deleteSavedUploadArtifacts } from "@/backend/uploads";
 
 export const runtime = "nodejs";
 
@@ -51,10 +57,15 @@ export async function DELETE(
 
   const { id } = await params;
   const db = openDatabase();
+  let deletedFile: { filename: string; filepath: string } | null = null;
 
   try {
+    const file = getQuoteDraftFileForCustomer(db, session.customerId, Number(id));
     deleteQuoteDraftFile(db, session.customerId, Number(id));
-    return NextResponse.json({ success: true });
+    deletedFile = {
+      filename: file.filename,
+      filepath: file.filepath,
+    };
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "草稿文件删除失败" },
@@ -63,6 +74,18 @@ export async function DELETE(
   } finally {
     db.close();
   }
+
+  const cleanup = deletedFile ? await deleteSavedUploadArtifacts(deletedFile) : null;
+
+  if (cleanup?.failed.length) {
+    console.error("Quote draft artifact cleanup incomplete", {
+      draftFileId: Number(id),
+      failed: cleanup.failed,
+      skipped: cleanup.skipped,
+    });
+  }
+
+  return NextResponse.json({ success: true, cleanup });
 }
 
 function readOptionalString(value: unknown) {

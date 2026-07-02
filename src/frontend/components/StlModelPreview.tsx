@@ -30,7 +30,7 @@ type StlModelPreviewProps = {
   onDimensions?: (dimensions: QuoteDimensions) => void;
 };
 
-type LoadStatus = "idle" | "loading" | "ready" | "failed" | "skipped";
+type LoadStatus = "idle" | "uploading" | "parsing" | "generating" | "ready" | "failed" | "skipped";
 
 export function StlModelPreview({
   file,
@@ -54,6 +54,10 @@ export function StlModelPreview({
   const [modalOpen, setModalOpen] = useState(false);
   const isStl = isStlFilename(filename);
   const autoLoad = shouldAutoLoadStlPreview(filename, filesize);
+  const previewUrl = useMemo(
+    () => buildPreviewUrl(fileUrl, filename, filesize),
+    [fileUrl, filename, filesize],
+  );
   const normalizedDimensions = useMemo(
     () => normalizeDimensions(dimensions) || detectedDimensions,
     [detectedDimensions, dimensions],
@@ -85,16 +89,25 @@ export function StlModelPreview({
   useEffect(() => {
     let disposed = false;
     let disposeThumbnail: (() => void) | undefined;
+    const controller = new AbortController();
 
-    setStatus(autoLoad ? "loading" : "skipped");
+    setStatus(autoLoad ? "uploading" : "skipped");
 
     if (!isStl || !autoLoad || !canvasRef.current) {
       return () => {
+        controller.abort();
         disposeThumbnail?.();
       };
     }
 
-    loadStlGeometry({ file, url: fileUrl })
+    loadStlGeometryWithRetry(
+      { file, url: previewUrl, signal: controller.signal },
+      (phase) => {
+        if (!disposed) {
+          setStatus(phase);
+        }
+      },
+    )
       .then(async (geometry) => {
         if (disposed) {
           geometry.dispose();
@@ -102,6 +115,7 @@ export function StlModelPreview({
         }
 
         reportDimensions(readStlDimensions(geometry));
+        setStatus("generating");
         disposeThumbnail = await renderStlThumbnail(canvasRef.current as HTMLCanvasElement, geometry);
         geometry.dispose();
 
@@ -110,7 +124,11 @@ export function StlModelPreview({
         }
       })
       .catch((error) => {
-        console.error("STL thumbnail preview failed", error);
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        console.error("STL thumbnail preview failed", sanitizePreviewError(error));
         if (!disposed) {
           setStatus("failed");
         }
@@ -118,9 +136,10 @@ export function StlModelPreview({
 
     return () => {
       disposed = true;
+      controller.abort();
       disposeThumbnail?.();
     };
-  }, [autoLoad, file, fileUrl, isStl, reportDimensions]);
+  }, [autoLoad, file, isStl, previewUrl, reportDimensions]);
 
   const openPreview = () => {
     if (!isStl) {
@@ -179,7 +198,7 @@ export function StlModelPreview({
           color={color}
           dimensions={normalizedDimensions}
           file={file}
-          fileUrl={fileUrl}
+          fileUrl={previewUrl}
           filename={filename}
           filesize={filesize}
           material={material}
@@ -213,16 +232,23 @@ function StlPreviewModal({
   }) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<StlViewerHandle | null>(null);
-  const [status, setStatus] = useState<LoadStatus>("loading");
+  const [status, setStatus] = useState<LoadStatus>("uploading");
   const [activeDimensions, setActiveDimensions] = useState<StlDimensions | null>(dimensions);
 
   useEffect(() => {
     const controller = new AbortController();
     let disposed = false;
 
-    setStatus("loading");
+    setStatus("uploading");
 
-    loadStlGeometry({ file, url: fileUrl, signal: controller.signal })
+    loadStlGeometryWithRetry(
+      { file, url: fileUrl, signal: controller.signal },
+      (phase) => {
+        if (!disposed) {
+          setStatus(phase);
+        }
+      },
+    )
       .then(async (geometry) => {
         if (disposed) {
           geometry.dispose();
@@ -238,6 +264,7 @@ function StlPreviewModal({
           return;
         }
 
+        setStatus("generating");
         handleRef.current?.dispose();
         handleRef.current = await createStlViewer(viewerRef.current, geometry);
         geometry.dispose();
@@ -251,7 +278,7 @@ function StlPreviewModal({
           return;
         }
 
-        console.error("STL model preview failed", error);
+        console.error("STL model preview failed", sanitizePreviewError(error));
         if (!disposed) {
           setStatus("failed");
         }
@@ -292,7 +319,7 @@ function StlPreviewModal({
             <div className="absolute inset-0" ref={viewerRef} />
             {status !== "ready" ? (
               <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm font-semibold text-graphite">
-                {status === "failed" ? "模型预览加载失败，不影响报价提交，请确认文件是否正确。" : "正在加载 3D 模型..."}
+                {status === "failed" ? "模型预览加载失败，不影响报价提交，请确认文件是否正确。" : getPreviewLoadingText(status)}
               </div>
             ) : null}
           </div>
@@ -343,8 +370,16 @@ function getPreviewPlaceholder(status: LoadStatus, isStl: boolean, filesize: num
     return "点击加载预览";
   }
 
-  if (status === "loading") {
-    return "正在生成缩略图";
+  if (status === "uploading") {
+    return "正在加载文件";
+  }
+
+  if (status === "parsing") {
+    return "正在分析模型";
+  }
+
+  if (status === "generating") {
+    return "正在生成预览";
   }
 
   if (status === "failed") {
@@ -352,6 +387,76 @@ function getPreviewPlaceholder(status: LoadStatus, isStl: boolean, filesize: num
   }
 
   return "STL 缩略图";
+}
+
+async function loadStlGeometryWithRetry(
+  source: Parameters<typeof loadStlGeometry>[0],
+  onStatus: (status: "uploading" | "parsing") => void,
+  maxAttempts = 3,
+) {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      onStatus("uploading");
+      const geometry = await loadStlGeometry(source);
+      onStatus("parsing");
+      return geometry;
+    } catch (error) {
+      if (source.signal?.aborted) {
+        throw error;
+      }
+
+      lastError = error;
+
+      if (attempt < maxAttempts) {
+        await waitForRetry(300 * attempt, source.signal);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function waitForRetry(milliseconds: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, milliseconds);
+
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
+function buildPreviewUrl(url: string | undefined, filename: string, filesize: number) {
+  if (!url) {
+    return undefined;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(`${filename}-${filesize}`)}`;
+}
+
+function sanitizePreviewError(error: unknown) {
+  return error instanceof Error ? error.message : "unknown";
+}
+
+function getPreviewLoadingText(status: LoadStatus) {
+  switch (status) {
+    case "uploading":
+      return "正在加载模型文件...";
+    case "parsing":
+      return "正在分析模型...";
+    case "generating":
+      return "正在生成 3D 预览...";
+    default:
+      return "正在加载 3D 模型...";
+  }
 }
 
 function normalizeDimensions(dimensions: QuoteDimensions | null | undefined): StlDimensions | null {

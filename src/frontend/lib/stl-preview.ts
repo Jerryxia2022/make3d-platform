@@ -240,22 +240,25 @@ function createModelScene(
   height: number,
 ) {
   const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf8fafc);
   const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100000);
   const geometry = sourceGeometry.clone();
   const material = new THREE.MeshStandardMaterial({
-    color: 0x7a8793,
-    roughness: 0.72,
+    color: 0x2563eb,
+    roughness: 0.64,
     metalness: 0.04,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  const fillLight = new THREE.DirectionalLight(0xffffff, 0.55);
-  const ambient = new THREE.AmbientLight(0xffffff, 0.85);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.45);
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.7);
+  const rimLight = new THREE.DirectionalLight(0xdbeafe, 0.45);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.92);
 
   centerGeometry(THREE, geometry);
   keyLight.position.set(2.5, 3, 4);
   fillLight.position.set(-3, -2, 2);
-  scene.add(ambient, keyLight, fillLight, mesh);
+  rimLight.position.set(-2, 3, -3);
+  scene.add(ambient, keyLight, fillLight, rimLight, mesh);
   resetCamera(THREE, camera, geometry);
 
   return { scene, camera, mesh };

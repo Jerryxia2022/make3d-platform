@@ -1,6 +1,6 @@
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { basename, resolve, sep } from "node:path";
+import { basename, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
 const MODEL_EXTENSIONS = [".stl", ".step", ".stp"];
@@ -34,8 +34,18 @@ export type SavedUpload = {
   filesize: number;
 };
 
+export type DeletedUploadArtifacts = {
+  deletedCount: number;
+  skipped: string[];
+  failed: string[];
+};
+
 export function getUploadDir() {
   return process.env.UPLOAD_DIR || join(process.cwd(), "uploads");
+}
+
+export function getGcodeDir() {
+  return process.env.GCODE_DIR || join(process.cwd(), "gcode");
 }
 
 export function isAllowedUploadFilename(filename: string) {
@@ -106,6 +116,45 @@ export async function validateSavedUploadReference(
   return upload;
 }
 
+export async function deleteSavedUploadArtifacts(upload: Pick<SavedUpload, "filename" | "filepath">) {
+  const result: DeletedUploadArtifacts = {
+    deletedCount: 0,
+    skipped: [],
+    failed: [],
+  };
+
+  if (!upload.filename || basename(upload.filename) !== upload.filename) {
+    result.skipped.push("invalid-filename");
+    return result;
+  }
+
+  const uploadPath = resolve(upload.filepath || "");
+  const expectedUploadPath = resolve(join(getUploadDir(), upload.filename));
+  const gcodePath = resolve(join(getGcodeDir(), `quote-${upload.filename}.gcode`));
+
+  for (const item of [
+    { path: uploadPath, root: getUploadDir(), label: "model" },
+    { path: gcodePath, root: getGcodeDir(), label: "gcode" },
+  ]) {
+    if (item.label === "model" && uploadPath !== expectedUploadPath) {
+      result.skipped.push(item.label);
+      continue;
+    }
+
+    const deleted = await deleteFileInsideRoot(item.path, item.root, item.label);
+
+    if (deleted === "deleted") {
+      result.deletedCount += 1;
+    } else if (deleted === "skipped") {
+      result.skipped.push(item.label);
+    } else {
+      result.failed.push(item.label);
+    }
+  }
+
+  return result;
+}
+
 export function isAllowedRequestAttachmentFilename(filename: string) {
   return ALLOWED_REQUEST_ATTACHMENT_EXTENSIONS.has(extname(filename).toLowerCase());
 }
@@ -144,4 +193,37 @@ async function saveFile(file: UploadLike, uploadDir: string): Promise<SavedUploa
     filepath,
     filesize: file.size,
   };
+}
+
+async function deleteFileInsideRoot(filePath: string, rootDir: string, label: string) {
+  const resolvedRoot = resolve(rootDir);
+  const resolvedPath = resolve(filePath);
+  const relativePath = relative(resolvedRoot, resolvedPath);
+
+  if (
+    !relativePath ||
+    relativePath.startsWith("..") ||
+    relativePath.includes(`..${sep}`) ||
+    resolve(resolvedRoot, relativePath) !== resolvedPath
+  ) {
+    console.warn("Skipped unsafe upload artifact deletion", { label });
+    return "skipped" as const;
+  }
+
+  try {
+    const fileStat = await stat(resolvedPath).catch(() => null);
+
+    if (!fileStat?.isFile()) {
+      return "skipped" as const;
+    }
+
+    await rm(resolvedPath, { force: true });
+    return "deleted" as const;
+  } catch (error) {
+    console.error("Failed to delete upload artifact", {
+      label,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return "failed" as const;
+  }
 }
