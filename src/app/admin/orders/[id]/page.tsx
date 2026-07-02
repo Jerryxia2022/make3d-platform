@@ -530,7 +530,7 @@ function formatOrderLeadTime(order: OrderDetail) {
 function formatShippingAddress(order: OrderDetail) {
   const snapshotAddress = [
     order.shippingProvince,
-    order.shippingCity,
+    order.shippingCityCustom || order.shippingCity,
     order.shippingDistrict,
     order.shippingDetailAddress,
   ]

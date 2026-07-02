@@ -16,6 +16,7 @@ export type ProvinceOption = {
 };
 
 export const OTHER_DISTRICT_CODE = "other";
+export const OTHER_CITY_CODE = "other-city";
 export const CHINA_REGION_DATA_VERSION = "2026-07-02-local-supplement";
 export const CHINA_REGION_DATA_UPDATED_AT = "2026-07-02";
 
@@ -199,6 +200,41 @@ export const CHINA_REGION_TREE: ProvinceOption[] = [
     ],
   },
   {
+    code: "120000",
+    name: "天津市",
+    cities: [],
+  },
+  {
+    code: "130000",
+    name: "河北省",
+    cities: [],
+  },
+  {
+    code: "140000",
+    name: "山西省",
+    cities: [],
+  },
+  {
+    code: "150000",
+    name: "内蒙古自治区",
+    cities: [],
+  },
+  {
+    code: "210000",
+    name: "辽宁省",
+    cities: [],
+  },
+  {
+    code: "220000",
+    name: "吉林省",
+    cities: [],
+  },
+  {
+    code: "230000",
+    name: "黑龙江省",
+    cities: [],
+  },
+  {
     code: "110000",
     name: "北京市",
     cities: [
@@ -231,6 +267,46 @@ export const CHINA_REGION_TREE: ProvinceOption[] = [
         ],
       },
     ],
+  },
+  {
+    code: "320000",
+    name: "江苏省",
+    cities: [],
+  },
+  {
+    code: "340000",
+    name: "安徽省",
+    cities: [],
+  },
+  {
+    code: "350000",
+    name: "福建省",
+    cities: [],
+  },
+  {
+    code: "360000",
+    name: "江西省",
+    cities: [],
+  },
+  {
+    code: "370000",
+    name: "山东省",
+    cities: [],
+  },
+  {
+    code: "410000",
+    name: "河南省",
+    cities: [],
+  },
+  {
+    code: "420000",
+    name: "湖北省",
+    cities: [],
+  },
+  {
+    code: "430000",
+    name: "湖南省",
+    cities: [],
   },
   {
     code: "440000",
@@ -277,6 +353,76 @@ export const CHINA_REGION_TREE: ProvinceOption[] = [
         ],
       },
     ],
+  },
+  {
+    code: "450000",
+    name: "广西壮族自治区",
+    cities: [],
+  },
+  {
+    code: "460000",
+    name: "海南省",
+    cities: [],
+  },
+  {
+    code: "500000",
+    name: "重庆市",
+    cities: [],
+  },
+  {
+    code: "510000",
+    name: "四川省",
+    cities: [],
+  },
+  {
+    code: "520000",
+    name: "贵州省",
+    cities: [],
+  },
+  {
+    code: "530000",
+    name: "云南省",
+    cities: [],
+  },
+  {
+    code: "540000",
+    name: "西藏自治区",
+    cities: [],
+  },
+  {
+    code: "620000",
+    name: "甘肃省",
+    cities: [],
+  },
+  {
+    code: "630000",
+    name: "青海省",
+    cities: [],
+  },
+  {
+    code: "640000",
+    name: "宁夏回族自治区",
+    cities: [],
+  },
+  {
+    code: "650000",
+    name: "新疆维吾尔自治区",
+    cities: [],
+  },
+  {
+    code: "710000",
+    name: "台湾省",
+    cities: [],
+  },
+  {
+    code: "810000",
+    name: "香港特别行政区",
+    cities: [],
+  },
+  {
+    code: "820000",
+    name: "澳门特别行政区",
+    cities: [],
   },
 ];
 

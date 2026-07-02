@@ -30,6 +30,7 @@ export type OrderInput = {
   addressDetail?: string;
   shippingProvince?: string | null;
   shippingCity?: string | null;
+  shippingCityCustom?: string | null;
   shippingDistrict?: string | null;
   shippingProvinceCode?: string | null;
   shippingProvinceName?: string | null;
@@ -182,6 +183,7 @@ export type CustomerAddressInput = {
   provinceName?: string | null;
   cityCode?: string | null;
   cityName?: string | null;
+  cityCustom?: string | null;
   districtCode?: string | null;
   districtName?: string | null;
   districtCustom?: string | null;
@@ -201,6 +203,7 @@ export type CustomerAddressRecord = CustomerAddressInput & {
   provinceName: string | null;
   cityCode: string | null;
   cityName: string | null;
+  cityCustom: string | null;
   districtCode: string | null;
   districtName: string | null;
   districtCustom: string | null;
@@ -475,6 +478,7 @@ export type OrderRecord = {
   addressDetail: string | null;
   shippingProvince: string | null;
   shippingCity: string | null;
+  shippingCityCustom: string | null;
   shippingDistrict: string | null;
   shippingProvinceCode: string | null;
   shippingProvinceName: string | null;
@@ -682,6 +686,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       address_detail TEXT,
       shipping_province TEXT,
       shipping_city TEXT,
+      shipping_city_custom TEXT,
       shipping_district TEXT,
       shipping_province_code TEXT,
       shipping_province_name TEXT,
@@ -749,6 +754,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       province_name TEXT,
       city_code TEXT,
       city_name TEXT,
+      city_custom TEXT,
       district_code TEXT,
       district_name TEXT,
       district_custom TEXT,
@@ -1058,6 +1064,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["address_detail", "TEXT"],
     ["shipping_province", "TEXT"],
     ["shipping_city", "TEXT"],
+    ["shipping_city_custom", "TEXT"],
     ["shipping_district", "TEXT"],
     ["shipping_province_code", "TEXT"],
     ["shipping_province_name", "TEXT"],
@@ -1109,6 +1116,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["province_name", "TEXT"],
     ["city_code", "TEXT"],
     ["city_name", "TEXT"],
+    ["city_custom", "TEXT"],
     ["district_code", "TEXT"],
     ["district_name", "TEXT"],
     ["district_custom", "TEXT"],
@@ -1665,6 +1673,7 @@ export function createCustomerAddress(
           province_name,
           city_code,
           city_name,
+          city_custom,
           district_code,
           district_name,
           district_custom,
@@ -1674,7 +1683,7 @@ export function createCustomerAddress(
           is_default,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         customerId,
@@ -1687,6 +1696,7 @@ export function createCustomerAddress(
         normalized.provinceName ?? normalized.province ?? "",
         normalized.cityCode ?? null,
         normalized.cityName ?? normalized.city ?? "",
+        normalized.cityCustom ?? null,
         normalized.districtCode ?? null,
         normalized.districtName ?? normalized.district ?? "",
         normalized.districtCustom ?? null,
@@ -1734,6 +1744,7 @@ export function updateCustomerAddress(
              province_name = ?,
              city_code = ?,
              city_name = ?,
+             city_custom = ?,
              district_code = ?,
              district_name = ?,
              district_custom = ?,
@@ -1754,6 +1765,7 @@ export function updateCustomerAddress(
         normalized.provinceName ?? normalized.province ?? "",
         normalized.cityCode ?? null,
         normalized.cityName ?? normalized.city ?? "",
+        normalized.cityCustom ?? null,
         normalized.districtCode ?? null,
         normalized.districtName ?? normalized.district ?? "",
         normalized.districtCustom ?? null,
@@ -1859,20 +1871,23 @@ function ensureCustomerHasDefaultAddress(db: DatabaseSync, customerId: number) {
 function normalizeCustomerAddressInput(input: CustomerAddressInput): CustomerAddressInput {
   const provinceName = (input.provinceName || input.province || "").trim();
   const cityName = (input.cityName || input.city || "").trim();
+  const cityCustom = input.cityCustom?.trim() || null;
   const districtName = (input.districtName || input.district || "").trim();
   const districtCustom = input.districtCustom?.trim() || null;
+  const city = cityCustom || cityName;
   const district = districtCustom || districtName;
 
   return {
     recipientName: input.recipientName.trim(),
     phone: input.phone.trim(),
     province: provinceName,
-    city: cityName,
+    city,
     district,
     provinceCode: input.provinceCode?.trim() || null,
     provinceName,
     cityCode: input.cityCode?.trim() || null,
     cityName,
+    cityCustom,
     districtCode: input.districtCode?.trim() || null,
     districtName,
     districtCustom,
@@ -1923,6 +1938,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           address_detail,
           shipping_province,
           shipping_city,
+          shipping_city_custom,
           shipping_district,
           shipping_province_code,
           shipping_province_name,
@@ -1954,7 +1970,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           status,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -1983,6 +1999,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.addressDetail || null,
         input.shippingProvince || null,
         input.shippingCity || null,
+        input.shippingCityCustom || null,
         input.shippingDistrict || null,
         input.shippingProvinceCode || null,
         input.shippingProvinceName || input.shippingProvince || null,
@@ -3797,6 +3814,7 @@ function orderSelectSql(suffix: string) {
     address_detail AS addressDetail,
     shipping_province AS shippingProvince,
     shipping_city AS shippingCity,
+    shipping_city_custom AS shippingCityCustom,
     shipping_district AS shippingDistrict,
     shipping_province_code AS shippingProvinceCode,
     shipping_province_name AS shippingProvinceName,
@@ -3931,6 +3949,7 @@ function customerAddressSelectSql(suffix: string) {
     province_name AS provinceName,
     city_code AS cityCode,
     city_name AS cityName,
+    city_custom AS cityCustom,
     district_code AS districtCode,
     district_name AS districtName,
     district_custom AS districtCustom,
@@ -4057,16 +4076,18 @@ function normalizeQuoteDraftFileRecord(file: unknown) {
 function normalizeCustomerAddressRecord(address: unknown) {
   const record = address as Record<string, unknown> & { isDefault: 0 | 1 | boolean };
   const provinceName = (record.provinceName as string | null) || (record.province as string) || "";
+  const cityCustom = (record.cityCustom as string | null) || null;
   const cityName = (record.cityName as string | null) || (record.city as string) || "";
   const districtCustom = (record.districtCustom as string | null) || null;
   const districtName = (record.districtName as string | null) || (record.district as string) || "";
   return {
     ...record,
     province: provinceName,
-    city: cityName,
+    city: cityCustom || cityName,
     district: districtCustom || districtName,
     provinceName,
     cityName,
+    cityCustom,
     districtName,
     districtCustom,
     provinceCode: (record.provinceCode as string | null) || null,

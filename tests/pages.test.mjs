@@ -313,11 +313,19 @@ test("customer address book page and APIs manage owned addresses only", async ()
   assert.match(databaseSource, /CREATE TABLE IF NOT EXISTS customer_addresses/);
   assert.match(databaseSource, /CUSTOMER_ADDRESS_LIMIT = 5/);
   assert.match(databaseSource, /province_code/);
+  assert.match(databaseSource, /city_custom/);
   assert.match(databaseSource, /district_custom/);
   assert.match(databaseSource, /idx_customer_addresses_default/);
   assert.match(databaseSource, /createCustomerAddress/);
   assert.match(databaseSource, /setCustomerDefaultAddress/);
   assert.match(databaseSource, /ensureCustomerHasDefaultAddress/);
+
+  const addressManagerSource = await readSource("src/frontend/components/AddressBookManager.tsx");
+  const addressValidationSource = await readSource("src/shared/customerAddressValidation.ts");
+  assert.match(addressManagerSource, /OTHER_CITY_CODE/);
+  assert.match(addressManagerSource, /其他城市名称/);
+  assert.match(addressValidationSource, /cityCustom/);
+  assert.match(addressValidationSource, /选择其他城市时，请填写城市名称/);
 });
 
 test("wechat account binding explains keyword service mode", async () => {

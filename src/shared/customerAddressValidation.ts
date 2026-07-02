@@ -2,6 +2,7 @@ import type { CustomerAddressInput } from "@/backend/database";
 import {
   getCityByCode,
   getDistrictByCode,
+  OTHER_CITY_CODE,
   getProvinceByCode,
   OTHER_DISTRICT_CODE,
 } from "@/shared/chinaRegions";
@@ -15,6 +16,7 @@ export type AddressInputResult =
 export function readCustomerAddressInput(body: Record<string, unknown>): CustomerAddressInput {
   const provinceCode = readString(body.provinceCode);
   const cityCode = readString(body.cityCode);
+  const cityCustom = readString(body.cityCustom);
   const districtCode = readString(body.districtCode);
   const districtCustom = readString(body.districtCustom);
   const provinceName = readString(body.provinceName || body.province);
@@ -31,6 +33,7 @@ export function readCustomerAddressInput(body: Record<string, unknown>): Custome
     provinceName,
     cityCode,
     cityName,
+    cityCustom: cityCustom || null,
     districtCode,
     districtName,
     districtCustom: districtCustom || null,
@@ -57,14 +60,19 @@ export function validateAndNormalizeCustomerAddressInput(
     return { input: null, error: "请选择有效省份" };
   }
 
-  const city = input.cityCode ? getCityByCode(province.code, input.cityCode) : null;
-  if (!city) {
+  const usesCustomCity = input.cityCode === OTHER_CITY_CODE;
+  const city = !usesCustomCity && input.cityCode ? getCityByCode(province.code, input.cityCode) : null;
+  if (!usesCustomCity && !city) {
     return { input: null, error: "请选择有效城市" };
+  }
+
+  if (usesCustomCity && !input.cityCustom?.trim()) {
+    return { input: null, error: "选择其他城市时，请填写城市名称" };
   }
 
   const usesCustomDistrict = input.districtCode === OTHER_DISTRICT_CODE;
   const district = !usesCustomDistrict && input.districtCode
-    ? getDistrictByCode(province.code, city.code, input.districtCode)
+    ? getDistrictByCode(province.code, city?.code || "", input.districtCode)
     : null;
 
   if (!usesCustomDistrict && !district) {
@@ -98,9 +106,10 @@ export function validateAndNormalizeCustomerAddressInput(
       province: province.name,
       provinceName: province.name,
       provinceCode: province.code,
-      city: city.name,
-      cityName: city.name,
-      cityCode: city.code,
+      city: input.cityCustom?.trim() || city?.name || "",
+      cityName: usesCustomCity ? "其他" : city?.name || "",
+      cityCode: usesCustomCity ? OTHER_CITY_CODE : city?.code || "",
+      cityCustom: usesCustomCity ? input.cityCustom?.trim() || "" : null,
       district: districtCustom || districtName,
       districtName,
       districtCode: usesCustomDistrict ? OTHER_DISTRICT_CODE : district?.code || "",

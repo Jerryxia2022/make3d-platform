@@ -246,6 +246,7 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "district",
     "province_code",
     "city_code",
+    "city_custom",
     "district_custom",
     "detail_address",
     "postal_code",
@@ -290,6 +291,79 @@ test("returns payment settings as a plain object for client components", () => {
     publicSecurityRecordUrl: null,
     publicSecurityRecordEnabled: false,
   });
+
+  db.close();
+});
+
+test("customer addresses support custom cities for incomplete province data", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13810000009",
+    password: "password123",
+    name: "Outside Province User",
+    wechat: "outside-province-user",
+    email: "outside@example.com",
+  });
+  const address = createCustomerAddress(db, customer.id, {
+    recipientName: "TEST User9",
+    phone: "13812345678",
+    province: "四川省",
+    provinceCode: "510000",
+    provinceName: "四川省",
+    city: "测试市",
+    cityCode: "other-city",
+    cityName: "其他",
+    cityCustom: "测试市",
+    district: "测试区",
+    districtCode: "other",
+    districtName: "其他",
+    districtCustom: "测试区",
+    detailAddress: "测试路 9 号",
+    label: "自定义",
+  });
+
+  assert.equal(address.city, "测试市");
+  assert.equal(address.cityCustom, "测试市");
+  assert.equal(address.district, "测试区");
+  assert.equal(address.districtCustom, "测试区");
+
+  const order = createOrderWithFiles(db, {
+    customerId: customer.id,
+    customerName: "Outside Province User",
+    phone: "13810000009",
+    wechat: "outside-province-user",
+    email: "outside@example.com",
+    quantity: 1,
+    estimatedPrice: 88,
+    addressRegion: [address.province, address.city, address.district].join(" "),
+    addressDetail: address.detailAddress,
+    shippingProvince: address.province,
+    shippingCity: address.city,
+    shippingCityCustom: address.cityCustom,
+    shippingDistrict: address.district,
+    shippingProvinceCode: address.provinceCode,
+    shippingCityCode: address.cityCode,
+    shippingCityName: address.cityName,
+    shippingDistrictCode: address.districtCode,
+    shippingDistrictName: address.districtName,
+    shippingDistrictCustom: address.districtCustom,
+    shippingDetailAddress: address.detailAddress,
+    shippingAddressSnapshot: JSON.stringify(address),
+    files: [
+      {
+        filename: "outside.stl",
+        filepath: "/uploads/outside.stl",
+        filesize: 128,
+        material: "PLA",
+        color: "白",
+      },
+    ],
+  });
+  const detail = getOrderById(db, order.id);
+
+  assert.equal(detail.shippingCity, "测试市");
+  assert.equal(detail.shippingCityCustom, "测试市");
+  assert.match(detail.shippingAddressSnapshot || "", /测试市/);
 
   db.close();
 });

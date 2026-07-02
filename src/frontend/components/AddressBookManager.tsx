@@ -7,6 +7,7 @@ import {
 } from "@/frontend/lib/customer-addresses";
 import {
   CHINA_REGION_TREE,
+  OTHER_CITY_CODE,
   OTHER_DISTRICT_CODE,
   type CityOption,
   type DistrictOption,
@@ -23,6 +24,7 @@ const emptyForm = {
   city: "",
   cityCode: "",
   cityName: "",
+  cityCustom: "",
   district: "",
   districtCode: "",
   districtName: "",
@@ -53,6 +55,8 @@ export function AddressBookManager({
   const limitMessage = "最多可保存 5 个常用地址，如需新增请先删除旧地址。";
   const selectedProvince = CHINA_REGION_TREE.find((province) => province.code === form.provinceCode) || null;
   const selectedCity = selectedProvince?.cities.find((city) => city.code === form.cityCode) || null;
+  const usesCustomCity = form.cityCode === OTHER_CITY_CODE;
+  const canSelectDistrict = Boolean(selectedCity) || usesCustomCity;
   const districtOptions = selectedCity?.districts || [];
   const defaultCount = useMemo(
     () => addresses.filter((address) => address.isDefault).length,
@@ -78,6 +82,7 @@ export function AddressBookManager({
       province: province?.name || "",
       cityCode: "",
       cityName: "",
+      cityCustom: "",
       city: "",
       districtCode: "",
       districtName: "",
@@ -88,11 +93,13 @@ export function AddressBookManager({
 
   function selectCity(code: string) {
     const city = selectedProvince?.cities.find((item) => item.code === code) || null;
+    const isCustom = code === OTHER_CITY_CODE;
     setForm((current) => ({
       ...current,
-      cityCode: city?.code || "",
-      cityName: city?.name || "",
-      city: city?.name || "",
+      cityCode: isCustom ? OTHER_CITY_CODE : city?.code || "",
+      cityName: isCustom ? "其他" : city?.name || "",
+      cityCustom: isCustom ? current.cityCustom : "",
+      city: isCustom ? current.cityCustom : city?.name || "",
       districtCode: "",
       districtName: "",
       district: "",
@@ -137,6 +144,7 @@ export function AddressBookManager({
       city: address.city,
       cityCode: address.cityCode || findCityByName(address.province, address.city)?.code || "",
       cityName: address.cityName || address.city,
+      cityCustom: address.cityCustom || "",
       district: address.district,
       districtCode: address.districtCode || findDistrictByName(address.province, address.city, address.district)?.code || "",
       districtName: address.districtName || address.district,
@@ -347,6 +355,7 @@ export function AddressBookManager({
               />
               <RegionSelect
                 disabled={!selectedProvince}
+                extraOption={{ code: OTHER_CITY_CODE, name: "其他城市", districts: [] }}
                 label="市"
                 onChange={selectCity}
                 options={selectedProvince?.cities || []}
@@ -355,7 +364,7 @@ export function AddressBookManager({
                 value={form.cityCode}
               />
               <RegionSelect
-                disabled={!selectedCity}
+                disabled={!canSelectDistrict}
                 extraOption={{ code: OTHER_DISTRICT_CODE, name: "其他区/县" }}
                 label="区/县"
                 onChange={selectDistrict}
@@ -365,6 +374,17 @@ export function AddressBookManager({
                 value={form.districtCode}
               />
             </div>
+            {form.cityCode === OTHER_CITY_CODE ? (
+              <AddressInput
+                label="其他城市名称"
+                required
+                value={form.cityCustom}
+                onChange={(value) => {
+                  updateForm("cityCustom", value);
+                  updateForm("city", value);
+                }}
+              />
+            ) : null}
             {form.districtCode === OTHER_DISTRICT_CODE ? (
               <AddressInput
                 label="其他区/县名称"
