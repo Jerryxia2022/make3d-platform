@@ -2,16 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   getWechatAccountByCustomerId,
+  listCustomerAddresses,
   listOrdersByCustomerId,
   openDatabase,
+  type CustomerAddressRecord,
   type OrderRecord,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
 import { maskOpenid } from "@/backend/wechat";
-import { ChangePasswordForm } from "@/frontend/components/ChangePasswordForm";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { InfoTile, StatusPill } from "@/frontend/components/UiPrimitives";
 import { WechatBindCard } from "@/frontend/components/WechatBindCard";
+import { formatCustomerAddress } from "@/frontend/lib/customer-addresses";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +30,7 @@ export default async function AccountPage() {
 
   try {
     const orders = listOrdersByCustomerId(db, customer.id);
+    const addresses = listCustomerAddresses(db, customer.id);
     const wechatAccount = getWechatAccountByCustomerId(db, customer.id);
     const activeBindCode =
       wechatAccount?.bindCode &&
@@ -45,6 +48,9 @@ export default async function AccountPage() {
               <p className="eyebrow">Make3D 会员</p>
               <h1 className="mt-3 text-4xl font-bold">我的账户</h1>
             </div>
+            <Link className="btn-secondary px-4 py-2" href="/account/change-password">
+              修改密码
+            </Link>
           </div>
 
           <section className="surface-card mt-6 p-5">
@@ -52,7 +58,6 @@ export default async function AccountPage() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Detail label="姓名" value={customer.name} />
               <Detail label="手机号" value={customer.phone} />
-              <Detail label="微信" value={customer.wechat} />
               <Detail label="邮箱" value={customer.email || "-"} />
             </div>
           </section>
@@ -69,12 +74,7 @@ export default async function AccountPage() {
                 管理地址簿
               </Link>
             </div>
-          </section>
-
-          <section className="surface-card mt-5 p-5">
-            <h2 className="text-xl font-bold">修改密码</h2>
-            <p className="mt-2 text-sm text-graphite">用于保护报价、订单和收货信息。</p>
-            <ChangePasswordForm />
+            <AddressSummary addresses={addresses} />
           </section>
 
           <WechatBindCard
@@ -146,6 +146,31 @@ function OrderTable({ orders, compact = false }: { orders: OrderRecord[]; compac
               </Link>
             </div>
           ) : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function AddressSummary({ addresses }: { addresses: CustomerAddressRecord[] }) {
+  if (addresses.length === 0) {
+    return (
+      <div className="surface-soft mt-5 p-4 text-sm text-graphite">
+        还没有常用地址，提交报价前请先添加一个收货地址。
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 grid gap-3 lg:grid-cols-2">
+      {addresses.map((address) => (
+        <article className="surface-soft p-4 text-sm" key={address.id}>
+          <div className="flex flex-wrap items-center gap-2">
+            {address.label ? <span className="status-pill status-gray">{address.label}</span> : null}
+            {address.isDefault ? <span className="status-pill status-orange">默认地址</span> : null}
+          </div>
+          <p className="mt-3 font-bold">{address.recipientName} / {address.phone}</p>
+          <p className="mt-1 leading-6 text-graphite">{formatCustomerAddress(address)}</p>
         </article>
       ))}
     </div>

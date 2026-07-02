@@ -46,6 +46,7 @@ export function AddressBookManager({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [activeLabelMode, setActiveLabelMode] = useState<"" | "家庭" | "公司" | "自定义">("");
   const canCreate = addresses.length < 5;
   const isEditing = editingId != null;
   const formTitle = isEditing ? "编辑地址" : "新增地址";
@@ -57,6 +58,12 @@ export function AddressBookManager({
     () => addresses.filter((address) => address.isDefault).length,
     [addresses],
   );
+  const inferredLabelMode = form.label === "家庭" || form.label === "公司"
+    ? form.label
+    : form.label
+      ? "自定义"
+      : "";
+  const labelMode = activeLabelMode || inferredLabelMode;
 
   function updateForm(key: keyof AddressFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -106,6 +113,7 @@ export function AddressBookManager({
 
   function startCreate() {
     setEditingId(null);
+    setActiveLabelMode("");
     setForm(emptyForm);
     setError("");
     setMessage("");
@@ -113,6 +121,13 @@ export function AddressBookManager({
 
   function startEdit(address: CustomerAddressView) {
     setEditingId(address.id);
+    setActiveLabelMode(
+      address.label === "家庭" || address.label === "公司"
+        ? address.label
+        : address.label
+          ? "自定义"
+          : "",
+    );
     setForm({
       recipientName: address.recipientName,
       phone: address.phone,
@@ -168,6 +183,7 @@ export function AddressBookManager({
 
       setAddresses(result.addresses || []);
       setEditingId(null);
+      setActiveLabelMode("");
       setForm(emptyForm);
       setMessage("地址已保存");
     } catch (submitError) {
@@ -209,6 +225,7 @@ export function AddressBookManager({
 
       setAddresses(result.addresses || []);
       setEditingId(null);
+      setActiveLabelMode("");
       setForm(emptyForm);
       setMessage(successMessage);
     } catch (mutationError) {
@@ -217,7 +234,7 @@ export function AddressBookManager({
   }
 
   return (
-    <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
+    <div className="mt-5 grid gap-5">
       <section className="surface-card p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -271,7 +288,6 @@ export function AddressBookManager({
                 <div className="mt-3 space-y-1 text-sm">
                   <p className="font-bold">{address.recipientName} / {address.phone}</p>
                   <p className="leading-6 text-graphite">{formatCustomerAddress(address)}</p>
-                  {address.postalCode ? <p className="text-graphite">邮编：{address.postalCode}</p> : null}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-ink/10 pt-3">
                   {!address.isDefault ? (
@@ -305,7 +321,7 @@ export function AddressBookManager({
       </section>
 
       {(canCreate || isEditing) ? (
-        <section className="surface-card p-5 lg:sticky lg:top-5">
+        <section className="surface-card mx-auto w-full max-w-3xl p-5">
           <h2 className="text-xl font-bold">{formTitle}</h2>
           <form className="mt-5 space-y-4" onSubmit={submitAddress}>
             <AddressInput label="收件人姓名" required value={form.recipientName} onChange={(value) => updateForm("recipientName", value)} />
@@ -361,9 +377,38 @@ export function AddressBookManager({
               />
             ) : null}
             <AddressTextarea label="详细地址" required value={form.detailAddress} onChange={(value) => updateForm("detailAddress", value)} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <AddressInput inputMode="numeric" label="邮编（可选）" maxLength={10} pattern="[0-9]{0,10}" value={form.postalCode} onChange={(value) => updateForm("postalCode", value)} />
-              <AddressInput label="标签（可选）" maxLength={10} value={form.label} onChange={(value) => updateForm("label", value)} />
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">地址标签（可选）</p>
+              <div className="flex flex-wrap gap-2">
+                {(["家庭", "公司"] as const).map((label) => (
+                  <button
+                    className={labelMode === label ? "btn-primary px-4 py-2 text-sm" : "btn-secondary px-4 py-2 text-sm"}
+                    key={label}
+                    onClick={() => {
+                      setActiveLabelMode(label);
+                      updateForm("label", label);
+                    }}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  className={labelMode === "自定义" ? "btn-primary px-4 py-2 text-sm" : "btn-secondary px-4 py-2 text-sm"}
+                  onClick={() => {
+                    setActiveLabelMode("自定义");
+                    if (form.label === "家庭" || form.label === "公司") {
+                      updateForm("label", "");
+                    }
+                  }}
+                  type="button"
+                >
+                  自定义
+                </button>
+              </div>
+              {labelMode === "自定义" ? (
+                <AddressInput label="自定义标签" maxLength={10} value={form.label} onChange={(value) => updateForm("label", value)} />
+              ) : null}
             </div>
             <label className="flex items-center gap-2 text-sm font-semibold">
               <input

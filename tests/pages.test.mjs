@@ -159,7 +159,8 @@ test("customer account center shows profile, compact orders, and owned order det
   assert.doesNotMatch(accountSource, /我的非标准需求/);
   assert.doesNotMatch(accountSource, /我的历史报价/);
   assert.match(accountSource, /修改密码/);
-  assert.match(accountSource, /ChangePasswordForm/);
+  assert.match(accountSource, /\/account\/change-password/);
+  assert.doesNotMatch(accountSource, /ChangePasswordForm/);
   assert.match(accountSource, /\/account\/addresses/);
   assert.match(accountSource, /管理地址簿/);
   assert.match(accountSource, /\/account\/orders\/\$\{order\.id\}/);
@@ -188,13 +189,10 @@ test("customer account center shows profile, compact orders, and owned order det
   assert.match(detailSource, /CurrentStatusPanel/);
   assert.match(detailSource, /已提交订单/);
   assert.match(detailSource, /已确认报价/);
-  assert.match(detailSource, /排产中/);
-  assert.match(detailSource, /后处理/);
   assert.match(detailSource, /付款已确认，订单已进入生产准备。/);
-  assert.match(detailSource, /订单已付款，等待排产。/);
-  assert.match(detailSource, /订单已进入排产，等待打印。/);
+  assert.match(detailSource, /后续将更新为生产中。/);
   assert.match(detailSource, /订单正在生产中。/);
-  assert.match(detailSource, /订单正在进行后处理、检查或包装。/);
+  assert.doesNotMatch(detailSource, /订单正在进行后处理、检查或包装。/);
   assert.match(detailSource, /订单已完成，感谢使用 Make3D。/);
   assert.match(detailSource, /生产与物流/);
   assert.match(detailSource, /快递公司/);
@@ -237,18 +235,21 @@ test("account pages expose registration, login, forgot password, and reset passw
   const loginFormSource = await readSource("src/frontend/components/CustomerLoginForm.tsx");
   const forgotSource = await readSource("src/app/account/forgot-password/page.tsx");
 
-  assert.match(registerSource, /name="phone"/);
-  assert.match(registerSource, /inputMode="numeric"/);
-  assert.match(registerSource, /maxLength=\{11\}/);
-  assert.match(registerSource, /pattern={mainlandPhoneHtmlPattern}/);
-  assert.match(registerSource, /title={mainlandPhoneErrorMessage}/);
-  assert.match(registerSource, /name="password"/);
-  assert.match(registerSource, /minLength=\{8\}/);
-  assert.match(registerSource, /name="name"/);
-  assert.match(registerSource, /name="wechat"/);
-  assert.match(registerSource, /name="email"/);
+  const registerFormSource = await readSource("src/frontend/components/RegisterForm.tsx");
+
+  assert.match(registerFormSource, /name="phone"/);
+  assert.match(registerFormSource, /inputMode="numeric"/);
+  assert.match(registerFormSource, /maxLength=\{11\}/);
+  assert.match(registerFormSource, /pattern={mainlandPhoneHtmlPattern}/);
+  assert.match(registerFormSource, /title={mainlandPhoneErrorMessage}/);
+  assert.match(registerFormSource, /name="password"/);
+  assert.match(registerFormSource, /name="confirmPassword"/);
+  assert.match(registerFormSource, /minLength=\{8\}/);
+  assert.match(registerFormSource, /name="name"/);
+  assert.doesNotMatch(registerFormSource, /name="wechat"/);
+  assert.match(registerFormSource, /name="email"/);
   assert.doesNotMatch(registerSource, /name="defaultAddress"/);
-  assert.match(registerSource, /微信很重要/);
+  assert.doesNotMatch(registerFormSource, /微信很重要/);
   assert.match(loginSource, /CustomerLoginForm/);
   assert.match(loginFormSource, /\/api\/account\/login/);
   assert.match(loginFormSource, /inputMode="numeric"/);
@@ -433,12 +434,9 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /phase/);
   assert.match(formSource, /startedAt/);
   assert.match(formSource, /elapsedSeconds/);
-  assert.match(formSource, /等待上传完成/);
-  assert.match(formSource, /文件已上传/);
-  assert.match(formSource, /正在准备切片任务/);
-  assert.match(formSource, /正在调用 PrusaSlicer/);
-  assert.match(formSource, /正在解析 G-code/);
-  assert.match(formSource, /正在计算价格/);
+  assert.match(formSource, /正在上传/);
+  assert.match(formSource, /正在分析模型/);
+  assert.match(formSource, /正在生成报价/);
   assert.match(formSource, /报价完成/);
   assert.match(formSource, /已等待/);
   assert.match(formSource, /模型较复杂，正在继续计算，请稍候/);
@@ -489,7 +487,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(formSource, /最终价格以人工确认为准/);
   assert.doesNotMatch(formSource, /DimensionField/);
   assert.doesNotMatch(formSource, /label="包装费"/);
-  assert.match(formSource, /PrusaSlicer/);
+  assert.doesNotMatch(formSource, /正在调用 PrusaSlicer/);
   assert.match(formSource, /文件小计/);
   assert.match(formSource, /getFileSubtotalPrice/);
   assert.match(formSource, /quote\.result\.printTimeSeconds \* quote\.quantity/);
@@ -678,8 +676,10 @@ test("admin pages show V2 estimate and shipping fields", async () => {
   assert.match(detailSource, /finalPrice/);
   assert.match(detailSource, /quoteDefaultPrice/);
   assert.match(detailSource, /quoteDefaultLeadTime/);
-  assert.match(detailSource, /自动总价/);
-  assert.match(detailSource, /报价默认/);
+  assert.match(detailSource, /当前状态/);
+  assert.match(detailSource, /最终金额/);
+  assert.match(detailSource, /下一步/);
+  assert.match(detailSource, /模型与报价/);
 });
 
 test("admin order detail page shows complete order fields and per-file V2 estimate actions", async () => {
@@ -783,7 +783,7 @@ test("customer APIs require login before quote slicing and order submission", as
 
   assert.match(sliceSource, /getCustomerFromRequestCookie/);
   assert.match(sliceSource, /analyzeStlTopology/);
-  assert.match(sliceSource, /该文件包含多个独立实体，需要人工确认后报价。/);
+  assert.match(sliceSource, /检测到该文件包含多个可拆分实体，需要人工确认报价。/);
   assert.match(sliceSource, /status\), 401\)|}, 401\)/);
   assert.match(orderSource, /getCustomerFromRequest/);
   assert.match(orderSource, /status: 401/);

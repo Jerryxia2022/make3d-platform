@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const CATEGORY_OPTIONS = [
   { value: "quote", label: "报价问题" },
@@ -26,6 +26,13 @@ export function OnlineConsultWidget() {
     const match = pathname.match(/^\/account\/orders\/(\d+)/);
     return match ? Number(match[1]) : null;
   }, [pathname]);
+
+  useEffect(() => {
+    const openConsult = () => setOpen(true);
+
+    window.addEventListener("make3d:open-consult", openConsult);
+    return () => window.removeEventListener("make3d:open-consult", openConsult);
+  }, []);
 
   if (pathname.startsWith("/admin")) {
     return null;

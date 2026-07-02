@@ -28,6 +28,7 @@ import {
   getDefaultAddress,
   type CustomerAddressView,
 } from "@/frontend/lib/customer-addresses";
+import { MATERIAL_GUIDANCE } from "@/shared/materialGuidance";
 
 const materials = ["PLA", "PETG", "ABS"];
 const colors = ["黑", "白", "红", "蓝"];
@@ -172,6 +173,20 @@ export function QuoteForm({
   useEffect(() => {
     sliceQuotesRef.current = sliceQuotes;
   }, [sliceQuotes]);
+
+  useEffect(() => {
+    if (addresses.length === 0) {
+      if (selectedAddressId) {
+        setSelectedAddressId("");
+      }
+      return;
+    }
+
+    if (!addresses.some((address) => String(address.id) === selectedAddressId)) {
+      const nextAddress = getDefaultAddress(addresses);
+      setSelectedAddressId(nextAddress ? String(nextAddress.id) : "");
+    }
+  }, [addresses, selectedAddressId]);
 
   useEffect(() => {
     filesRef.current = files;
@@ -377,7 +392,7 @@ export function QuoteForm({
         material: SLICE_MATERIAL,
         message: "正在计算",
         progress: 25,
-        phase: "正在准备切片任务",
+        phase: "正在上传",
         startedAt: Date.now(),
         elapsedSeconds: 0,
         quantity: item.quantity,
@@ -393,7 +408,7 @@ export function QuoteForm({
           material: SLICE_MATERIAL,
           message: "正在计算",
           progress: 45,
-          phase: "正在调用 PrusaSlicer",
+          phase: "正在分析模型",
           startedAt: quotes[item.id]?.startedAt || Date.now(),
           elapsedSeconds: quotes[item.id]?.elapsedSeconds || 0,
           quantity: item.quantity,
@@ -914,6 +929,29 @@ export function QuoteForm({
         </section>
       )}
 
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold">材料特性</h2>
+          <p className="mt-1 text-xs text-graphite">
+            以下为常见 FDM 材料参考值，实际性能会受模型结构、打印方向和参数影响。
+          </p>
+        </div>
+        <div className="grid gap-3 p-4 md:grid-cols-3">
+          {MATERIAL_GUIDANCE.map((item) => (
+            <article className="surface-soft p-4 text-sm" key={item.material}>
+              <h3 className="text-base font-bold">{item.material}</h3>
+              <dl className="mt-3 space-y-2 leading-5 text-graphite">
+                <MaterialFeature label="软化温度" value={item.softeningTemperature} />
+                <MaterialFeature label="强度" value={item.strength} />
+                <MaterialFeature label="韧性/刚性" value={item.toughness} />
+                <MaterialFeature label="适用" value={item.useCases} />
+                <MaterialFeature label="注意" value={item.notes} />
+              </dl>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="surface-card p-5">
         <div>
           <h2 className="text-lg font-bold">订单备注</h2>
@@ -1045,7 +1083,6 @@ export function QuoteForm({
                     <AddressPreviewItem label="收件人" value={selectedAddress.recipientName} />
                     <AddressPreviewItem label="电话" value={selectedAddress.phone} />
                     <AddressPreviewItem label="地址" value={formatCustomerAddress(selectedAddress)} />
-                    <AddressPreviewItem label="邮编" value={selectedAddress.postalCode || "-"} />
                   </dl>
                 </div>
               ) : null}
@@ -1139,6 +1176,23 @@ function SliceQuoteDetails({
           value={subtotalPrice == null ? "需人工确认" : formatMoney(subtotalPrice)}
         />
       </div>
+      {quote.status === "manual" || quote.status === "failed" ? (
+        <div className="notice-warning px-3 py-3 text-sm">
+          <p className="font-semibold">{quote.message || "该模型需要人工确认后报价。"}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="btn-primary px-3 py-2 text-xs" type="submit">
+              提交人工确认
+            </button>
+            <button
+              className="btn-secondary px-3 py-2 text-xs"
+              onClick={() => window.dispatchEvent(new Event("make3d:open-consult"))}
+              type="button"
+            >
+              联系客服
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1175,6 +1229,15 @@ function AddressPreviewItem({
     <div className={wide ? "sm:col-span-2" : ""}>
       <dt className="text-xs font-semibold text-graphite">{label}</dt>
       <dd className="mt-1 font-semibold text-ink">{value}</dd>
+    </div>
+  );
+}
+
+function MaterialFeature({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="font-semibold text-ink">{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }
@@ -1585,27 +1648,27 @@ function formatSliceStatus(quote: SliceQuoteState) {
 
 function getSliceProgressPhase(progress: number) {
   if (progress <= 0) {
-    return "等待上传完成";
+    return "正在上传";
   }
 
   if (progress <= 10) {
-    return "文件已上传";
+    return "正在上传";
   }
 
   if (progress <= 25) {
-    return "正在准备切片任务";
+    return "正在分析模型";
   }
 
   if (progress < 70) {
-    return "正在调用 PrusaSlicer";
+    return "正在分析模型";
   }
 
   if (progress < 90) {
-    return "正在解析 G-code";
+    return "正在生成报价";
   }
 
   if (progress < 100) {
-    return "正在计算价格";
+    return "正在生成报价";
   }
 
   return "报价完成";

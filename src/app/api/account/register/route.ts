@@ -8,11 +8,21 @@ export async function POST(request: Request) {
   const db = openDatabase();
 
   try {
+    const password = getString(formData, "password");
+    const confirmPassword = getString(formData, "confirmPassword");
+
+    if (password !== confirmPassword) {
+      return Response.json(
+        { success: false, error: "两次输入的密码不一致", message: "两次输入的密码不一致" },
+        { status: 400 },
+      );
+    }
+
     const customer = createCustomerAccount(db, {
       phone: getString(formData, "phone"),
-      password: getString(formData, "password"),
+      password,
       name: getString(formData, "name"),
-      wechat: getString(formData, "wechat"),
+      wechat: getString(formData, "wechat") || "",
       email: getString(formData, "email"),
       defaultAddress: getString(formData, "defaultAddress"),
     });

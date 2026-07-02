@@ -45,7 +45,7 @@ export function validateAndNormalizeCustomerAddressInput(
   input: CustomerAddressInput,
 ): AddressInputResult {
   if (!isValidRecipientName(input.recipientName)) {
-    return { input: null, error: "收件人姓名至少 2 个汉字或 4 个英文字符，不能为纯数字" };
+    return { input: null, error: "收件人姓名需 2-40 个字符，可包含中英文、数字、空格、连字符和间隔号，且至少包含一个中英文字符" };
   }
 
   if (!phonePattern.test(input.phone)) {
@@ -116,19 +116,15 @@ export function validateAndNormalizeCustomerAddressInput(
 
 export function isValidRecipientName(value: string) {
   const normalized = value.trim();
-  if (!normalized || /^\d+$/.test(normalized)) {
+  if (normalized.length < 2 || normalized.length > 40) {
     return false;
   }
 
-  if (/^[\u4e00-\u9fa5·\s-]+$/.test(normalized)) {
-    return normalized.replace(/[·\s-]/g, "").length >= 2;
+  if (!/^[\u4e00-\u9fa5A-Za-z0-9·\s-]+$/.test(normalized)) {
+    return false;
   }
 
-  if (/^[A-Za-z·\s-]+$/.test(normalized)) {
-    return normalized.replace(/[·\s-]/g, "").length >= 4;
-  }
-
-  return /^[\u4e00-\u9fa5A-Za-z·\s-]+$/.test(normalized) && normalized.length >= 2;
+  return /[\u4e00-\u9fa5A-Za-z]/.test(normalized);
 }
 
 function readString(value: unknown) {

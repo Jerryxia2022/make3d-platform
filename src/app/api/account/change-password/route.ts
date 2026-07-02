@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const currentPassword = getString(formData, "currentPassword");
   const newPassword = getString(formData, "newPassword");
+  const confirmNewPassword = getString(formData, "confirmNewPassword");
   const db = openDatabase();
 
   try {
@@ -31,6 +32,10 @@ export async function POST(request: Request) {
 
     if (newPassword.length < 8) {
       return NextResponse.json({ error: "新密码至少8位" }, { status: 400 });
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      return NextResponse.json({ error: "两次输入的新密码不一致" }, { status: 400 });
     }
 
     db.prepare("UPDATE customers SET password_hash = ? WHERE id = ?").run(
