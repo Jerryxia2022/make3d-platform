@@ -436,8 +436,9 @@ test("sends wechat notification for bound customer status updates", async () => 
     const scheduledResult = await notifyWechatOrderStatus(db, getOrderById(db, order.id), {
       sendText: async (openid, content) => sent.push({ openid, content }),
     });
-    assert.equal(scheduledResult.sent, true);
-    assert.match(sent[1].content, /当前状态：排产中/);
+    assert.equal(scheduledResult.skipped, true);
+    assert.equal(scheduledResult.reason, "status_not_supported");
+    assert.equal(sent.length, 1);
   } finally {
     restoreEnv(previous);
     db.close();

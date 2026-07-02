@@ -16,6 +16,7 @@ const INFILL_DENSITY = 50;
 const SLICER_BASE_MATERIAL = "PLA";
 const WEIGHT_MATERIAL = "PETG";
 const PARSE_FAILURE_MESSAGE = "计算失败，需人工确认";
+const MULTI_ENTITY_MANUAL_MESSAGE = "检测到该文件包含多个可拆分实体，需要人工确认报价。";
 
 let sliceQueue: Promise<void> = Promise.resolve();
 
@@ -96,12 +97,12 @@ export async function POST(request: Request) {
           color,
           quantity,
           sliceStatus: "manual",
-          errorMessage: "该文件包含多个独立实体，需要人工确认后报价。",
+          errorMessage: `${MULTI_ENTITY_MANUAL_MESSAGE} 实体数量：${analysis.componentCount}`,
         });
 
         return jsonResponse({
           success: true,
-          message: "该文件包含多个独立实体，需要人工确认后报价。",
+          message: MULTI_ENTITY_MANUAL_MESSAGE,
           saved_upload: savedFile,
           draft_file_id: draftFileId,
           error: "Multiple independent STL bodies",

@@ -22,6 +22,7 @@ import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfi
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 import { AdminBrand } from "@/frontend/components/BrandLogo";
+import { CopyTextButton } from "@/frontend/components/CopyTextButton";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
@@ -68,14 +69,10 @@ export default async function AdminOrderDetailPage({
                 <StatusPill status={order.status} />
               </div>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-                <Detail label="自动总价" value={formatMoney(order.payablePrice ?? order.estimatedPrice)} />
-                <Detail label="报价默认" value={formatMoney(quoteDefaultPrice)} />
-                <Detail label="默认交期" value={formatLeadTimeHours(quoteDefaultLeadTime)} />
-                <Detail label="提交时间" value={formatDate(order.createdAt)} />
-                <Detail label="客户" value={order.customerName} />
-                <Detail label="手机" value={order.phone} />
-                <Detail label="文件数" value={`${order.files.length} 个`} />
-                <Detail label="总数量" value={String(order.quantity)} />
+                <Detail label="当前状态" value={order.status} />
+                <Detail label="最终金额" value={formatMoney(quoteDefaultPrice)} />
+                <Detail label="客户" value={`${order.customerName} / ${order.phone}`} />
+                <Detail label="下一步" value={getNextAdminAction(order)} />
               </dl>
             </section>
             <div className="grid gap-3">
@@ -161,11 +158,14 @@ export default async function AdminOrderDetailPage({
             </section>
 
             <section className="surface-card p-4">
-              <h2 className="text-xl font-bold">打印信息</h2>
+              <h2 className="text-xl font-bold">模型与报价</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <Detail label="材料" value={order.material} />
                 <Detail label="颜色" value={order.color || "-"} />
                 <Detail label="数量" value={String(order.quantity)} />
+                <Detail label="文件数" value={`${order.files.length} 个`} />
+                <Detail label="自动报价" value={formatAutomaticPrice(order)} />
+                <Detail label="最终报价" value={formatMoney(order.finalPrice)} />
               </dl>
             </section>
           </div>
@@ -191,6 +191,18 @@ export default async function AdminOrderDetailPage({
 
           <section className="surface-card mt-4 p-5">
             <h2 className="text-xl font-bold">配送与物流</h2>
+            <div className="notice-success mt-4 p-4 text-sm">
+              <p className="font-bold">收货信息</p>
+              <p className="mt-2 whitespace-pre-line leading-6">
+                {formatShippingCopyBlock(order)}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <CopyTextButton label="复制姓名" text={order.recipientName || ""} />
+                <CopyTextButton label="复制电话" text={order.recipientPhone || ""} />
+                <CopyTextButton label="复制地址" text={formatShippingAddress(order)} />
+                <CopyTextButton label="复制全部" text={formatShippingCopyBlock(order)} />
+              </div>
+            </div>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <Detail label="配送方式" value={order.shippingMethod || "-"} />
               <Detail label="预估运费" value={order.shippingFeeEstimate || "-"} />
@@ -526,6 +538,37 @@ function formatShippingAddress(order: OrderDetail) {
     .join(" ");
 
   return snapshotAddress || [order.addressRegion, order.addressDetail].filter(Boolean).join(" ") || "-";
+}
+
+function formatShippingCopyBlock(order: OrderDetail) {
+  return [
+    `${order.recipientName || "-"} ${order.recipientPhone || "-"}`,
+    formatShippingAddress(order),
+  ].join("\n");
+}
+
+function getNextAdminAction(order: OrderDetail) {
+  if (order.status === "待确认") {
+    return "确认最终报价和交期";
+  }
+
+  if (order.status === "待付款") {
+    return "等待或确认到账";
+  }
+
+  if (order.status === "已付款") {
+    return "安排生产";
+  }
+
+  if (["排产中", "生产中", "后处理"].includes(order.status)) {
+    return "更新生产或发货";
+  }
+
+  if (order.status === "已发货") {
+    return "跟踪物流或完成订单";
+  }
+
+  return "查看订单记录";
 }
 
 function formatFilePrice(file: OrderFileRecord) {

@@ -252,20 +252,21 @@ function PaymentStatusPanel({
     return (
       <section className="surface-card mt-5 p-5">
         <h2 className="text-xl font-bold">生产进度</h2>
-        <p className="mt-4 text-sm font-semibold text-coral">订单已付款，等待排产。</p>
-        <p className="mt-2 text-sm text-graphite">付款已确认，订单已进入生产准备。</p>
+        <p className="mt-4 text-sm font-semibold text-coral">付款已确认。</p>
+        <p className="mt-2 text-sm text-graphite">订单已进入生产准备，后续将更新为生产中。</p>
         <PaymentRecordSummary records={paymentRecords} />
       </section>
     );
   }
 
   if (["排产中", "生产中", "后处理", "已发货", "已完成"].includes(order.status)) {
+    const customerStage = getCustomerFacingStage(order.status);
+
     return (
       <section className="surface-card mt-5 p-5">
         <h2 className="text-xl font-bold">生产与物流</h2>
-        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <Detail label="分配打印机" value={order.assignedPrinter || "-"} />
-          <Detail label="预计开始" value={formatOptionalDate(order.estimatedStartAt)} />
+        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <Detail label="当前状态" value={customerStage} />
           <Detail label="预计完成" value={formatOptionalDate(order.estimatedFinishAt)} />
           <Detail label="发货时间" value={formatOptionalDate(order.shippedAt)} />
         </dl>
@@ -389,9 +390,11 @@ function buildTimelineItems(order: OrderDetail, logs: OrderStatusLogRecord[]) {
     },
     { label: "待付款", completed: hasReached("待付款"), time: findLogTime("待付款") },
     { label: "已付款", completed: hasReached("已付款"), time: findLogTime("已付款") || order.paymentConfirmedAt },
-    { label: "排产中", completed: hasReached("排产中"), time: findLogTime("排产中") },
-    { label: "生产中", completed: hasReached("生产中"), time: findLogTime("生产中") || order.actualStartAt },
-    { label: "后处理", completed: hasReached("后处理"), time: findLogTime("后处理") },
+    {
+      label: "生产中",
+      completed: hasReached("排产中") || hasReached("生产中") || hasReached("后处理"),
+      time: findLogTime("生产中") || findLogTime("排产中") || order.actualStartAt,
+    },
     { label: "已发货", completed: hasReached("已发货"), time: findLogTime("已发货") || order.shippedAt },
     { label: "已完成", completed: hasReached("已完成"), time: findLogTime("已完成") || order.actualFinishAt },
   ];
@@ -410,15 +413,31 @@ function getCustomerStatusText(order: OrderDetail) {
     待确认: "订单已提交，正在确认最终报价。",
     待付款: "最终报价已确认，请按页面提示完成付款。",
     已付款: "付款已确认，订单已进入生产准备。",
-    排产中: "订单已进入排产，等待打印。",
+    排产中: "订单正在生产中。",
     生产中: "订单正在生产中。",
-    后处理: "订单正在进行后处理、检查或包装。",
+    后处理: "订单正在生产中。",
     已发货: "订单已发货，请留意物流信息。",
     已完成: "订单已完成，感谢使用 Make3D。",
     已取消: "订单已取消，如需继续请重新提交订单。",
   };
 
   return textByStatus[order.status] || "订单状态已更新。";
+}
+
+function getCustomerFacingStage(status: string) {
+  if (status === "已发货") {
+    return "已发货";
+  }
+
+  if (status === "已完成") {
+    return "已完成";
+  }
+
+  if (["排产中", "生产中", "后处理"].includes(status)) {
+    return "生产中";
+  }
+
+  return status;
 }
 
 

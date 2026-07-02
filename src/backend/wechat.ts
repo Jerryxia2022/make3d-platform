@@ -70,9 +70,7 @@ const WECHAT_ONBOARDING_REPLY = [
 const WECHAT_ORDER_NOTIFY_STATUSES = new Set([
   "待付款",
   "已付款",
-  "排产中",
   "生产中",
-  "后处理",
   "已发货",
   "已完成",
 ]);

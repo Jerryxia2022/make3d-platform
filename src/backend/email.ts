@@ -43,9 +43,7 @@ export type OrderStatusEmailOrder = Pick<
 const CUSTOMER_STATUS_EMAIL_STATUSES = new Set([
   "待付款",
   "已付款",
-  "排产中",
   "生产中",
-  "后处理",
   "已发货",
   "已完成",
 ]);
@@ -191,12 +189,16 @@ export async function notifyCustomerOrderStatus(
   order: OrderStatusEmailOrder,
   transport = createSmtpTransport(),
 ) {
-  if (!CUSTOMER_STATUS_EMAIL_STATUSES.has(order.status) || !order.email) {
-    return { sent: false, skipped: true };
+  if (!CUSTOMER_STATUS_EMAIL_STATUSES.has(order.status)) {
+    return { sent: false, skipped: true, reason: "status_not_notifiable" };
+  }
+
+  if (!order.email) {
+    return { sent: false, skipped: true, reason: "missing_email" };
   }
 
   if (!hasSmtpConfig()) {
-    return { sent: false, skipped: true };
+    return { sent: false, skipped: true, reason: "smtp_config_missing" };
   }
 
   try {
