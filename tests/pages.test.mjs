@@ -488,7 +488,10 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.match(estimateSource, /模型最大外形尺寸约：/);
   assert.match(estimateSource, /尺寸暂未识别，最终以人工确认为准。/);
   assert.match(formSource, /打印单价/);
-  assert.match(formSource, /报价状态/);
+  assert.match(formSource, /formatSliceStatus\(quote\)/);
+  assert.doesNotMatch(formSource, /<QuoteMetric label="报价状态"/);
+  assert.doesNotMatch(formSource, /<QuoteMetric label="材料"/);
+  assert.doesNotMatch(formSource, /<QuoteMetric label="数量"/);
   assert.doesNotMatch(formSource, /耗材重量/);
   assert.doesNotMatch(formSource, /材料费/);
   assert.doesNotMatch(formSource, /工时费/);

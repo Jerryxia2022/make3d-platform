@@ -907,8 +907,6 @@ export function QuoteForm({
                     </label>
                   </div>
                   <SliceQuoteDetails
-                    material={item.material}
-                    quantity={item.quantity}
                     quote={quote}
                     subtotalPrice={fileSubtotal}
                     unitPrice={filePrice}
@@ -1107,18 +1105,16 @@ export function QuoteForm({
 }
 
 function SliceQuoteDetails({
-  material,
-  quantity,
   quote,
   subtotalPrice,
   unitPrice,
 }: {
-  material: string;
-  quantity: number;
   quote: SliceQuoteState;
   subtotalPrice: number | null;
   unitPrice: number | null;
 }) {
+  const showPriceMetrics = quote.status === "success" && unitPrice != null && subtotalPrice != null;
+
   return (
     <div className="mt-3 space-y-3">
       <div>
@@ -1139,21 +1135,20 @@ function SliceQuoteDetails({
           </p>
         ) : null}
       </div>
-      <div className="grid gap-2 text-sm sm:grid-cols-2">
-        <QuoteMetric label="报价状态" value={formatSliceStatus(quote)} />
-        <QuoteMetric label="材料" value={material} />
-        <QuoteMetric
-          emphasis
-          label="打印单价"
-          value={unitPrice == null ? "需人工确认" : formatMoney(unitPrice)}
-        />
-        <QuoteMetric label="数量" value={String(getSafeQuantity(quantity))} />
-        <QuoteMetric
-          emphasis
-          label="文件小计"
-          value={subtotalPrice == null ? "需人工确认" : formatMoney(subtotalPrice)}
-        />
-      </div>
+      {showPriceMetrics ? (
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <QuoteMetric
+            emphasis
+            label="打印单价"
+            value={`${formatMoney(unitPrice)} / 件`}
+          />
+          <QuoteMetric
+            emphasis
+            label="文件小计"
+            value={formatMoney(subtotalPrice)}
+          />
+        </div>
+      ) : null}
       {quote.status === "manual" || quote.status === "failed" ? (
         <div className="notice-warning px-3 py-3 text-sm">
           <p className="font-semibold">{quote.message || "该模型需要人工确认后报价。"}</p>
