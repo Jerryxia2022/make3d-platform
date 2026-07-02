@@ -26,6 +26,7 @@ import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButt
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
 import { AdminBrand } from "@/frontend/components/BrandLogo";
 import { CopyTextButton } from "@/frontend/components/CopyTextButton";
+import { SmartStickyColumn } from "@/frontend/components/SmartStickyColumn";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 import { formatBeijingDateTime } from "@/shared/dateTime";
 
@@ -56,7 +57,7 @@ export default async function AdminOrderDetailPage({
       order.finalLeadTimeHours ?? order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
 
     return (
-      <main className="bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
+      <div className="bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
         <div className="mx-auto flex w-full max-w-[1450px] items-center justify-between gap-4 py-4">
             <AdminBrand />
             <Link className="font-semibold text-graphite" href="/admin/orders">
@@ -64,7 +65,7 @@ export default async function AdminOrderDetailPage({
             </Link>
           </div>
         <section className="orderPageGrid mx-auto grid w-full max-w-[1450px] gap-4 py-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-6">
-          <div className="orderMainColumn flex min-h-0 min-w-0 flex-col gap-4 self-start">
+          <main className="orderMainColumn flex min-h-0 min-w-0 flex-col gap-4 self-start">
             <section className="surface-card min-w-0 p-4">
               <p className="eyebrow">
                 {order.orderNo}
@@ -312,9 +313,10 @@ export default async function AdminOrderDetailPage({
               ))}
             </div>
           </section>
-          </div>
+          </main>
 
-          <aside className="orderActionColumn flex min-w-0 flex-col gap-3 self-start xl:sticky xl:top-5">
+          <SmartStickyColumn topOffset={20}>
+            <aside className="orderActionColumn flex min-w-0 flex-col gap-3 self-start">
               <AdminFinalQuoteForm
                 finalLeadTimeHours={quoteDefaultLeadTime}
                 finalPrice={quoteDefaultPrice}
@@ -342,8 +344,9 @@ export default async function AdminOrderDetailPage({
                 trackingNumber={order.trackingNumber}
               />
             </aside>
+          </SmartStickyColumn>
         </section>
-      </main>
+      </div>
     );
   } catch {
     notFound();

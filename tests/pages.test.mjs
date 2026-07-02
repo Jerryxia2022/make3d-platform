@@ -374,7 +374,8 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(formSource, /addresses\?: CustomerAddressView\[\]/);
   assert.match(formSource, /customer\?: QuoteFormCustomer/);
   assert.match(formSource, /guestUploadGateMessage/);
-  assert.match(formSource, /xl:sticky xl:top-6/);
+  assert.match(quoteSource, /SmartStickyColumn/);
+  assert.match(formSource, /SmartStickyColumn/);
   assert.match(formSource, /if \(disabled\) \{/);
   assert.match(formSource, /disabled={disabled}/);
   assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses}/);
@@ -858,13 +859,28 @@ test("admin order status API records admin workflow and notifies customers", asy
 
 test("admin order detail keeps core cards in the main content column", async () => {
   const source = await readSource("src/app/admin/orders/[id]/page.tsx");
+  const stickySource = await readSource("src/frontend/components/SmartStickyColumn.tsx");
 
   assert.match(source, /orderPageGrid/);
   assert.match(source, /orderMainColumn/);
   assert.match(source, /orderActionColumn/);
   assert.match(source, /orderInfoGrid/);
   assert.match(source, /xl:grid-cols-\[minmax\(0,1fr\)_360px\]/);
-  assert.match(source, /xl:sticky xl:top-5/);
+  assert.match(source, /SmartStickyColumn/);
+  assert.match(source, /<main className="orderMainColumn/);
+  assert.match(source, /<SmartStickyColumn topOffset=\{20\}>[\s\S]*<aside className="orderActionColumn/);
+  assert.doesNotMatch(source, /orderActionColumn[^"]*sticky/);
+  assert.doesNotMatch(source, /orderActionColumn[^"]*overflow/);
+  assert.doesNotMatch(source, /xl:sticky xl:top-5/);
+  assert.match(stickySource, /ResizeObserver/);
+  assert.match(stickySource, /requestAnimationFrame/);
+  assert.match(stickySource, /disabledBelow = DEFAULT_DESKTOP_WIDTH/);
+  assert.match(stickySource, /contentHeight <= availableHeight/);
+  assert.match(stickySource, /long-down/);
+  assert.match(stickySource, /long-up/);
+  assert.match(stickySource, /window\.innerWidth < disabledBelow/);
+  assert.match(stickySource, /content\.style\.transform = "none"/);
+  assert.match(stickySource, /translate3d/);
   assert.match(source, /lg:grid-cols-2/);
   assert.match(source, /lg:col-span-2/);
   assert.doesNotMatch(source, /className="contents"/);

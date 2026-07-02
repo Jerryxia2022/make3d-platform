@@ -23,6 +23,7 @@ import {
   mainlandPhoneErrorMessage,
 } from "@/shared/phoneValidation";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
+import { SmartStickyColumn } from "@/frontend/components/SmartStickyColumn";
 import {
   formatCustomerAddress,
   getDefaultAddress,
@@ -952,7 +953,8 @@ export function QuoteForm({
 
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+      <SmartStickyColumn contentClassName="space-y-4" topOffset={24}>
+      <aside>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white p-0 shadow-sm">
         <div className="border-b border-slate-200 px-5 py-4">
           <h2 className="text-lg font-bold">订单汇总</h2>
@@ -1100,6 +1102,7 @@ export function QuoteForm({
         </div>
       </section>
       </aside>
+      </SmartStickyColumn>
     </form>
   );
 }

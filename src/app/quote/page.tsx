@@ -7,6 +7,7 @@ import { ContactSection } from "@/frontend/components/ContactSection";
 import { ContactSupportButton } from "@/frontend/components/ContactSupportButton";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { QuoteForm } from "@/frontend/components/QuoteForm";
+import { SmartStickyColumn } from "@/frontend/components/SmartStickyColumn";
 import { MATERIAL_GUIDANCE } from "@/shared/materialGuidance";
 
 export default async function QuotePage() {
@@ -36,7 +37,7 @@ export default async function QuotePage() {
     <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
       <CustomerAuthBar returnTo="/quote" />
       <section className="mx-auto grid w-full max-w-[1450px] gap-5 py-5 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="order-2 space-y-4 xl:order-1 xl:sticky xl:top-5 xl:self-start">
+        <SmartStickyColumn className="order-2 xl:order-1" contentClassName="space-y-4" topOffset={20}>
           <InfoCard title="FDM打印说明">
             <p>FDM通过熔融材料逐层成型，适合外观件、功能件和小批量试制。</p>
             <p>默认报价按0.4mm喷嘴、0.2mm层高、50%填充计算。</p>
@@ -83,7 +84,7 @@ export default async function QuotePage() {
               </ContactSupportButton>
             </div>
           </InfoCard>
-        </div>
+        </SmartStickyColumn>
 
         <div className="order-1 xl:order-2">
           <QuoteForm addresses={addresses} customer={quoteCustomer} disabled={!customer} />
