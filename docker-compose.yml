@@ -31,6 +31,19 @@ services:
       WECHAT_MP_TOKEN: ${WECHAT_MP_TOKEN:-}
       WECHAT_MP_AES_KEY: ${WECHAT_MP_AES_KEY:-}
       WECHAT_MP_MENU_ENABLED: ${WECHAT_MP_MENU_ENABLED:-false}
+      WECHAT_PAY_ENABLED: ${WECHAT_PAY_ENABLED:-false}
+      WECHAT_PAY_TEST_ONLY: ${WECHAT_PAY_TEST_ONLY:-true}
+      WECHAT_PAY_JSAPI_AUTH_READY: ${WECHAT_PAY_JSAPI_AUTH_READY:-false}
+      WECHAT_PAY_TEST_CUSTOMER_IDS: ${WECHAT_PAY_TEST_CUSTOMER_IDS:-}
+      WECHAT_PAY_MCH_ID: ${WECHAT_PAY_MCH_ID:-}
+      WECHAT_PAY_APP_ID: ${WECHAT_PAY_APP_ID:-}
+      WECHAT_PAY_MERCHANT_CERT_SERIAL: ${WECHAT_PAY_MERCHANT_CERT_SERIAL:-}
+      WECHAT_PAY_PUBLIC_KEY_ID: ${WECHAT_PAY_PUBLIC_KEY_ID:-}
+      WECHAT_PAY_NOTIFY_URL: ${WECHAT_PAY_NOTIFY_URL:-}
+      WECHAT_PAY_MERCHANT_PRIVATE_KEY_FILE: /run/secrets/wechatpay/apiclient_key.pem
+      WECHAT_PAY_MERCHANT_CERT_FILE: /run/secrets/wechatpay/apiclient_cert.pem
+      WECHAT_PAY_PUBLIC_KEY_FILE: /run/secrets/wechatpay/wechatpay_public_key.pem
+      WECHAT_PAY_API_V3_KEY_FILE: /run/secrets/wechatpay/api_v3_key
       PRUSASLICER_ENABLED: ${PRUSASLICER_ENABLED:-false}
       PRUSASLICER_BIN: ${PRUSASLICER_BIN:-prusa-slicer}
       PRUSASLICER_PROFILE_PATH: ${PRUSASLICER_PROFILE_PATH:-/app/profiles/bambu-p1s.ini}
@@ -41,3 +54,22 @@ services:
       - ./uploads:/app/uploads
       - ./profiles:/app/profiles
       - ./gcode:/app/gcode
+    secrets:
+      - source: wechatpay_apiclient_key
+        target: /run/secrets/wechatpay/apiclient_key.pem
+      - source: wechatpay_apiclient_cert
+        target: /run/secrets/wechatpay/apiclient_cert.pem
+      - source: wechatpay_public_key
+        target: /run/secrets/wechatpay/wechatpay_public_key.pem
+      - source: wechatpay_api_v3_key
+        target: /run/secrets/wechatpay/api_v3_key
+
+secrets:
+  wechatpay_apiclient_key:
+    file: ${WECHAT_PAY_MERCHANT_PRIVATE_KEY_FILE_HOST:-./secrets/wechatpay/apiclient_key.pem}
+  wechatpay_apiclient_cert:
+    file: ${WECHAT_PAY_MERCHANT_CERT_FILE_HOST:-./secrets/wechatpay/apiclient_cert.pem}
+  wechatpay_public_key:
+    file: ${WECHAT_PAY_PUBLIC_KEY_FILE_HOST:-./secrets/wechatpay/wechatpay_public_key.pem}
+  wechatpay_api_v3_key:
+    file: ${WECHAT_PAY_API_V3_KEY_FILE_HOST:-./secrets/wechatpay/api_v3_key}

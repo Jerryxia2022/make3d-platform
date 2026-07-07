@@ -24,6 +24,7 @@ import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
 import { AdminStatusForm } from "@/frontend/components/AdminStatusForm";
+import { AdminWechatPaymentActions } from "@/frontend/components/AdminWechatPaymentActions";
 import { AdminBrand } from "@/frontend/components/BrandLogo";
 import { CopyTextButton } from "@/frontend/components/CopyTextButton";
 import { SmartStickyColumn } from "@/frontend/components/SmartStickyColumn";
@@ -491,6 +492,25 @@ function PaymentRecords({ records }: { records: OrderPaymentRecord[] }) {
                 {record.paymentDifferenceReason ? (
                   <p className="mt-1 text-xs text-coral">差额原因：{record.paymentDifferenceReason}</p>
                 ) : null}
+                {record.provider === "wechat" ? (
+                  <div className="mt-2 space-y-1 text-xs text-graphite">
+                    <p>支付单：{record.paymentNo || "-"}</p>
+                    <p>场景：{record.scenario || "-"}</p>
+                    <p>状态：{record.status || "-"}</p>
+                    <p>微信单号：{maskTradeNo(record.providerTransactionId)}</p>
+                    <p>Request-ID：{record.requestId || "-"}</p>
+                    <p>退款：{formatCents(record.refundedAmountCents || 0)}</p>
+                    {record.failureCode ? <p className="text-coral">异常：{record.failureCode}</p> : null}
+                    {record.paymentNo ? (
+                      <AdminWechatPaymentActions
+                        amountCents={record.expectedAmountCents}
+                        paymentNo={record.paymentNo}
+                        refundedAmountCents={record.refundedAmountCents || 0}
+                        status={record.status || ""}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
               </td>
               <td className="py-2 pr-4">{record.confirmedBy || "-"}</td>
             </tr>
@@ -709,6 +729,18 @@ function formatPaymentMethod(value: string | null) {
 
 function formatWeight(value: number | null) {
   return value == null ? "-" : `${value.toFixed(2)} g`;
+}
+
+function maskTradeNo(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  if (value.length <= 10) {
+    return `${value.slice(0, 2)}***${value.slice(-2)}`;
+  }
+
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
 function formatSliceMoney(value: number | null) {

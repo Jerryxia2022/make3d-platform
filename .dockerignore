@@ -12,6 +12,7 @@ pnpm-debug.log*
 data
 uploads
 gcode
+secrets
 coverage
 Dockerfile
 docker-compose.yml

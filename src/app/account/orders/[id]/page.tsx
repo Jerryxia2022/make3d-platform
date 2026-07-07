@@ -15,6 +15,7 @@ import {
   type PaymentSettings,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
+import { getWechatPayPublicAvailability } from "@/backend/wechatPayService";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
@@ -44,6 +45,7 @@ export default async function CustomerOrderDetailPage({
     const paymentSettings = getPaymentSettings(db);
     const paymentRecords = listOrderPaymentsByOrderId(db, order.id);
     const serviceRequests = listCustomerServiceRequestsForCustomer(db, customer.id, order.id);
+    const wechatPayAvailability = getWechatPayPublicAvailability(customer);
 
     return (
       <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
@@ -106,7 +108,12 @@ export default async function CustomerOrderDetailPage({
             <StatusTimeline order={order} logs={statusLogs} />
           </section>
 
-          <PaymentStatusPanel order={order} paymentRecords={paymentRecords} paymentSettings={paymentSettings} />
+          <PaymentStatusPanel
+            order={order}
+            paymentRecords={paymentRecords}
+            paymentSettings={paymentSettings}
+            wechatPayAvailable={wechatPayAvailability.enabled && wechatPayAvailability.allowedByTestMode}
+          />
 
           <CustomerServiceRecords records={serviceRequests} />
 
@@ -214,10 +221,12 @@ function PaymentStatusPanel({
   order,
   paymentRecords,
   paymentSettings,
+  wechatPayAvailable,
 }: {
   order: OrderDetail;
   paymentRecords: OrderPaymentRecord[];
   paymentSettings: PaymentSettings;
+  wechatPayAvailable: boolean;
 }) {
   if (order.status === "待确认") {
     return (
@@ -240,6 +249,11 @@ function PaymentStatusPanel({
         <p className="mt-5 text-sm font-semibold text-coral">
           请按最终报价付款，付款时请备注订单编号或注册手机号，便于我们核对。
         </p>
+        {wechatPayAvailable ? (
+          <Link className="btn-primary mt-5 inline-flex px-5 py-3" href={`/account/orders/${order.id}/pay`}>
+            微信支付测试
+          </Link>
+        ) : null}
         <CustomerPaymentOptions settings={paymentSettings} />
         <p className="mt-5 text-sm font-semibold text-graphite">
           付款完成后，工作人员核对到账后会更新订单状态。

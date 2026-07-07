@@ -252,6 +252,7 @@ export type CustomerRecord = {
 export type WechatAccountRecord = {
   id: number;
   customerId: number | null;
+  appId: string | null;
   openid: string | null;
   unionid: string | null;
   subscribed: boolean;
@@ -588,7 +589,12 @@ export type OrderPaymentInput = {
 export type OrderPaymentRecord = {
   id: number;
   orderId: number;
+  customerId: number | null;
+  paymentNo: string | null;
   paymentMethod: string;
+  provider: string | null;
+  method: string | null;
+  scenario: string | null;
   expectedAmountCents: number;
   paidAmountCents: number;
   paidAt: string;
@@ -597,6 +603,22 @@ export type OrderPaymentRecord = {
   platformTradeNo: string | null;
   paymentNote: string | null;
   paymentDifferenceReason: string | null;
+  status: string | null;
+  outTradeNo: string | null;
+  providerTransactionId: string | null;
+  providerTradeState: string | null;
+  providerPayerBindingId: string | null;
+  prepayId: string | null;
+  codeUrl: string | null;
+  codeUrlExpiresAt: string | null;
+  requestId: string | null;
+  idempotencyKey: string | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  expiresAt: string | null;
+  closedAt: string | null;
+  updatedAt: string | null;
+  refundedAmountCents: number | null;
   refundStatus: string;
   refundAmountCents: number | null;
   refundNote: string | null;
@@ -830,8 +852,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
 
     CREATE TABLE IF NOT EXISTS order_payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_no TEXT,
       order_id INTEGER NOT NULL,
+      customer_id INTEGER,
       payment_method TEXT NOT NULL,
+      provider TEXT,
+      method TEXT,
+      scenario TEXT,
       expected_amount_cents INTEGER NOT NULL,
       paid_amount_cents INTEGER NOT NULL,
       paid_at DATETIME NOT NULL,
@@ -840,11 +867,64 @@ export function initDatabase(dbPath = getDatabasePath()) {
       platform_trade_no TEXT,
       payment_note TEXT,
       payment_difference_reason TEXT,
+      status TEXT,
+      out_trade_no TEXT,
+      provider_transaction_id TEXT,
+      provider_trade_state TEXT,
+      provider_payer_binding_id TEXT,
+      prepay_id TEXT,
+      code_url TEXT,
+      code_url_expires_at DATETIME,
+      request_id TEXT,
+      idempotency_key TEXT,
+      failure_code TEXT,
+      failure_message TEXT,
+      expires_at DATETIME,
+      closed_at DATETIME,
+      updated_at DATETIME,
+      refunded_amount_cents INTEGER NOT NULL DEFAULT 0,
       refund_status TEXT NOT NULL DEFAULT 'none',
       refund_amount_cents INTEGER,
       refund_note TEXT,
       confirmed_by TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS wechat_payment_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_id INTEGER,
+      order_id INTEGER,
+      event_type TEXT NOT NULL,
+      request_id TEXT,
+      wechatpay_serial TEXT,
+      body_hash TEXT,
+      processing_status TEXT NOT NULL,
+      error_code TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (payment_id) REFERENCES order_payments(id) ON DELETE SET NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS wechat_refunds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      refund_no TEXT NOT NULL UNIQUE,
+      payment_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL,
+      out_refund_no TEXT NOT NULL UNIQUE,
+      provider_refund_id TEXT,
+      request_id TEXT,
+      failure_code TEXT,
+      failure_message TEXT,
+      created_by_admin_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      success_at DATETIME,
+      updated_at DATETIME,
+      FOREIGN KEY (payment_id) REFERENCES order_payments(id) ON DELETE CASCADE,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
@@ -911,6 +991,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     CREATE TABLE IF NOT EXISTS wechat_accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_id INTEGER UNIQUE,
+      app_id TEXT,
       openid TEXT UNIQUE,
       unionid TEXT,
       subscribed INTEGER NOT NULL DEFAULT 0,
@@ -1175,8 +1256,13 @@ export function initDatabase(dbPath = getDatabasePath()) {
   ]);
   db.prepare("INSERT OR IGNORE INTO payment_settings (id) VALUES (1)").run();
   ensureColumns(db, "order_payments", [
+    ["payment_no", "TEXT"],
     ["order_id", "INTEGER"],
+    ["customer_id", "INTEGER"],
     ["payment_method", "TEXT"],
+    ["provider", "TEXT"],
+    ["method", "TEXT"],
+    ["scenario", "TEXT"],
     ["expected_amount_cents", "INTEGER"],
     ["paid_amount_cents", "INTEGER"],
     ["paid_at", "DATETIME"],
@@ -1185,13 +1271,76 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["platform_trade_no", "TEXT"],
     ["payment_note", "TEXT"],
     ["payment_difference_reason", "TEXT"],
+    ["status", "TEXT"],
+    ["out_trade_no", "TEXT"],
+    ["provider_transaction_id", "TEXT"],
+    ["provider_trade_state", "TEXT"],
+    ["provider_payer_binding_id", "TEXT"],
+    ["prepay_id", "TEXT"],
+    ["code_url", "TEXT"],
+    ["code_url_expires_at", "DATETIME"],
+    ["request_id", "TEXT"],
+    ["idempotency_key", "TEXT"],
+    ["failure_code", "TEXT"],
+    ["failure_message", "TEXT"],
+    ["expires_at", "DATETIME"],
+    ["closed_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+    ["refunded_amount_cents", "INTEGER NOT NULL DEFAULT 0"],
     ["refund_status", "TEXT NOT NULL DEFAULT 'none'"],
     ["refund_amount_cents", "INTEGER"],
     ["refund_note", "TEXT"],
     ["confirmed_by", "TEXT"],
     ["created_at", "DATETIME"],
   ]);
-  db.exec("CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(order_id, created_at DESC)");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(order_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_order_payments_status ON order_payments(provider, status, expires_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_order_payments_payment_no_unique ON order_payments(payment_no) WHERE payment_no IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_order_payments_out_trade_no_unique ON order_payments(out_trade_no) WHERE out_trade_no IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_order_payments_transaction_unique ON order_payments(provider_transaction_id) WHERE provider_transaction_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_order_payments_idempotency_unique ON order_payments(idempotency_key) WHERE idempotency_key IS NOT NULL;
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wechat_payment_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_id INTEGER,
+      order_id INTEGER,
+      event_type TEXT NOT NULL,
+      request_id TEXT,
+      wechatpay_serial TEXT,
+      body_hash TEXT,
+      processing_status TEXT NOT NULL,
+      error_code TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (payment_id) REFERENCES order_payments(id) ON DELETE SET NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS wechat_refunds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      refund_no TEXT NOT NULL UNIQUE,
+      payment_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL,
+      out_refund_no TEXT NOT NULL UNIQUE,
+      provider_refund_id TEXT,
+      request_id TEXT,
+      failure_code TEXT,
+      failure_message TEXT,
+      created_by_admin_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      success_at DATETIME,
+      updated_at DATETIME,
+      FOREIGN KEY (payment_id) REFERENCES order_payments(id) ON DELETE CASCADE,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_wechat_payment_events_payment ON wechat_payment_events(payment_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_wechat_refunds_payment ON wechat_refunds(payment_id, created_at DESC);
+  `);
   ensureColumns(db, "service_requests", [
     ["request_type", "TEXT"],
     ["customer_id", "INTEGER"],
@@ -1218,6 +1367,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
   ]);
   ensureColumns(db, "wechat_accounts", [
     ["customer_id", "INTEGER"],
+    ["app_id", "TEXT"],
     ["openid", "TEXT"],
     ["unionid", "TEXT"],
     ["subscribed", "INTEGER NOT NULL DEFAULT 0"],
@@ -3207,15 +3357,17 @@ export function createWechatBindCode(
   db.prepare(
     `INSERT INTO wechat_accounts (
       customer_id,
+      app_id,
       bind_code,
       bind_code_expires_at,
       updated_at
-    ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(customer_id) DO UPDATE SET
+      app_id = excluded.app_id,
       bind_code = excluded.bind_code,
       bind_code_expires_at = excluded.bind_code_expires_at,
       updated_at = CURRENT_TIMESTAMP`,
-  ).run(customerId, bindCode, expiresAt);
+  ).run(customerId, getCurrentWechatAppId(), bindCode, expiresAt);
 
   return { bindCode, expiresAt };
 }
@@ -3264,23 +3416,25 @@ export function markWechatSubscribed(
     db.prepare(
       `UPDATE wechat_accounts
        SET subscribed = ?,
+           app_id = COALESCE(app_id, ?),
            unionid = COALESCE(?, unionid),
            last_message_at = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP
        WHERE openid = ?`,
-    ).run(input.subscribed ? 1 : 0, normalizeOptionalText(input.unionid), input.openid);
+    ).run(input.subscribed ? 1 : 0, getCurrentWechatAppId(), normalizeOptionalText(input.unionid), input.openid);
     return getWechatAccountByOpenid(db, input.openid);
   }
 
   db.prepare(
     `INSERT INTO wechat_accounts (
+      app_id,
       openid,
       unionid,
       subscribed,
       last_message_at,
       updated_at
-    ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-  ).run(input.openid, normalizeOptionalText(input.unionid), input.subscribed ? 1 : 0);
+    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+  ).run(getCurrentWechatAppId(), input.openid, normalizeOptionalText(input.unionid), input.subscribed ? 1 : 0);
 
   return getWechatAccountByOpenid(db, input.openid);
 }
@@ -3326,6 +3480,7 @@ export function bindWechatAccountByCode(
     db.prepare(
       `UPDATE wechat_accounts
        SET openid = ?,
+           app_id = ?,
            unionid = COALESCE(?, unionid),
            subscribed = 1,
            bind_code = NULL,
@@ -3333,7 +3488,7 @@ export function bindWechatAccountByCode(
            last_message_at = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-    ).run(input.openid, normalizeOptionalText(input.unionid), bindAccount.id);
+    ).run(input.openid, getCurrentWechatAppId(), normalizeOptionalText(input.unionid), bindAccount.id);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -4047,6 +4202,7 @@ function wechatAccountSelectSql(suffix: string) {
   return `SELECT
     id,
     customer_id AS customerId,
+    app_id AS appId,
     openid,
     unionid,
     subscribed,
@@ -4082,8 +4238,13 @@ function wechatNotificationSelectSql(suffix: string) {
 function orderPaymentSelectSql(suffix: string) {
   return `SELECT
     id,
+    payment_no AS paymentNo,
     order_id AS orderId,
+    customer_id AS customerId,
     payment_method AS paymentMethod,
+    provider,
+    method,
+    scenario,
     expected_amount_cents AS expectedAmountCents,
     paid_amount_cents AS paidAmountCents,
     paid_at AS paidAt,
@@ -4092,6 +4253,22 @@ function orderPaymentSelectSql(suffix: string) {
     platform_trade_no AS platformTradeNo,
     payment_note AS paymentNote,
     payment_difference_reason AS paymentDifferenceReason,
+    status,
+    out_trade_no AS outTradeNo,
+    provider_transaction_id AS providerTransactionId,
+    provider_trade_state AS providerTradeState,
+    provider_payer_binding_id AS providerPayerBindingId,
+    prepay_id AS prepayId,
+    code_url AS codeUrl,
+    code_url_expires_at AS codeUrlExpiresAt,
+    request_id AS requestId,
+    idempotency_key AS idempotencyKey,
+    failure_code AS failureCode,
+    failure_message AS failureMessage,
+    expires_at AS expiresAt,
+    closed_at AS closedAt,
+    updated_at AS updatedAt,
+    refunded_amount_cents AS refundedAmountCents,
     refund_status AS refundStatus,
     refund_amount_cents AS refundAmountCents,
     refund_note AS refundNote,
@@ -4363,6 +4540,10 @@ function normalizeOptionalText(value: string | null | undefined) {
 
   const normalized = value.trim();
   return normalized || null;
+}
+
+function getCurrentWechatAppId() {
+  return normalizeOptionalText(process.env.WECHAT_MP_APP_ID || process.env.WECHAT_PAY_APP_ID);
 }
 
 function moneyToCents(value: number) {
