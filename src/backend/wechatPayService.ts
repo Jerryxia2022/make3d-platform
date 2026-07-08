@@ -10,6 +10,11 @@ import {
 } from "./database.ts";
 import { ORDER_STATUSES } from "./orderStatus.ts";
 import {
+  notifyWechatRefundSuccess,
+  type WechatMessageClient,
+  type WechatRefundNotificationInput,
+} from "./wechat.ts";
+import {
   WECHAT_PAY_CURRENCY,
   WechatPayApiClient,
   buildJsapiBridgeParams,
@@ -253,6 +258,7 @@ export async function refundWechatPayment(
     adminId: string;
   },
   client = new WechatPayApiClient(loadWechatPayConfig()),
+  notificationClient?: WechatMessageClient,
 ) {
   const payment = getWechatPaymentByPaymentNo(db, input.paymentNo);
   const reason = input.reason.trim();
@@ -301,6 +307,7 @@ export async function refundWechatPayment(
       successAt: status === "success" ? result.data.success_time || getBeijingTimestamp() : null,
     });
     applyRefundToPayment(db, payment.id, input.amountCents, status);
+    await notifyWechatSuccessfulRefund(db, getWechatRefundByRefundNo(db, refundNo), notificationClient);
   } catch (error) {
     updateRefundFromProvider(db, refundId, {
       status: "failed",
@@ -317,6 +324,7 @@ export async function queryWechatRefund(
   db: DatabaseSync,
   refundNo: string,
   client = new WechatPayApiClient(loadWechatPayConfig()),
+  notificationClient?: WechatMessageClient,
 ) {
   const refund = getWechatRefundByRefundNo(db, refundNo);
   if (!refund) {
@@ -332,6 +340,7 @@ export async function queryWechatRefund(
     successAt: status === "success" ? result.data.success_time || refund.successAt || getBeijingTimestamp() : null,
   });
   syncRefundsToPayment(db, refund.paymentId);
+  await notifyWechatSuccessfulRefund(db, getWechatRefundByRefundNo(db, refundNo), notificationClient);
 
   return getWechatRefundByRefundNo(db, refundNo);
 }
@@ -1001,6 +1010,22 @@ function syncRefundsToPayment(db: DatabaseSync, paymentId: number) {
          updated_at = ?
      WHERE id = ?`,
   ).run(paymentStatus, refunded, refundStatus, refunded || null, getBeijingTimestamp(), paymentId);
+}
+
+async function notifyWechatSuccessfulRefund(
+  db: DatabaseSync,
+  refund: WechatRefundNotificationInput | null,
+  notificationClient?: WechatMessageClient,
+) {
+  if (!refund || refund.status !== "success") {
+    return;
+  }
+
+  try {
+    await notifyWechatRefundSuccess(db, refund, notificationClient);
+  } catch {
+    // Refund state is authoritative; notification diagnostics are best effort.
+  }
 }
 
 function buildCreatePaymentResponse(config: WechatPayConfig, payment: WechatPaymentRecord) {

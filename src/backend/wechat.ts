@@ -4,11 +4,14 @@ import {
   bindWechatAccountByCode,
   createCustomerServiceRequest,
   createWechatNotification,
+  getCustomerById,
   getBoundWechatAccountByCustomerId,
+  getOrderById,
   getWechatAccountByOpenid,
   getWechatNotificationByIdempotencyKey,
   markWechatSubscribed,
   touchWechatAccountMessage,
+  type CustomerRecord,
   type OrderRecord,
 } from "./database.ts";
 
@@ -33,6 +36,13 @@ export type WechatNotifyResult = {
   reason?: string;
   notificationId?: number;
   error?: Error;
+};
+
+export type WechatRefundNotificationInput = {
+  refundNo: string;
+  orderId: number;
+  amountCents: number;
+  status: string;
 };
 
 export type WechatVerificationDiagnostics = {
@@ -83,6 +93,8 @@ export const WECHAT_MENU_CLICK_KEYS = [
   "MAKE3D_SERVICE_SCOPE",
   "MAKE3D_FAQ",
 ] as const;
+
+export const WECHAT_REFUND_SUCCESS_NOTIFICATION_TYPE = "wechat_refund_success";
 
 export const WECHAT_MENU_CLICK_REPLIES: Record<(typeof WECHAT_MENU_CLICK_KEYS)[number], string> = {
   MAKE3D_PAYMENT_HELP: [
@@ -386,6 +398,115 @@ export async function notifyWechatOrderStatus(
   }
 }
 
+export function buildWechatRefundSuccessContent(
+  order: Pick<OrderRecord, "id" | "orderNo">,
+  refund: Pick<WechatRefundNotificationInput, "amountCents" | "status">,
+  appUrl = getAppUrl(),
+) {
+  const detailUrl = `${appUrl.replace(/\/$/, "")}/account/orders/${order.id}`;
+
+  return [
+    "Make3D 退款成功通知",
+    `订单号：${order.orderNo}`,
+    `退款金额：${formatCents(refund.amountCents)}`,
+    `退款状态：${formatRefundStatus(refund.status)}`,
+    `查看订单：${detailUrl}`,
+  ].join("\n");
+}
+
+export async function notifyWechatRefundSuccess(
+  db: DatabaseSync,
+  refund: WechatRefundNotificationInput,
+  client?: WechatMessageClient,
+): Promise<WechatNotifyResult> {
+  if (refund.status !== "success") {
+    return { sent: false, skipped: true, reason: "refund_not_success" };
+  }
+
+  const order = getOrderById(db, refund.orderId);
+  const customer = order.customerId ? getCustomerById(db, order.customerId) : null;
+
+  if (!customer) {
+    return { sent: false, skipped: true, reason: "customer_not_found" };
+  }
+
+  if (!isWechatRefundNotificationAllowedForCustomer(customer)) {
+    return { sent: false, skipped: true, reason: "wechat_pay_test_only" };
+  }
+
+  const account = getBoundWechatAccountByCustomerId(db, customer.id);
+
+  if (!account?.openid || !account.subscribed) {
+    return { sent: false, skipped: true, reason: "customer_not_bound" };
+  }
+
+  if (!isWechatMpEnabled()) {
+    return { sent: false, skipped: true, reason: "wechat_disabled" };
+  }
+
+  const type = WECHAT_REFUND_SUCCESS_NOTIFICATION_TYPE;
+  const content = buildWechatRefundSuccessContent(order, refund);
+  const idempotencyKey = buildWechatRefundNotificationIdempotencyKey(customer.id, order.id, refund.refundNo, type);
+  const existingNotification = getWechatNotificationByIdempotencyKey(db, idempotencyKey);
+
+  if (existingNotification) {
+    return {
+      sent: existingNotification.sendStatus === "sent",
+      skipped: true,
+      reason: "duplicate",
+      notificationId: existingNotification.id,
+    };
+  }
+
+  if (!client && !hasWechatSendConfig()) {
+    const notificationId = createWechatNotification(db, {
+      customerId: customer.id,
+      openid: account.openid,
+      orderId: order.id,
+      type,
+      content,
+      sendStatus: "skipped",
+      errorMessage: "WECHAT_MP_APP_ID or WECHAT_MP_APP_SECRET is missing",
+      errorCode: "wechat_config_missing",
+      idempotencyKey,
+    });
+
+    return { sent: false, skipped: true, reason: "wechat_config_missing", notificationId };
+  }
+
+  try {
+    const sendResult = await (client || createWechatMessageClient()).sendText(account.openid, content);
+    const notificationId = createWechatNotification(db, {
+      customerId: customer.id,
+      openid: account.openid,
+      orderId: order.id,
+      type,
+      content,
+      sendStatus: "sent",
+      sentAt: new Date().toISOString(),
+      platformMessageId: extractWechatPlatformMessageId(sendResult),
+      idempotencyKey,
+    });
+
+    return { sent: true, notificationId };
+  } catch (error) {
+    const normalizedError = error instanceof Error ? error : new Error("wechat notification failed");
+    const notificationId = createWechatNotification(db, {
+      customerId: customer.id,
+      openid: account.openid,
+      orderId: order.id,
+      type,
+      content,
+      sendStatus: "failed",
+      errorMessage: normalizedError.message,
+      errorCode: extractWechatErrorCode(normalizedError.message),
+      idempotencyKey,
+    });
+
+    return { sent: false, notificationId, error: normalizedError };
+  }
+}
+
 function getWechatOrderNotificationType(status: string) {
   const index = Array.from(WECHAT_ORDER_NOTIFY_STATUSES).indexOf(status);
   const types = [
@@ -406,6 +527,15 @@ function buildWechatNotificationIdempotencyKey(order: OrderRecord, type: string)
     type,
     order.status,
   ].join(":");
+}
+
+function buildWechatRefundNotificationIdempotencyKey(
+  customerId: number,
+  orderId: number,
+  refundNo: string,
+  type: string,
+) {
+  return [customerId, orderId, refundNo, type].join(":");
 }
 
 function extractWechatPlatformMessageId(result: unknown) {
@@ -702,10 +832,40 @@ function formatMoney(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)} 元` : "-";
 }
 
+function formatCents(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `${(value / 100).toFixed(2)} 元` : "-";
+}
+
+function formatRefundStatus(status: string) {
+  if (status === "success") {
+    return "退款成功";
+  }
+  if (status === "processing") {
+    return "退款处理中";
+  }
+  if (status === "closed") {
+    return "退款关闭";
+  }
+  return status || "-";
+}
+
 function formatLeadTime(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `约 ${Math.ceil(value)} 小时` : "-";
 }
 
 function getAppUrl() {
   return (process.env.APP_URL || "https://make3d.com.cn").replace(/\/$/, "");
+}
+
+function isWechatRefundNotificationAllowedForCustomer(customer: CustomerRecord) {
+  if (process.env.WECHAT_PAY_TEST_ONLY === "false") {
+    return true;
+  }
+
+  const testCustomerIds = (process.env.WECHAT_PAY_TEST_CUSTOMER_IDS || "")
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  return customer.isTestAccount && testCustomerIds.includes(customer.id);
 }
