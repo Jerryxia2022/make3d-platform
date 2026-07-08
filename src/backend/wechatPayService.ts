@@ -505,7 +505,7 @@ function getReusablePendingPayment(
         `WHERE provider = 'wechat'
            AND order_id = ?
            AND scenario = ?
-           AND amount_cents = ?
+           AND expected_amount_cents = ?
            AND status = 'pending'
            AND expires_at > ?
          ORDER BY created_at DESC, id DESC
