@@ -35,6 +35,7 @@ export async function GET(request: Request) {
         scenario: refreshed.scenario,
         amountCents: refreshed.amountCents,
         status: refreshed.status,
+        codeUrl: refreshed.codeUrl,
         expiresAt: refreshed.expiresAt,
         paidAt: refreshed.paidAt,
         refundedAmountCents: refreshed.refundedAmountCents,

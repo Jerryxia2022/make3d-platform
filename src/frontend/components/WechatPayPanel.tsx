@@ -41,6 +41,7 @@ export function WechatPayPanel({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
   const isWechatBrowser = useMemo(
     () => typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent),
     [],
@@ -77,28 +78,62 @@ export function WechatPayPanel({
         throw new Error(result.error || "支付状态查询失败");
       }
 
-      setPayment(result.payment);
+      setPayment((current) =>
+        current
+          ? {
+              ...current,
+              ...result.payment,
+              codeUrl: result.payment.codeUrl ?? current.codeUrl,
+            }
+          : result.payment,
+      );
       if (result.payment.status === "paid") {
         setMessage("支付已确认，订单状态已更新。");
       }
+      return result.payment as PaymentState;
     },
     [payment?.paymentNo],
   );
 
   useEffect(() => {
-    if (!payment || payment.status === "paid") {
+    if (!payment || payment.status === "paid" || payment.scenario !== "native") {
       return;
     }
 
-    const timer = window.setInterval(() => {
-      refreshStatus(false).catch(() => null);
-    }, 5000);
+    const expiresAt = new Date(payment.expiresAt).getTime();
+    const delay = Math.max(0, expiresAt - Date.now());
+    const timer = window.setTimeout(() => {
+      async function refreshExpiredPayment() {
+        setMessage("二维码已超过30分钟，正在自动刷新。");
+        setIsSubmitting(true);
 
-    return () => window.clearInterval(timer);
-  }, [payment, refreshStatus]);
+        try {
+          const response = await fetch("/api/payments/wechat/native", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId }),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || "微信支付创建失败");
+          }
+          setPayment(result.payment);
+          setMessage("二维码已自动刷新，请使用新的二维码支付。");
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "微信支付创建失败");
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
 
-  async function createPayment(scenario: "jsapi" | "native") {
-    setMessage("");
+      refreshExpiredPayment().catch(() => null);
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [payment, orderId]);
+
+  async function createPayment(scenario: "jsapi" | "native", automaticRefresh = false) {
+    setMessage(automaticRefresh ? "二维码已超过30分钟，正在自动刷新。" : "");
     setIsSubmitting(true);
 
     try {
@@ -113,6 +148,9 @@ export function WechatPayPanel({
       }
 
       setPayment(result.payment);
+      if (automaticRefresh) {
+        setMessage("二维码已自动刷新，请使用新的二维码支付。");
+      }
       if (scenario === "jsapi" && result.jsapiParams) {
         await invokeJsapiPay(result.jsapiParams);
       }
@@ -121,6 +159,28 @@ export function WechatPayPanel({
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function confirmPaid() {
+    setIsChecking(true);
+    setMessage("");
+
+    try {
+      const result = await refreshStatus(true);
+      if (result?.status === "paid") {
+        setMessage("支付已确认，订单状态已更新。");
+      } else {
+        setMessage("暂未查询到支付成功，请确认微信支付结果后再点击已付款。");
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "支付状态查询失败，请稍后再试。");
+    } finally {
+      setIsChecking(false);
+    }
+  }
+
+  function confirmUnpaid() {
+    setMessage("二维码将继续保留，可稍后继续扫码或点击已付款确认。");
   }
 
   async function invokeJsapiPay(params: Record<string, string>) {
@@ -185,12 +245,17 @@ export function WechatPayPanel({
           <img alt="微信支付动态二维码" className="h-64 w-64 border border-ink/10 bg-white p-3" src={qrDataUrl} />
           <div className="text-sm leading-6 text-graphite">
             <p className="font-semibold text-ink">{merchantName}</p>
+            <div className="my-4 flex flex-col gap-3 sm:flex-row">
+              <button className="btn-primary px-4 py-2" disabled={isChecking} onClick={confirmPaid} type="button">
+                {isChecking ? "确认中..." : "已付款"}
+              </button>
+              <button className="btn-secondary px-4 py-2" disabled={isChecking} onClick={confirmUnpaid} type="button">
+                未付款
+              </button>
+            </div>
             <p>订单：{orderNo}</p>
             <p>金额：{formatCents(amountCents)}</p>
             <p>有效期：{payment?.expiresAt ? formatDate(payment.expiresAt) : "-"}</p>
-            <button className="btn-secondary mt-4 px-4 py-2" onClick={() => refreshStatus(true)} type="button">
-              查询支付状态
-            </button>
           </div>
         </div>
       ) : null}
