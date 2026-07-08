@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  COMPANY_LEGAL_SNAPSHOT,
   LEGAL_DOCUMENT_PAGES,
   LEGAL_EFFECTIVE_DATE,
   LEGAL_LAST_UPDATED_DATE,
@@ -31,18 +30,6 @@ export default function LegalPage() {
             ))}
           </div>
         </div>
-
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold">经营主体与联系方式</h2>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <LegalMeta label="公司名称" value={COMPANY_LEGAL_SNAPSHOT.company_name} />
-            <LegalMeta label="统一社会信用代码" value={COMPANY_LEGAL_SNAPSHOT.unified_social_credit_code} />
-            <LegalMeta label="营业执照登记住所" value={COMPANY_LEGAL_SNAPSHOT.registered_address} />
-            <LegalMeta label="法定代表人" value={COMPANY_LEGAL_SNAPSHOT.legal_representative} />
-            <LegalMeta label="售后/联系地址" value={COMPANY_LEGAL_SNAPSHOT.contact_address} />
-            <LegalMeta label="客服时间" value={COMPANY_LEGAL_SNAPSHOT.customer_service_hours} />
-          </dl>
-        </section>
 
         <div className="mt-5 grid gap-5">
           {LEGAL_PAGE_SECTIONS.map((section) => (

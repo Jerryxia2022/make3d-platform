@@ -87,7 +87,7 @@ test("global footer shows official company ICP filing information", async () => 
   assert.match(productionEnvExample, /NEXT_PUBLIC_ICP_BEIAN=陕ICP备2026016776号-1/);
 });
 
-test("legal v1.0 page is based on the v0.11 source package and shows company registration details", async () => {
+test("legal v1.0 overview is based on the v0.11 source package and links agreement pages", async () => {
   await assertFileExists("docs/legal-source/V0.11/Make3D_协议与证据留存资料包_v0.11_法律风险修订稿.zip");
   await Promise.all([
     assertFileExists("src/app/legal/page.tsx"),
@@ -117,6 +117,8 @@ test("legal v1.0 page is based on the v0.11 source package and shows company reg
   assert.match(legalPolicySource, /v1\.0/);
   assert.match(legalPolicySource, /2026-07-08/);
   assert.match(legalPolicySource, /陕西省西安市雁塔区小寨东路196号1幢11907室华博众创081号（集群）/);
+  assert.doesNotMatch(legalPageSource, /COMPANY_LEGAL_SNAPSHOT/);
+  assert.doesNotMatch(legalPageSource, /经营主体与联系方式|公司名称|统一社会信用代码|营业执照登记住所/);
   assert.doesNotMatch(legalPageSource, /内部审阅稿|v0\.11|草案|待律师审阅|仅供内部参考/);
   for (const href of [
     "/legal/terms",
