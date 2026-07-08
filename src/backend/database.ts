@@ -2,6 +2,15 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { INVOICE_PROFILE_LIMIT, type InvoiceType } from "../shared/invoice.ts";
+import type { InvoiceProfileInput } from "../shared/invoiceProfileValidation.ts";
+import {
+  LEGAL_ACCEPTANCE_DOCUMENT_SLUGS,
+  LEGAL_DOCUMENT_PAGES,
+  LEGAL_EFFECTIVE_DATE,
+  LEGAL_PUBLIC_VERSION,
+  LEGAL_SOURCE_VERSION,
+} from "../shared/legalPolicy.ts";
 import { verifyCustomerSessionToken } from "./customerSessionCore.js";
 
 export type OrderInput = {
@@ -44,6 +53,10 @@ export type OrderInput = {
   shippingLabel?: string | null;
   shippingAddressSnapshot?: string | null;
   shippingRemark?: string;
+  invoiceJson?: string | null;
+  cancellationPolicyJson?: string | null;
+  fileRetentionJson?: string | null;
+  companySnapshotJson?: string | null;
   printFeeTotal?: number;
   payablePrice?: number | null;
   estimatedLeadTimeHours?: number;
@@ -212,6 +225,88 @@ export type CustomerAddressRecord = CustomerAddressInput & {
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CustomerInvoiceProfileRecord = InvoiceProfileInput & {
+  id: number;
+  customerId: number;
+  invoiceType: Extract<InvoiceType, "ordinary" | "special">;
+  registeredAddress: string | null;
+  registeredPhone: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LegalDocumentRecord = {
+  id: number;
+  slug: string;
+  title: string;
+  sourceVersion: string | null;
+  currentVersion: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LegalDocumentVersionRecord = {
+  id: number;
+  documentId: number;
+  slug: string;
+  version: string;
+  title: string;
+  contentJson: string;
+  contentSha256: string;
+  effectiveDate: string;
+  createdAt: string;
+};
+
+export type UserLegalAcceptanceInput = {
+  documentSlug: string;
+  version: string;
+  contentSha256: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
+export type UserLegalAcceptanceRecord = UserLegalAcceptanceInput & {
+  id: number;
+  customerId: number;
+  acceptedAt: string;
+  createdAt: string;
+};
+
+export type OrderRiskAcceptanceInput = {
+  orderId: number;
+  customerId: number | null;
+  version: string;
+  contentJson: string;
+  contentSha256: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
+export type OrderRiskAcceptanceRecord = OrderRiskAcceptanceInput & {
+  id: number;
+  acceptedAt: string;
+  createdAt: string;
+};
+
+export type OrderEvidenceSnapshotInput = {
+  orderId: number;
+  customerId: number | null;
+  snapshotJson: string;
+  snapshotSha256: string;
+  invoiceJson?: string | null;
+  cancellationPolicyJson?: string | null;
+  fileRetentionJson?: string | null;
+  companySnapshotJson?: string | null;
+};
+
+export type OrderEvidenceSnapshotRecord = OrderEvidenceSnapshotInput & {
+  id: number;
+  createdAt: string;
 };
 
 export type SingleFileOrderInput = Omit<OrderInput, "files"> & {
@@ -499,6 +594,10 @@ export type OrderRecord = {
   shippingLabel: string | null;
   shippingAddressSnapshot: string | null;
   shippingRemark: string | null;
+  invoiceJson: string | null;
+  cancellationPolicyJson: string | null;
+  fileRetentionJson: string | null;
+  companySnapshotJson: string | null;
   printFeeTotal: number | null;
   payablePrice: number | null;
   estimatedLeadTimeHours: number | null;
@@ -794,6 +893,92 @@ export function initDatabase(dbPath = getDatabasePath()) {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_invoice_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      invoice_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      taxpayer_id TEXT NOT NULL,
+      registered_address TEXT,
+      registered_phone TEXT,
+      bank_name TEXT,
+      bank_account TEXT,
+      receiver_contact TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CHECK (invoice_type IN ('ordinary', 'special'))
+    );
+
+    CREATE TABLE IF NOT EXISTS legal_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      source_version TEXT,
+      current_version TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS legal_document_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL,
+      slug TEXT NOT NULL,
+      version TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      effective_date TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (document_id) REFERENCES legal_documents(id) ON DELETE CASCADE,
+      UNIQUE(slug, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_legal_acceptances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      document_slug TEXT NOT NULL,
+      version TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      accepted_at DATETIME NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+      UNIQUE(customer_id, document_slug, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS order_risk_acceptances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL UNIQUE,
+      customer_id INTEGER,
+      version TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      accepted_at DATETIME NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS order_evidence_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL UNIQUE,
+      customer_id INTEGER,
+      snapshot_json TEXT NOT NULL,
+      snapshot_sha256 TEXT NOT NULL,
+      invoice_json TEXT,
+      cancellation_policy_json TEXT,
+      file_retention_json TEXT,
+      company_snapshot_json TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -1171,6 +1356,10 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["shipping_label", "TEXT"],
     ["shipping_address_snapshot", "TEXT"],
     ["shipping_remark", "TEXT"],
+    ["invoice_json", "TEXT"],
+    ["cancellation_policy_json", "TEXT"],
+    ["file_retention_json", "TEXT"],
+    ["company_snapshot_json", "TEXT"],
     ["print_fee_total", "REAL"],
     ["payable_price", "REAL"],
     ["estimated_lead_time_hours", "INTEGER"],
@@ -1225,6 +1414,83 @@ export function initDatabase(dbPath = getDatabasePath()) {
     CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id, updated_at);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_addresses_default ON customer_addresses(customer_id) WHERE is_default = 1;
   `);
+  ensureColumns(db, "customer_invoice_profiles", [
+    ["customer_id", "INTEGER"],
+    ["invoice_type", "TEXT"],
+    ["title", "TEXT"],
+    ["taxpayer_id", "TEXT"],
+    ["registered_address", "TEXT"],
+    ["registered_phone", "TEXT"],
+    ["bank_name", "TEXT"],
+    ["bank_account", "TEXT"],
+    ["receiver_contact", "TEXT"],
+    ["is_default", "INTEGER NOT NULL DEFAULT 0"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_customer_invoice_profiles_customer ON customer_invoice_profiles(customer_id, updated_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_invoice_profiles_default ON customer_invoice_profiles(customer_id) WHERE is_default = 1;
+  `);
+  ensureColumns(db, "legal_documents", [
+    ["slug", "TEXT"],
+    ["title", "TEXT"],
+    ["source_version", "TEXT"],
+    ["current_version", "TEXT"],
+    ["created_at", "DATETIME"],
+    ["updated_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "legal_document_versions", [
+    ["document_id", "INTEGER"],
+    ["slug", "TEXT"],
+    ["version", "TEXT"],
+    ["title", "TEXT"],
+    ["content_json", "TEXT"],
+    ["content_sha256", "TEXT"],
+    ["effective_date", "TEXT"],
+    ["created_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "user_legal_acceptances", [
+    ["customer_id", "INTEGER"],
+    ["document_slug", "TEXT"],
+    ["version", "TEXT"],
+    ["content_sha256", "TEXT"],
+    ["accepted_at", "DATETIME"],
+    ["ip_address", "TEXT"],
+    ["user_agent", "TEXT"],
+    ["created_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "order_risk_acceptances", [
+    ["order_id", "INTEGER"],
+    ["customer_id", "INTEGER"],
+    ["version", "TEXT"],
+    ["content_json", "TEXT"],
+    ["content_sha256", "TEXT"],
+    ["accepted_at", "DATETIME"],
+    ["ip_address", "TEXT"],
+    ["user_agent", "TEXT"],
+    ["created_at", "DATETIME"],
+  ]);
+  ensureColumns(db, "order_evidence_snapshots", [
+    ["order_id", "INTEGER"],
+    ["customer_id", "INTEGER"],
+    ["snapshot_json", "TEXT"],
+    ["snapshot_sha256", "TEXT"],
+    ["invoice_json", "TEXT"],
+    ["cancellation_policy_json", "TEXT"],
+    ["file_retention_json", "TEXT"],
+    ["company_snapshot_json", "TEXT"],
+    ["created_at", "DATETIME"],
+  ]);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_legal_documents_slug ON legal_documents(slug);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_legal_document_versions_slug_version ON legal_document_versions(slug, version);
+    CREATE INDEX IF NOT EXISTS idx_user_legal_acceptances_customer ON user_legal_acceptances(customer_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_legal_acceptances_unique ON user_legal_acceptances(customer_id, document_slug, version);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_order_risk_acceptances_order ON order_risk_acceptances(order_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_order_evidence_snapshots_order ON order_evidence_snapshots(order_id);
+  `);
+  seedLegalDocuments(db);
   ensureColumns(db, "order_status_logs", [["note", "TEXT"]]);
   ensureColumns(db, "payment_settings", [
     ["wechat_qr_path", "TEXT"],
@@ -2073,6 +2339,406 @@ function normalizeCustomerAddressInput(input: CustomerAddressInput): CustomerAdd
   };
 }
 
+export function listCustomerInvoiceProfiles(
+  db: DatabaseSync,
+  customerId: number,
+): CustomerInvoiceProfileRecord[] {
+  return db
+    .prepare(
+      customerInvoiceProfileSelectSql(
+        "WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC, id DESC",
+      ),
+    )
+    .all(customerId)
+    .map(normalizeCustomerInvoiceProfileRecord) as CustomerInvoiceProfileRecord[];
+}
+
+export function getCustomerInvoiceProfileByIdForCustomer(
+  db: DatabaseSync,
+  customerId: number,
+  profileId: number,
+): CustomerInvoiceProfileRecord {
+  const profile = db
+    .prepare(customerInvoiceProfileSelectSql("WHERE id = ? AND customer_id = ?"))
+    .get(profileId, customerId);
+
+  if (!profile) {
+    throw new Error("发票资料不存在");
+  }
+
+  return normalizeCustomerInvoiceProfileRecord(profile) as CustomerInvoiceProfileRecord;
+}
+
+export function createCustomerInvoiceProfile(
+  db: DatabaseSync,
+  customerId: number,
+  input: InvoiceProfileInput & { isDefault?: boolean },
+): CustomerInvoiceProfileRecord {
+  const count = getCustomerInvoiceProfileCount(db, customerId);
+
+  if (count >= INVOICE_PROFILE_LIMIT) {
+    throw new Error(`每个客户最多保存 ${INVOICE_PROFILE_LIMIT} 条发票资料`);
+  }
+
+  const normalized = normalizeCustomerInvoiceProfileInput(input);
+  const shouldDefault = count === 0 || Boolean(input.isDefault);
+  const now = getBeijingTimestamp();
+
+  try {
+    db.exec("BEGIN");
+    if (shouldDefault) {
+      clearCustomerDefaultInvoiceProfile(db, customerId);
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO customer_invoice_profiles (
+          customer_id,
+          invoice_type,
+          title,
+          taxpayer_id,
+          registered_address,
+          registered_phone,
+          bank_name,
+          bank_account,
+          receiver_contact,
+          is_default,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        customerId,
+        normalized.invoiceType,
+        normalized.title,
+        normalized.taxpayerId,
+        normalized.registeredAddress ?? null,
+        normalized.registeredPhone ?? null,
+        normalized.bankName ?? null,
+        normalized.bankAccount ?? null,
+        normalized.receiverContact,
+        shouldDefault ? 1 : 0,
+        now,
+        now,
+      );
+
+    db.exec("COMMIT");
+    return getCustomerInvoiceProfileByIdForCustomer(db, customerId, Number(result.lastInsertRowid));
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function updateCustomerInvoiceProfile(
+  db: DatabaseSync,
+  customerId: number,
+  profileId: number,
+  input: InvoiceProfileInput & { isDefault?: boolean },
+): CustomerInvoiceProfileRecord {
+  getCustomerInvoiceProfileByIdForCustomer(db, customerId, profileId);
+  const normalized = normalizeCustomerInvoiceProfileInput(input);
+  const now = getBeijingTimestamp();
+
+  try {
+    db.exec("BEGIN");
+    if (input.isDefault) {
+      clearCustomerDefaultInvoiceProfile(db, customerId);
+    }
+
+    db
+      .prepare(
+        `UPDATE customer_invoice_profiles
+         SET invoice_type = ?,
+             title = ?,
+             taxpayer_id = ?,
+             registered_address = ?,
+             registered_phone = ?,
+             bank_name = ?,
+             bank_account = ?,
+             receiver_contact = ?,
+             is_default = CASE WHEN ? THEN 1 ELSE is_default END,
+             updated_at = ?
+         WHERE id = ? AND customer_id = ?`,
+      )
+      .run(
+        normalized.invoiceType,
+        normalized.title,
+        normalized.taxpayerId,
+        normalized.registeredAddress ?? null,
+        normalized.registeredPhone ?? null,
+        normalized.bankName ?? null,
+        normalized.bankAccount ?? null,
+        normalized.receiverContact,
+        input.isDefault ? 1 : 0,
+        now,
+        profileId,
+        customerId,
+      );
+
+    ensureCustomerHasDefaultInvoiceProfile(db, customerId);
+    db.exec("COMMIT");
+    return getCustomerInvoiceProfileByIdForCustomer(db, customerId, profileId);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function deleteCustomerInvoiceProfile(db: DatabaseSync, customerId: number, profileId: number) {
+  const profile = getCustomerInvoiceProfileByIdForCustomer(db, customerId, profileId);
+
+  try {
+    db.exec("BEGIN");
+    db.prepare("DELETE FROM customer_invoice_profiles WHERE id = ? AND customer_id = ?").run(profileId, customerId);
+
+    if (profile.isDefault) {
+      ensureCustomerHasDefaultInvoiceProfile(db, customerId);
+    }
+
+    db.exec("COMMIT");
+    return true;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function setCustomerDefaultInvoiceProfile(
+  db: DatabaseSync,
+  customerId: number,
+  profileId: number,
+): CustomerInvoiceProfileRecord {
+  getCustomerInvoiceProfileByIdForCustomer(db, customerId, profileId);
+
+  try {
+    db.exec("BEGIN");
+    clearCustomerDefaultInvoiceProfile(db, customerId);
+    db
+      .prepare(
+        `UPDATE customer_invoice_profiles
+         SET is_default = 1,
+             updated_at = ?
+         WHERE id = ? AND customer_id = ?`,
+      )
+      .run(getBeijingTimestamp(), profileId, customerId);
+    db.exec("COMMIT");
+    return getCustomerInvoiceProfileByIdForCustomer(db, customerId, profileId);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function getCustomerInvoiceProfileCount(db: DatabaseSync, customerId: number) {
+  const row = db
+    .prepare("SELECT COUNT(*) AS count FROM customer_invoice_profiles WHERE customer_id = ?")
+    .get(customerId) as { count?: number } | undefined;
+
+  return row?.count || 0;
+}
+
+function clearCustomerDefaultInvoiceProfile(db: DatabaseSync, customerId: number) {
+  db.prepare("UPDATE customer_invoice_profiles SET is_default = 0 WHERE customer_id = ?").run(customerId);
+}
+
+function ensureCustomerHasDefaultInvoiceProfile(db: DatabaseSync, customerId: number) {
+  const defaultProfile = db
+    .prepare("SELECT id FROM customer_invoice_profiles WHERE customer_id = ? AND is_default = 1 LIMIT 1")
+    .get(customerId);
+
+  if (defaultProfile) {
+    return;
+  }
+
+  const latest = db
+    .prepare(
+      `SELECT id
+       FROM customer_invoice_profiles
+       WHERE customer_id = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(customerId) as { id?: number } | undefined;
+
+  if (latest?.id) {
+    db.prepare("UPDATE customer_invoice_profiles SET is_default = 1 WHERE id = ?").run(latest.id);
+  }
+}
+
+function normalizeCustomerInvoiceProfileInput(
+  input: InvoiceProfileInput & { isDefault?: boolean },
+): InvoiceProfileInput & { isDefault?: boolean } {
+  return {
+    invoiceType: input.invoiceType,
+    title: input.title.trim(),
+    taxpayerId: input.taxpayerId.trim(),
+    registeredAddress: input.invoiceType === "special" ? input.registeredAddress?.trim() || null : null,
+    registeredPhone: input.invoiceType === "special" ? input.registeredPhone?.trim() || null : null,
+    bankName: input.invoiceType === "special" ? input.bankName?.trim() || null : null,
+    bankAccount: input.invoiceType === "special" ? input.bankAccount?.trim() || null : null,
+    receiverContact: input.receiverContact.trim(),
+    isDefault: Boolean(input.isDefault),
+  };
+}
+
+export function getLegalDocumentVersion(
+  db: DatabaseSync,
+  slug: string,
+  version = LEGAL_PUBLIC_VERSION,
+): LegalDocumentVersionRecord {
+  const record = db
+    .prepare(legalDocumentVersionSelectSql("WHERE slug = ? AND version = ?"))
+    .get(slug, version) as LegalDocumentVersionRecord | undefined;
+
+  if (!record) {
+    throw new Error(`Legal document version not found: ${slug}@${version}`);
+  }
+
+  return record;
+}
+
+export function recordRequiredUserLegalAcceptances(
+  db: DatabaseSync,
+  customerId: number,
+  input: { ipAddress?: string | null; userAgent?: string | null } = {},
+) {
+  return LEGAL_ACCEPTANCE_DOCUMENT_SLUGS.map((slug) => {
+    const version = getLegalDocumentVersion(db, slug);
+    return recordUserLegalAcceptance(db, customerId, {
+      documentSlug: slug,
+      version: version.version,
+      contentSha256: version.contentSha256,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+    });
+  });
+}
+
+export function recordUserLegalAcceptance(
+  db: DatabaseSync,
+  customerId: number,
+  input: UserLegalAcceptanceInput,
+): UserLegalAcceptanceRecord {
+  const acceptedAt = getBeijingTimestamp();
+  db.prepare(
+    `INSERT OR IGNORE INTO user_legal_acceptances (
+      customer_id,
+      document_slug,
+      version,
+      content_sha256,
+      accepted_at,
+      ip_address,
+      user_agent
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    customerId,
+    input.documentSlug,
+    input.version,
+    input.contentSha256,
+    acceptedAt,
+    input.ipAddress || null,
+    input.userAgent || null,
+  );
+
+  return db
+    .prepare(userLegalAcceptanceSelectSql("WHERE customer_id = ? AND document_slug = ? AND version = ?"))
+    .get(customerId, input.documentSlug, input.version) as UserLegalAcceptanceRecord;
+}
+
+export function createOrderRiskAcceptance(
+  db: DatabaseSync,
+  input: OrderRiskAcceptanceInput,
+): OrderRiskAcceptanceRecord {
+  const acceptedAt = getBeijingTimestamp();
+  db.prepare(
+    `INSERT OR IGNORE INTO order_risk_acceptances (
+      order_id,
+      customer_id,
+      version,
+      content_json,
+      content_sha256,
+      accepted_at,
+      ip_address,
+      user_agent
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.orderId,
+    input.customerId,
+    input.version,
+    input.contentJson,
+    input.contentSha256,
+    acceptedAt,
+    input.ipAddress || null,
+    input.userAgent || null,
+  );
+
+  const acceptance = getOrderRiskAcceptanceByOrderId(db, input.orderId);
+  if (!acceptance) {
+    throw new Error("Order risk acceptance was not created");
+  }
+  return acceptance;
+}
+
+export function getOrderRiskAcceptanceByOrderId(
+  db: DatabaseSync,
+  orderId: number,
+): OrderRiskAcceptanceRecord | null {
+  return (
+    (db
+      .prepare(orderRiskAcceptanceSelectSql("WHERE order_id = ?"))
+      .get(orderId) as OrderRiskAcceptanceRecord | undefined) || null
+  );
+}
+
+export function createOrderEvidenceSnapshot(
+  db: DatabaseSync,
+  input: OrderEvidenceSnapshotInput,
+): OrderEvidenceSnapshotRecord {
+  db.prepare(
+    `INSERT OR IGNORE INTO order_evidence_snapshots (
+      order_id,
+      customer_id,
+      snapshot_json,
+      snapshot_sha256,
+      invoice_json,
+      cancellation_policy_json,
+      file_retention_json,
+      company_snapshot_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.orderId,
+    input.customerId,
+    input.snapshotJson,
+    input.snapshotSha256,
+    input.invoiceJson || null,
+    input.cancellationPolicyJson || null,
+    input.fileRetentionJson || null,
+    input.companySnapshotJson || null,
+  );
+
+  const snapshot = getOrderEvidenceSnapshotByOrderId(db, input.orderId);
+  if (!snapshot) {
+    throw new Error("Order evidence snapshot was not created");
+  }
+  return snapshot;
+}
+
+export function getOrderEvidenceSnapshotByOrderId(
+  db: DatabaseSync,
+  orderId: number,
+): OrderEvidenceSnapshotRecord | null {
+  return (
+    (db
+      .prepare(orderEvidenceSnapshotSelectSql("WHERE order_id = ?"))
+      .get(orderId) as OrderEvidenceSnapshotRecord | undefined) || null
+  );
+}
+
+export function createContentSha256(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): CreatedOrder {
   if (input.files.length === 0) {
     throw new Error("请上传模型文件");
@@ -2127,6 +2793,10 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           shipping_label,
           shipping_address_snapshot,
           shipping_remark,
+          invoice_json,
+          cancellation_policy_json,
+          file_retention_json,
+          company_snapshot_json,
           print_fee_total,
           payable_price,
           estimated_lead_time_hours,
@@ -2145,7 +2815,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
           status,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         orderNo,
@@ -2188,6 +2858,10 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         input.shippingLabel || null,
         input.shippingAddressSnapshot || null,
         input.shippingRemark || null,
+        input.invoiceJson || null,
+        input.cancellationPolicyJson || null,
+        input.fileRetentionJson || null,
+        input.companySnapshotJson || null,
         input.printFeeTotal ?? null,
         input.payablePrice ?? null,
         input.estimatedLeadTimeHours ?? null,
@@ -4062,6 +4736,10 @@ function orderSelectSql(suffix: string) {
     shipping_label AS shippingLabel,
     shipping_address_snapshot AS shippingAddressSnapshot,
     shipping_remark AS shippingRemark,
+    invoice_json AS invoiceJson,
+    cancellation_policy_json AS cancellationPolicyJson,
+    file_retention_json AS fileRetentionJson,
+    company_snapshot_json AS companySnapshotJson,
     print_fee_total AS printFeeTotal,
     payable_price AS payablePrice,
     estimated_lead_time_hours AS estimatedLeadTimeHours,
@@ -4195,6 +4873,87 @@ function customerAddressSelectSql(suffix: string) {
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM customer_addresses
+  ${suffix}`;
+}
+
+function customerInvoiceProfileSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    customer_id AS customerId,
+    invoice_type AS invoiceType,
+    title,
+    taxpayer_id AS taxpayerId,
+    registered_address AS registeredAddress,
+    registered_phone AS registeredPhone,
+    bank_name AS bankName,
+    bank_account AS bankAccount,
+    receiver_contact AS receiverContact,
+    is_default AS isDefault,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM customer_invoice_profiles
+  ${suffix}`;
+}
+
+function legalDocumentVersionSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    document_id AS documentId,
+    slug,
+    version,
+    title,
+    content_json AS contentJson,
+    content_sha256 AS contentSha256,
+    effective_date AS effectiveDate,
+    created_at AS createdAt
+  FROM legal_document_versions
+  ${suffix}`;
+}
+
+function userLegalAcceptanceSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    customer_id AS customerId,
+    document_slug AS documentSlug,
+    version,
+    content_sha256 AS contentSha256,
+    accepted_at AS acceptedAt,
+    ip_address AS ipAddress,
+    user_agent AS userAgent,
+    created_at AS createdAt
+  FROM user_legal_acceptances
+  ${suffix}`;
+}
+
+function orderRiskAcceptanceSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    order_id AS orderId,
+    customer_id AS customerId,
+    version,
+    content_json AS contentJson,
+    content_sha256 AS contentSha256,
+    accepted_at AS acceptedAt,
+    ip_address AS ipAddress,
+    user_agent AS userAgent,
+    created_at AS createdAt
+  FROM order_risk_acceptances
+  ${suffix}`;
+}
+
+function orderEvidenceSnapshotSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    order_id AS orderId,
+    customer_id AS customerId,
+    snapshot_json AS snapshotJson,
+    snapshot_sha256 AS snapshotSha256,
+    invoice_json AS invoiceJson,
+    cancellation_policy_json AS cancellationPolicyJson,
+    file_retention_json AS fileRetentionJson,
+    company_snapshot_json AS companySnapshotJson,
+    created_at AS createdAt
+  FROM order_evidence_snapshots
   ${suffix}`;
 }
 
@@ -4369,6 +5128,18 @@ function normalizeCustomerAddressRecord(address: unknown) {
     districtCode: (record.districtCode as string | null) || null,
     isDefault: Boolean(record.isDefault),
   } as CustomerAddressRecord;
+}
+
+function normalizeCustomerInvoiceProfileRecord(profile: unknown) {
+  const record = profile as Record<string, unknown> & { isDefault: 0 | 1 | boolean };
+  return {
+    ...record,
+    registeredAddress: (record.registeredAddress as string | null) || null,
+    registeredPhone: (record.registeredPhone as string | null) || null,
+    bankName: (record.bankName as string | null) || null,
+    bankAccount: (record.bankAccount as string | null) || null,
+    isDefault: Boolean(record.isDefault),
+  } as CustomerInvoiceProfileRecord;
 }
 
 function normalizeSliceJobRecord(job: unknown) {
@@ -4663,5 +5434,66 @@ function ensureColumns(
     if (!existingColumns.has(name)) {
       db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${name} ${type}`);
     }
+  }
+}
+
+function seedLegalDocuments(db: DatabaseSync) {
+  const now = getBeijingTimestamp();
+
+  for (const page of LEGAL_DOCUMENT_PAGES) {
+    const contentJson = JSON.stringify({
+      slug: page.slug,
+      title: page.title,
+      version: LEGAL_PUBLIC_VERSION,
+      effectiveDate: LEGAL_EFFECTIVE_DATE,
+      body: page.body,
+    });
+    const contentSha256 = createContentSha256(contentJson);
+
+    db.prepare(
+      `INSERT INTO legal_documents (
+        slug,
+        title,
+        source_version,
+        current_version,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(slug) DO UPDATE SET
+        title = excluded.title,
+        source_version = excluded.source_version,
+        current_version = excluded.current_version,
+        updated_at = excluded.updated_at`,
+    ).run(page.slug, page.title, LEGAL_SOURCE_VERSION, LEGAL_PUBLIC_VERSION, now, now);
+
+    const document = db
+      .prepare("SELECT id FROM legal_documents WHERE slug = ?")
+      .get(page.slug) as { id: number } | undefined;
+
+    if (!document) {
+      throw new Error(`Legal document seed failed: ${page.slug}`);
+    }
+
+    db.prepare(
+      `INSERT OR IGNORE INTO legal_document_versions (
+        document_id,
+        slug,
+        version,
+        title,
+        content_json,
+        content_sha256,
+        effective_date,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      document.id,
+      page.slug,
+      LEGAL_PUBLIC_VERSION,
+      page.title,
+      contentJson,
+      contentSha256,
+      LEGAL_EFFECTIVE_DATE,
+      now,
+    );
   }
 }

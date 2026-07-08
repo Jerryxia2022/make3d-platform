@@ -1,5 +1,10 @@
 import { createCustomerSessionToken, createCustomerLoginRedirectResponse } from "@/backend/accountAuth";
-import { createCustomerAccount, openDatabase } from "@/backend/database";
+import {
+  createCustomerAccount,
+  openDatabase,
+  recordRequiredUserLegalAcceptances,
+} from "@/backend/database";
+import { getClientIp } from "@/backend/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -18,6 +23,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!isChecked(formData, "acceptTerms") || !isChecked(formData, "acceptPrivacy")) {
+      return Response.json(
+        {
+          success: false,
+          error: "请先阅读并同意用户服务协议和隐私政策",
+          message: "请先阅读并同意用户服务协议和隐私政策",
+        },
+        { status: 400 },
+      );
+    }
+
     const customer = createCustomerAccount(db, {
       phone: getString(formData, "phone"),
       password,
@@ -25,6 +41,10 @@ export async function POST(request: Request) {
       wechat: getString(formData, "wechat") || "",
       email: getString(formData, "email"),
       defaultAddress: getString(formData, "defaultAddress"),
+    });
+    recordRequiredUserLegalAcceptances(db, customer.id, {
+      ipAddress: getClientIp(request),
+      userAgent: request.headers.get("user-agent"),
     });
     return createCustomerLoginRedirectResponse(createCustomerSessionToken(customer.id));
   } catch (error) {
@@ -38,4 +58,9 @@ export async function POST(request: Request) {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isChecked(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value === "on" || value === "true" || value === "1";
 }

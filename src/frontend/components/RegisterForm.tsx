@@ -1,6 +1,7 @@
 "use client";
 
-import type { InputHTMLAttributes } from "react";
+import Link from "next/link";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { mainlandPhoneErrorMessage, mainlandPhoneHtmlPattern } from "@/shared/phoneValidation";
 
@@ -47,10 +48,31 @@ export function RegisterForm() {
       />
       <Field label="姓名" name="name" required />
       <Field helpText="邮箱建议填写，用于找回密码。" label="邮箱" name="email" type="email" />
+      <AgreementCheckbox name="acceptTerms">
+        我已阅读并同意{" "}
+        <Link className="font-bold text-coral" href="/legal/terms" target="_blank">
+          用户服务协议
+        </Link>
+      </AgreementCheckbox>
+      <AgreementCheckbox name="acceptPrivacy">
+        我已阅读并同意{" "}
+        <Link className="font-bold text-coral" href="/legal/privacy" target="_blank">
+          隐私政策
+        </Link>
+      </AgreementCheckbox>
       <button className="btn-primary w-full px-5 py-3" disabled={passwordMismatch} type="submit">
         注册
       </button>
     </form>
+  );
+}
+
+function AgreementCheckbox({ children, name }: { children: ReactNode; name: string }) {
+  return (
+    <label className="flex items-start gap-3 rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm leading-6">
+      <input className="mt-1 size-4" name={name} required type="checkbox" />
+      <span>{children}</span>
+    </label>
   );
 }
 

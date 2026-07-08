@@ -29,6 +29,15 @@ import {
   getDefaultAddress,
   type CustomerAddressView,
 } from "@/frontend/lib/customer-addresses";
+import {
+  INVOICE_FACE_TAX_RATE_BPS,
+  INVOICE_TYPE_LABELS,
+  calculateInvoiceTotalCents,
+  formatBpsPercent,
+  formatCentsAsYuan,
+  type InvoiceType,
+  yuanToCents,
+} from "@/shared/invoice";
 import { applyMinimumPrintUnitPrice, calculateLinePrintTotal, roundMoney } from "@/shared/pricing";
 
 const materials = ["PLA", "PETG", "ABS"];
@@ -122,14 +131,27 @@ type QuoteFormCustomer = {
   email: string | null;
 };
 
+type QuoteInvoiceProfile = {
+  id: number;
+  invoiceType: Extract<InvoiceType, "ordinary" | "special">;
+  title: string;
+  taxpayerId: string;
+  receiverContact: string;
+  isDefault: boolean;
+};
+
+type InvoiceSelection = InvoiceType | "";
+
 export function QuoteForm({
   addresses = [],
   customer,
   disabled = false,
+  invoiceProfiles = [],
 }: {
   addresses?: CustomerAddressView[];
   customer?: QuoteFormCustomer | null;
   disabled?: boolean;
+  invoiceProfiles?: QuoteInvoiceProfile[];
 }) {
   const router = useRouter();
   const defaultAddress = getDefaultAddress(addresses);
@@ -138,6 +160,9 @@ export function QuoteForm({
   const [stlDimensions, setStlDimensions] = useState<Record<string, QuoteDimensions>>({});
   const [sliceQuotes, setSliceQuotes] = useState<Record<string, SliceQuoteState>>({});
   const [selectedAddressId, setSelectedAddressId] = useState(defaultAddress ? String(defaultAddress.id) : "");
+  const [invoiceType, setInvoiceType] = useState<InvoiceSelection>("");
+  const [selectedInvoiceProfileId, setSelectedInvoiceProfileId] = useState("");
+  const [riskAccepted, setRiskAccepted] = useState(false);
   const filesRef = useRef<SelectedModelFile[]>([]);
   const stlDimensionsRef = useRef<Record<string, QuoteDimensions>>({});
   const sliceQuotesRef = useRef<Record<string, SliceQuoteState>>({});
@@ -154,6 +179,25 @@ export function QuoteForm({
   const orderSummary = useMemo(
     () => buildOrderSummary(files, fileEstimates, sliceQuotes, shippingMethod),
     [files, fileEstimates, sliceQuotes, shippingMethod],
+  );
+  const matchingInvoiceProfiles = useMemo(
+    () =>
+      invoiceType === "" || invoiceType === "none"
+        ? []
+        : invoiceProfiles.filter((profile) => profile.invoiceType === invoiceType),
+    [invoiceProfiles, invoiceType],
+  );
+  const resolvedInvoiceType = invoiceType || "none";
+  const invoiceCalculation = useMemo(
+    () => calculateInvoiceTotalCents(orderSummary.payableCents ?? 0, resolvedInvoiceType),
+    [resolvedInvoiceType, orderSummary.payableCents],
+  );
+  const payableWithInvoiceLabel =
+    orderSummary.payableCents == null
+      ? orderSummary.payableLabel
+      : formatCentsAsYuan(invoiceCalculation.invoiceTotalAmountCents);
+  const selectedInvoiceProfile = matchingInvoiceProfiles.find(
+    (profile) => String(profile.id) === selectedInvoiceProfileId,
   );
   const hasPendingQuotes = useMemo(
     () =>
@@ -174,6 +218,20 @@ export function QuoteForm({
   useEffect(() => {
     sliceQuotesRef.current = sliceQuotes;
   }, [sliceQuotes]);
+
+  useEffect(() => {
+    if (invoiceType === "" || invoiceType === "none") {
+      if (selectedInvoiceProfileId) {
+        setSelectedInvoiceProfileId("");
+      }
+      return;
+    }
+
+    if (!matchingInvoiceProfiles.some((profile) => String(profile.id) === selectedInvoiceProfileId)) {
+      const nextProfile = matchingInvoiceProfiles.find((profile) => profile.isDefault) || matchingInvoiceProfiles[0];
+      setSelectedInvoiceProfileId(nextProfile ? String(nextProfile.id) : "");
+    }
+  }, [invoiceType, matchingInvoiceProfiles, selectedInvoiceProfileId]);
 
   useEffect(() => {
     if (addresses.length === 0) {
@@ -626,6 +684,21 @@ export function QuoteForm({
       return;
     }
 
+    if (!invoiceType) {
+      setError("请先选择发票类型。");
+      return;
+    }
+
+    if (invoiceType !== "none" && !selectedInvoiceProfile) {
+      setError("请选择对应的发票资料，或前往发票资料管理先完善资料。");
+      return;
+    }
+
+    if (!riskAccepted) {
+      setError("请先确认下单风险、定制制造和售后规则。");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       formData.delete("modelFiles");
@@ -654,6 +727,9 @@ export function QuoteForm({
       formData.set("phone", phone);
       formData.set("addressId", String(selectedAddress.id));
       formData.set("shippingRemark", "");
+      formData.set("invoiceType", invoiceType);
+      formData.set("invoiceProfileId", selectedInvoiceProfile ? String(selectedInvoiceProfile.id) : "");
+      formData.set("riskAccepted", riskAccepted ? "true" : "");
 
       for (const item of files) {
         const dimensions = stlDimensions[item.id] || estimateDisplayDimensions(item.file);
@@ -980,7 +1056,7 @@ export function QuoteForm({
             highlight
             label="应付总价"
             hint={orderSummary.payableHint}
-            value={orderSummary.payableLabel}
+            value={payableWithInvoiceLabel}
           />
           <SummaryItem
             label="预计交货期"
@@ -988,6 +1064,80 @@ export function QuoteForm({
           />
           <SummaryItem label="材料和颜色摘要" value={formatOptionSummary(files)} />
         </dl>
+
+        <div className="mt-5 border-t border-slate-200 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold">发票类型</h3>
+              <p className="mt-1 text-xs leading-5 text-graphite">
+                请在提交订单前确认发票类型和资料，订单提交后原则上不支持变更发票类型。
+              </p>
+            </div>
+            <Link className="text-xs font-bold text-coral" href="/account/invoices">
+              管理发票资料
+            </Link>
+          </div>
+
+          <label className="mt-4 block text-sm font-semibold" htmlFor="invoiceType">
+            发票类型
+            <select
+              className="field-input mt-2"
+              disabled={disabled}
+              id="invoiceType"
+              name="invoiceType"
+              onChange={(event) => setInvoiceType(event.target.value as InvoiceSelection)}
+              required
+              value={invoiceType}
+            >
+              <option disabled value="">
+                请选择发票类型
+              </option>
+              <option value="none">{INVOICE_TYPE_LABELS.none}</option>
+              <option value="ordinary">{INVOICE_TYPE_LABELS.ordinary}</option>
+              <option value="special">{INVOICE_TYPE_LABELS.special}</option>
+            </select>
+          </label>
+
+          {invoiceType !== "" && invoiceType !== "none" ? (
+            <>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="invoiceProfileId">
+                发票资料
+                <select
+                  className="field-input mt-2"
+                  disabled={disabled || matchingInvoiceProfiles.length === 0}
+                  id="invoiceProfileId"
+                  name="invoiceProfileId"
+                  onChange={(event) => setSelectedInvoiceProfileId(event.target.value)}
+                  required
+                  value={selectedInvoiceProfileId}
+                >
+                  {matchingInvoiceProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.title} / {profile.receiverContact}
+                      {profile.isDefault ? " / 默认资料" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {matchingInvoiceProfiles.length === 0 ? (
+                <p className="notice-warning mt-3 px-4 py-3 text-sm font-semibold">
+                  请先完善对应发票资料后再提交订单。
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
+          <dl className="surface-soft mt-4 grid gap-2 p-4 text-sm">
+            <SummaryItem
+              label="发票类型"
+              value={invoiceType ? INVOICE_TYPE_LABELS[invoiceType] : "请选择发票类型"}
+            />
+            {invoiceType !== "" && invoiceType !== "none" ? (
+              <SummaryItem label="票面税率" value={formatBpsPercent(INVOICE_FACE_TAX_RATE_BPS)} />
+            ) : null}
+            <SummaryItem highlight label="最终应付总价" value={payableWithInvoiceLabel} />
+          </dl>
+        </div>
 
         <div className="mt-5 border-t border-slate-200 pt-5">
           <div className="flex items-start justify-between gap-3">
@@ -1080,6 +1230,36 @@ export function QuoteForm({
           如需加急，请在备注中说明，加急可能产生额外费用。
         </p>
 
+        <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+          <Link className="text-coral" href="/legal/fdm-service">
+            定制制造服务条款
+          </Link>
+          <Link className="text-coral" href="/legal/refund-shipping">
+            售后物流规则
+          </Link>
+          <Link className="text-coral" href="/legal/ip-confidentiality">
+            知识产权与保密规则
+          </Link>
+          <Link className="text-coral" href="/legal/order-risk">
+            订单风险确认
+          </Link>
+        </div>
+
+        <label className="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6">
+          <input
+            checked={riskAccepted}
+            className="mt-1 size-4"
+            disabled={disabled}
+            name="riskAccepted"
+            onChange={(event) => setRiskAccepted(event.target.checked)}
+            required
+            type="checkbox"
+          />
+          <span>
+            我已阅读并确认下单风险、定制制造服务条款、售后退款物流规则和知识产权保密规则。
+          </span>
+        </label>
+
         {error ? (
           <p className="notice-warning mt-4 px-4 py-3 text-sm font-semibold">
             {error}
@@ -1088,7 +1268,7 @@ export function QuoteForm({
 
         <button
           className="btn-primary mt-5 w-full py-3"
-          disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled || !hasAddresses}
+          disabled={isSubmitting || isSubmitted || hasPendingQuotes || disabled || !hasAddresses || !riskAccepted}
           type="submit"
         >
           {isSubmitted
@@ -1478,6 +1658,7 @@ function buildOrderSummary(
     printFeeTotal,
     printFeeLabel: hasManualFile && hasSuccessfulQuote ? "当前自动报价小计" : "打印费用",
     shippingFeeLabel: allFilesQuoted ? shipping.label : "报价完成后计入",
+    payableCents: payable == null ? null : yuanToCents(payable),
     payableLabel,
     payableHint,
     leadTimeLabel,

@@ -2,7 +2,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { getCurrentCustomer } from "@/backend/nextCustomer";
-import { listCustomerAddresses, openDatabase, type CustomerAddressRecord } from "@/backend/database";
+import {
+  listCustomerAddresses,
+  listCustomerInvoiceProfiles,
+  openDatabase,
+  type CustomerAddressRecord,
+  type CustomerInvoiceProfileRecord,
+} from "@/backend/database";
 import { ContactSection } from "@/frontend/components/ContactSection";
 import { ContactSupportButton } from "@/frontend/components/ContactSupportButton";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
@@ -13,12 +19,14 @@ import { MATERIAL_GUIDANCE } from "@/shared/materialGuidance";
 export default async function QuotePage() {
   const customer = await getCurrentCustomer();
   let addresses: CustomerAddressRecord[] = [];
+  let invoiceProfiles: CustomerInvoiceProfileRecord[] = [];
 
   if (customer) {
     const db = openDatabase();
 
     try {
       addresses = listCustomerAddresses(db, customer.id);
+      invoiceProfiles = listCustomerInvoiceProfiles(db, customer.id);
     } finally {
       db.close();
     }
@@ -87,7 +95,12 @@ export default async function QuotePage() {
         </SmartStickyColumn>
 
         <div className="order-1 xl:order-2">
-          <QuoteForm addresses={addresses} customer={quoteCustomer} disabled={!customer} />
+          <QuoteForm
+            addresses={addresses}
+            customer={quoteCustomer}
+            disabled={!customer}
+            invoiceProfiles={invoiceProfiles}
+          />
         </div>
       </section>
       <ContactSection />

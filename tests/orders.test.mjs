@@ -11,9 +11,13 @@ import {
   confirmOrderFinalQuote,
   confirmOrderPayment,
   createCustomerAddress,
+  createCustomerInvoiceProfile,
+  createContentSha256,
   createOrderWithFile,
   createCustomerAccount,
+  createOrderEvidenceSnapshot,
   createOrderWithFiles,
+  createOrderRiskAcceptance,
   createSliceJob,
   deleteCustomerAddress,
   deleteQuoteDraftFile,
@@ -23,13 +27,18 @@ import {
   getOrderByIdForCustomer,
   getBeijingTimestamp,
   getLatestSliceJobByOrderId,
+  getLegalDocumentVersion,
   getPaymentSettings,
+  getOrderEvidenceSnapshotByOrderId,
   getSliceJobsByOrderId,
+  getOrderRiskAcceptanceByOrderId,
   initDatabase,
   listOrders,
   listCustomerAddresses,
+  listCustomerInvoiceProfiles,
   listOrdersByCustomerId,
   markActiveQuoteDraftSubmitted,
+  recordRequiredUserLegalAcceptances,
   setCustomerDefaultAddress,
   updateCustomerAddress,
   updateOrderStatus,
@@ -37,6 +46,7 @@ import {
   updateSliceJobFailure,
   updateSliceJobSuccess,
 } from "../src/backend/database.ts";
+import { INVOICE_PROFILE_LIMIT } from "../src/shared/invoice.ts";
 import { ORDER_STATUSES } from "../src/backend/orderStatus.ts";
 import {
   MAX_UPLOAD_BYTES,
@@ -48,25 +58,36 @@ import {
   consumeUploadRateLimit,
   resetUploadRateLimit,
 } from "../src/backend/rateLimit.ts";
+import {
+  LEGAL_PUBLIC_VERSION,
+  ORDER_RISK_CONFIRMATION_ITEMS,
+  ORDER_RISK_CONFIRMATION_VERSION,
+} from "../src/shared/legalPolicy.ts";
 
 test("initializes orders, files, slice_jobs, and payment settings tables", async () => {
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'order_payments', 'quote_drafts', 'quote_draft_files', 'customer_addresses') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'order_payments', 'quote_drafts', 'quote_draft_files', 'customer_addresses', 'customer_invoice_profiles', 'legal_documents', 'legal_document_versions', 'user_legal_acceptances', 'order_risk_acceptances', 'order_evidence_snapshots') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
 
   assert.deepEqual(tables, [
     "customer_addresses",
+    "customer_invoice_profiles",
     "files",
+    "legal_document_versions",
+    "legal_documents",
+    "order_evidence_snapshots",
     "order_payments",
+    "order_risk_acceptances",
     "orders",
     "payment_settings",
     "quote_draft_files",
     "quote_drafts",
     "slice_jobs",
+    "user_legal_acceptances",
   ]);
 
   const fileColumns = db.prepare("PRAGMA table_info(files)").all().map((row) => row.name);
@@ -120,6 +141,10 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "shipping_label",
     "shipping_address_snapshot",
     "shipping_remark",
+    "invoice_json",
+    "cancellation_policy_json",
+    "file_retention_json",
+    "company_snapshot_json",
     "print_fee_total",
     "payable_price",
     "estimated_lead_time_hours",
@@ -261,6 +286,106 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   ]) {
     assert.equal(addressColumns.includes(column), true);
   }
+
+  const invoiceProfileColumns = db
+    .prepare("PRAGMA table_info(customer_invoice_profiles)")
+    .all()
+    .map((row) => row.name);
+  for (const column of [
+    "customer_id",
+    "invoice_type",
+    "title",
+    "taxpayer_id",
+    "registered_address",
+    "registered_phone",
+    "bank_name",
+    "bank_account",
+    "receiver_contact",
+    "is_default",
+    "created_at",
+    "updated_at",
+  ]) {
+    assert.equal(invoiceProfileColumns.includes(column), true);
+  }
+
+  db.close();
+});
+
+test("seeds legal versions and records customer/order evidence acceptances", () => {
+  const db = initDatabase(":memory:");
+  const terms = getLegalDocumentVersion(db, "terms");
+  const privacy = getLegalDocumentVersion(db, "privacy");
+  assert.equal(terms.version, LEGAL_PUBLIC_VERSION);
+  assert.match(terms.contentSha256, /^[a-f0-9]{64}$/);
+  assert.equal(privacy.version, LEGAL_PUBLIC_VERSION);
+
+  const customer = createCustomerAccount(db, {
+    phone: "13810006001",
+    password: "password123",
+    name: "Legal User",
+    wechat: "legal-user",
+    email: "legal@example.com",
+  });
+  const acceptances = recordRequiredUserLegalAcceptances(db, customer.id, {
+    ipAddress: "127.0.0.1",
+    userAgent: "node-test",
+  });
+  assert.equal(acceptances.length, 2);
+  assert.deepEqual(
+    acceptances.map((record) => record.documentSlug).sort(),
+    ["privacy", "terms"],
+  );
+
+  const order = createOrderWithFile(db, {
+    customerId: customer.id,
+    customerName: "Legal User",
+    phone: "13810006001",
+    wechat: "legal-user",
+    material: "PLA",
+    color: "white",
+    quantity: 1,
+    estimatedPrice: 10,
+    file: {
+      filename: "legal.stl",
+      filepath: "/uploads/legal.stl",
+      filesize: 128,
+    },
+  });
+  const riskJson = JSON.stringify({
+    version: ORDER_RISK_CONFIRMATION_VERSION,
+    items: ORDER_RISK_CONFIRMATION_ITEMS,
+  });
+  const risk = createOrderRiskAcceptance(db, {
+    orderId: order.id,
+    customerId: customer.id,
+    version: ORDER_RISK_CONFIRMATION_VERSION,
+    contentJson: riskJson,
+    contentSha256: createContentSha256(riskJson),
+    ipAddress: "127.0.0.1",
+    userAgent: "node-test",
+  });
+  assert.equal(risk.version, ORDER_RISK_CONFIRMATION_VERSION);
+  assert.equal(getOrderRiskAcceptanceByOrderId(db, order.id)?.contentSha256, createContentSha256(riskJson));
+
+  const snapshotJson = JSON.stringify({
+    invoice_json: { invoice_type: "none" },
+    cancellation_policy_json: { policy_version: LEGAL_PUBLIC_VERSION },
+    file_retention_json: { retention_months: 6 },
+    company_snapshot_json: { unified_social_credit_code: "91610113MAEK6AUB19" },
+  });
+  createOrderEvidenceSnapshot(db, {
+    orderId: order.id,
+    customerId: customer.id,
+    snapshotJson,
+    snapshotSha256: createContentSha256(snapshotJson),
+    invoiceJson: JSON.stringify({ invoice_type: "none" }),
+    cancellationPolicyJson: JSON.stringify({ policy_version: LEGAL_PUBLIC_VERSION }),
+    fileRetentionJson: JSON.stringify({ retention_months: 6 }),
+    companySnapshotJson: JSON.stringify({ unified_social_credit_code: "91610113MAEK6AUB19" }),
+  });
+  const snapshot = getOrderEvidenceSnapshotByOrderId(db, order.id);
+  assert.equal(snapshot?.snapshotSha256, createContentSha256(snapshotJson));
+  assert.equal(JSON.parse(snapshot?.snapshotJson || "{}").file_retention_json.retention_months, 6);
 
   db.close();
 });
@@ -463,6 +588,57 @@ test("manages customer address book defaults, limits, and ownership", () => {
   db.close();
 });
 
+test("manages customer invoice profiles with special invoice fields and two-profile limit", () => {
+  const db = initDatabase(":memory:");
+  const customer = createCustomerAccount(db, {
+    phone: "13800002001",
+    password: "Password123",
+    name: "Invoice User",
+    wechat: "invoice-user",
+    email: "invoice@example.com",
+  });
+
+  const ordinary = createCustomerInvoiceProfile(db, customer.id, {
+    invoiceType: "ordinary",
+    title: "西安测试普通发票有限公司",
+    taxpayerId: "91610113MAEK6AUB19",
+    receiverContact: "invoice@example.com",
+  });
+  const special = createCustomerInvoiceProfile(db, customer.id, {
+    invoiceType: "special",
+    title: "西安测试专用发票有限公司",
+    taxpayerId: "91610113MAEK6AUB20",
+    registeredAddress: "陕西省西安市雁塔区小寨东路196号",
+    registeredPhone: "029-88888888",
+    bankName: "测试银行西安分行",
+    bankAccount: "6222000000000000000",
+    receiverContact: "13800002001",
+    isDefault: true,
+  });
+
+  assert.equal(INVOICE_PROFILE_LIMIT, 2);
+  assert.equal(listCustomerInvoiceProfiles(db, customer.id).length, 2);
+  assert.equal(special.invoiceType, "special");
+  assert.equal(special.registeredAddress, "陕西省西安市雁塔区小寨东路196号");
+  assert.equal(special.registeredPhone, "029-88888888");
+  assert.equal(special.bankName, "测试银行西安分行");
+  assert.equal(special.bankAccount, "6222000000000000000");
+  assert.equal(listCustomerInvoiceProfiles(db, customer.id).find((profile) => profile.isDefault)?.id, special.id);
+  assert.notEqual(ordinary.id, special.id);
+  assert.throws(
+    () =>
+      createCustomerInvoiceProfile(db, customer.id, {
+        invoiceType: "ordinary",
+        title: "第三条资料",
+        taxpayerId: "91610113MAEK6AUB21",
+        receiverContact: "third@example.com",
+      }),
+    /最多保存 2 条发票资料/,
+  );
+
+  db.close();
+});
+
 test("saves order shipping address snapshot independent of later address edits", () => {
   const db = initDatabase(":memory:");
   const customer = createCustomerAccount(db, {
@@ -544,6 +720,61 @@ test("saves order shipping address snapshot independent of later address edits",
   assert.equal(detail.shippingPostalCode, "710000");
   assert.equal(detail.shippingLabel, "公司");
   assert.match(detail.shippingAddressSnapshot || "", /科技二路 18 号 A 座/);
+
+  db.close();
+});
+
+test("order evidence snapshots include invoice, cancellation, file retention, and company data", () => {
+  const db = initDatabase(":memory:");
+  const order = createOrderWithFile(db, {
+    customerName: "Evidence User",
+    phone: "13800003001",
+    wechat: "evidence-user",
+    material: "PLA",
+    color: "white",
+    quantity: 1,
+    estimatedPrice: 103,
+    payablePrice: 103,
+    invoiceJson: JSON.stringify({
+      invoice_required: true,
+      invoice_type: "ordinary",
+      invoice_title: "西安测试普通发票有限公司",
+      taxpayer_id_masked_or_hash: "916***B19",
+      invoice_rate: 100,
+      invoice_price_adjustment_rate: 300,
+      invoice_base_amount_cents: 10000,
+      invoice_adjustment_amount_cents: 300,
+      invoice_total_amount_cents: 10300,
+      invoice_profile_snapshot: {
+        title: "西安测试普通发票有限公司",
+      },
+      selected_at: "2026-07-08 10:00:00",
+    }),
+    cancellationPolicyJson: JSON.stringify({
+      policy_version: "v1.0",
+      unpaid_cancel_rule: "未支付订单客户可取消，不产生打印费用。",
+    }),
+    fileRetentionJson: JSON.stringify({
+      retention_version: "v1.0",
+      retention_months: 6,
+      legal_hold_exception: true,
+    }),
+    companySnapshotJson: JSON.stringify({
+      company_name: "西安瑞淞增材技术有限公司",
+      unified_social_credit_code: "91610113MAEK6AUB19",
+    }),
+    file: {
+      filename: "evidence.stl",
+      filepath: "/uploads/evidence.stl",
+      filesize: 128,
+    },
+  });
+
+  const detail = getOrderById(db, order.id);
+  assert.equal(JSON.parse(detail.invoiceJson).invoice_total_amount_cents, 10300);
+  assert.equal(JSON.parse(detail.cancellationPolicyJson).policy_version, "v1.0");
+  assert.equal(JSON.parse(detail.fileRetentionJson).retention_months, 6);
+  assert.equal(JSON.parse(detail.companySnapshotJson).company_name, "西安瑞淞增材技术有限公司");
 
   db.close();
 });

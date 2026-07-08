@@ -87,6 +87,93 @@ test("global footer shows official company ICP filing information", async () => 
   assert.match(productionEnvExample, /NEXT_PUBLIC_ICP_BEIAN=陕ICP备2026016776号-1/);
 });
 
+test("legal v1.0 page is based on the v0.11 source package and shows company registration details", async () => {
+  await assertFileExists("docs/legal-source/V0.11/Make3D_协议与证据留存资料包_v0.11_法律风险修订稿.zip");
+  await Promise.all([
+    assertFileExists("src/app/legal/page.tsx"),
+    assertFileExists("src/app/legal/terms/page.tsx"),
+    assertFileExists("src/app/legal/privacy/page.tsx"),
+    assertFileExists("src/app/legal/fdm-service/page.tsx"),
+    assertFileExists("src/app/legal/refund-shipping/page.tsx"),
+    assertFileExists("src/app/legal/ip-confidentiality/page.tsx"),
+    assertFileExists("src/app/legal/order-risk/page.tsx"),
+  ]);
+  const legalPageSource = await readSource("src/app/legal/page.tsx");
+  const legalDocumentSource = await readSource("src/app/legal/LegalDocument.tsx");
+  const legalPolicySource = await readSource("src/shared/legalPolicy.ts");
+  const footerSource = await readSource("src/frontend/components/SiteFooter.tsx");
+  const registerSource = await readSource("src/app/account/register/page.tsx");
+  const quoteFormSource = await readSource("src/frontend/components/QuoteForm.tsx");
+
+  assert.match(legalPolicySource, /LEGAL_SOURCE_PACKAGE/);
+  assert.match(legalPolicySource, /LEGAL_DOCUMENT_PAGES/);
+  assert.match(legalPolicySource, /用户服务协议/);
+  assert.match(legalPolicySource, /隐私政策/);
+  assert.match(legalPolicySource, /定制制造服务条款及FDM工艺标准/);
+  assert.match(legalPolicySource, /Legal Hold/);
+  assert.match(legalPageSource, /LEGAL_PUBLIC_VERSION/);
+  assert.match(legalPageSource, /\/legal\/\$\{item\.slug\}/);
+  assert.match(legalDocumentSource, /getLegalDocumentPage/);
+  assert.match(legalPolicySource, /v1\.0/);
+  assert.match(legalPolicySource, /2026-07-08/);
+  assert.match(legalPolicySource, /陕西省西安市雁塔区小寨东路196号1幢11907室华博众创081号（集群）/);
+  assert.doesNotMatch(legalPageSource, /内部审阅稿|v0\.11|草案|待律师审阅|仅供内部参考/);
+  for (const href of [
+    "/legal/terms",
+    "/legal/privacy",
+    "/legal/fdm-service",
+    "/legal/refund-shipping",
+    "/legal/ip-confidentiality",
+    "/legal/order-risk",
+  ]) {
+    assert.match(footerSource, new RegExp(href.replace(/\//g, "\\/")));
+  }
+  assert.match(registerSource, /href="\/legal\/terms"/);
+  assert.match(registerSource, /href="\/legal\/privacy"/);
+  assert.match(registerSource, /href="\/legal\/order-risk"/);
+  assert.match(quoteFormSource, /href="\/legal\/fdm-service"/);
+  assert.match(quoteFormSource, /href="\/legal\/refund-shipping"/);
+  assert.match(quoteFormSource, /href="\/legal\/ip-confidentiality"/);
+  assert.match(quoteFormSource, /href="\/legal\/order-risk"/);
+});
+
+test("invoice UI hides public surcharge wording while showing invoice type and final payable total", async () => {
+  const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
+  const adminDetailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
+  const ordersApiSource = await readSource("src/app/api/orders/route.ts");
+  const registerFormSource = await readSource("src/frontend/components/RegisterForm.tsx");
+  const registerApiSource = await readSource("src/app/api/account/register/route.ts");
+
+  assert.doesNotMatch(formSource, /开票费|普通发票 \+3%|专票 \+7%|发票加收费|专票收费比例|普票加收比例/);
+  assert.doesNotMatch(formSource, /\+3%|\+7%/);
+  assert.match(formSource, /发票类型/);
+  assert.match(formSource, /票面税率/);
+  assert.match(formSource, /最终应付总价/);
+  assert.match(formSource, /INVOICE_TYPE_LABELS/);
+  assert.match(formSource, /useState<InvoiceSelection>\(""\)/);
+  assert.match(formSource, /请选择发票类型/);
+  assert.match(formSource, /formData\.set\("invoiceType", invoiceType\)/);
+  assert.match(formSource, /name="riskAccepted"/);
+  assert.match(formSource, /formData\.set\("riskAccepted", riskAccepted \? "true" : ""\)/);
+  assert.match(formSource, /invoiceType !== "" && invoiceType !== "none"/);
+  assert.match(ordersApiSource, /invoiceTypes\.includes/);
+  assert.match(ordersApiSource, /calculateInvoiceTotalCents/);
+  assert.match(ordersApiSource, /createOrderRiskAcceptance/);
+  assert.match(ordersApiSource, /createOrderEvidenceSnapshot/);
+  assert.match(ordersApiSource, /hashFileContent/);
+  assert.doesNotMatch(ordersApiSource, /invoiceTotalAmountCents.*getString/);
+  assert.match(registerFormSource, /name="acceptTerms"/);
+  assert.match(registerFormSource, /name="acceptPrivacy"/);
+  assert.match(registerApiSource, /recordRequiredUserLegalAcceptances/);
+  assert.match(adminDetailSource, /基础金额 = 打印费 \+ 配送费/);
+  assert.match(adminDetailSource, /发票方案调整比例/);
+  assert.match(adminDetailSource, /发票调整金额/);
+  assert.match(adminDetailSource, /最终应付金额/);
+  assert.match(adminDetailSource, /票面税率/);
+  assert.match(adminDetailSource, /getOrderRiskAcceptanceByOrderId/);
+  assert.match(adminDetailSource, /getOrderEvidenceSnapshotByOrderId/);
+});
+
 test("brand logo assets are generated and applied to public entry points", async () => {
   const layoutSource = await readSource("src/app/layout.tsx");
   const navSource = await readSource("src/frontend/components/CustomerAuthBar.tsx");
@@ -378,7 +465,7 @@ test("quote form supports disabled guest mode and customer prefill", async () =>
   assert.match(formSource, /SmartStickyColumn/);
   assert.match(formSource, /if \(disabled\) \{/);
   assert.match(formSource, /disabled={disabled}/);
-  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses \|\| !riskAccepted}/);
   assert.match(formSource, /defaultValue={customer\?\.name \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.phone \|\| ""}/);
   assert.match(formSource, /defaultValue={customer\?\.wechat \|\| ""}/);
@@ -469,7 +556,7 @@ test("quote form keeps upload, per-file options, safe dimensions, estimates, and
   assert.doesNotMatch(formSource, /整单计算报价/);
   assert.doesNotMatch(formSource, /calculateOrderQuote/);
   assert.doesNotMatch(formSource, /请先计算报价/);
-  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses}/);
+  assert.match(formSource, /disabled={isSubmitting \|\| isSubmitted \|\| hasPendingQuotes \|\| disabled \|\| !hasAddresses \|\| !riskAccepted}/);
   assert.match(formSource, /等待计算/);
   assert.match(formSource, /正在计算/);
   assert.match(formSource, /已完成/);

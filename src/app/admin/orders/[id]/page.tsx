@@ -3,8 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import {
   getBoundWechatAccountByCustomerId,
   getCustomerById,
+  getOrderEvidenceSnapshotByOrderId,
   getLatestWechatNotificationByOrderId,
   getOrderById,
+  getOrderRiskAcceptanceByOrderId,
   getOrderStatusLogsByOrderId,
   getSliceJobsByOrderId,
   listWechatNotificationsByOrderId,
@@ -30,6 +32,7 @@ import { CopyTextButton } from "@/frontend/components/CopyTextButton";
 import { SmartStickyColumn } from "@/frontend/components/SmartStickyColumn";
 import { StlModelPreview } from "@/frontend/components/StlModelPreview";
 import { formatBeijingDateTime } from "@/shared/dateTime";
+import { INVOICE_TYPE_LABELS, formatBpsPercent, formatCentsAsYuan } from "@/shared/invoice";
 
 export default async function AdminOrderDetailPage({
   params,
@@ -56,6 +59,10 @@ export default async function AdminOrderDetailPage({
     const quoteDefaultPrice = order.finalPrice ?? order.payablePrice ?? order.estimatedPrice ?? order.estimatedPriceMax;
     const quoteDefaultLeadTime =
       order.finalLeadTimeHours ?? order.estimatedLeadTimeHours ?? order.estimatedLeadTimeMaxHours;
+    const invoiceSnapshot = parseJsonRecord(order.invoiceJson);
+    const riskAcceptance = getOrderRiskAcceptanceByOrderId(db, order.id);
+    const evidenceSnapshot = getOrderEvidenceSnapshotByOrderId(db, order.id);
+    const evidenceSnapshotJson = parseJsonRecord(evidenceSnapshot?.snapshotJson || null);
 
     return (
       <div className="bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
@@ -113,6 +120,62 @@ export default async function AdminOrderDetailPage({
                 <Detail label="运费" value={formatMoney(order.shippingFee)} />
                 <Detail label="状态" value={order.status} />
               </dl>
+            </section>
+
+            <section className="surface-card p-4">
+              <h2 className="text-xl font-bold">发票与证据快照</h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <Detail
+                  label="基础金额 = 打印费 + 配送费"
+                  value={formatSnapshotCents(invoiceSnapshot.invoice_base_amount_cents)}
+                />
+                <Detail label="发票类型" value={formatInvoiceType(invoiceSnapshot.invoice_type)} />
+                <Detail
+                  label="发票方案调整比例"
+                  value={formatSnapshotBps(invoiceSnapshot.invoice_price_adjustment_rate)}
+                />
+                <Detail
+                  label="发票调整金额"
+                  value={formatSnapshotCents(invoiceSnapshot.invoice_adjustment_amount_cents)}
+                />
+                <Detail
+                  label="最终应付金额"
+                  value={formatSnapshotCents(invoiceSnapshot.invoice_total_amount_cents)}
+                />
+                <Detail label="票面税率" value={formatSnapshotBps(invoiceSnapshot.invoice_rate)} />
+                <Detail label="发票抬头" value={formatSnapshotString(invoiceSnapshot.invoice_title)} />
+                <Detail
+                  label="税号脱敏"
+                  value={formatSnapshotString(invoiceSnapshot.taxpayer_id_masked_or_hash)}
+                />
+                <Detail label="选择时间" value={formatSnapshotString(invoiceSnapshot.selected_at)} />
+                <Detail label="来源版本" value={formatSnapshotString(invoiceSnapshot.source_version)} />
+              </dl>
+              <pre className="mt-4 max-h-64 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">
+                {JSON.stringify(invoiceSnapshot.invoice_profile_snapshot || {}, null, 2)}
+              </pre>
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <h3 className="text-sm font-bold">下单风险确认</h3>
+                <dl className="mt-3 grid gap-3 text-sm">
+                  <Detail label="确认状态" value={riskAcceptance ? "已确认" : "-"} />
+                  <Detail label="确认版本" value={riskAcceptance?.version || "-"} />
+                  <Detail label="确认时间" value={formatOptionalDate(riskAcceptance?.acceptedAt || null)} />
+                  <Detail label="内容SHA-256" value={riskAcceptance?.contentSha256 || "-"} />
+                </dl>
+              </div>
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <h3 className="text-sm font-bold">订单证据快照</h3>
+                <dl className="mt-3 grid gap-3 text-sm">
+                  <Detail label="快照状态" value={evidenceSnapshot ? "已保存" : "-"} />
+                  <Detail label="快照时间" value={formatOptionalDate(evidenceSnapshot?.createdAt || null)} />
+                  <Detail label="快照SHA-256" value={evidenceSnapshot?.snapshotSha256 || "-"} />
+                  <Detail label="协议版本" value={formatSnapshotString(evidenceSnapshotJson.agreement_version)} />
+                  <Detail
+                    label="文件数量"
+                    value={Array.isArray(evidenceSnapshotJson.files) ? String(evidenceSnapshotJson.files.length) : "-"}
+                  />
+                </dl>
+              </div>
             </section>
 
             <section className="surface-card p-4">
@@ -698,6 +761,39 @@ function getFileDimensions(file: OrderFileRecord) {
 
 function formatMoney(value: number | null) {
   return value == null ? "-" : `¥${value.toFixed(2)}`;
+}
+
+function parseJsonRecord(value: string | null) {
+  if (!value) {
+    return {} as Record<string, unknown>;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function formatSnapshotString(value: unknown) {
+  return typeof value === "string" && value ? value : "-";
+}
+
+function formatSnapshotCents(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) ? formatCentsAsYuan(value) : "-";
+}
+
+function formatSnapshotBps(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) ? formatBpsPercent(value) : "-";
+}
+
+function formatInvoiceType(value: unknown) {
+  return typeof value === "string" && value in INVOICE_TYPE_LABELS
+    ? INVOICE_TYPE_LABELS[value as keyof typeof INVOICE_TYPE_LABELS]
+    : "-";
 }
 
 function formatPaymentStatus(value: string | null) {

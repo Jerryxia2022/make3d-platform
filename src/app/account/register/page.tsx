@@ -14,6 +14,21 @@ export default function RegisterPage() {
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Make3D 会员</p>
         <h1 className="mt-3 text-3xl font-bold">注册账号</h1>
         <RegisterForm />
+        <p className="mt-4 text-xs leading-5 text-graphite">
+          注册即表示你已阅读并同意
+          <Link className="font-semibold text-coral" href="/legal/terms">
+            用户服务协议
+          </Link>
+          、
+          <Link className="font-semibold text-coral" href="/legal/privacy">
+            隐私政策
+          </Link>
+          及
+          <Link className="font-semibold text-coral" href="/legal/order-risk">
+            订单风险确认规则
+          </Link>
+          。
+        </p>
         <Link className="mt-4 inline-block text-sm font-semibold text-coral" href="/account/login">
           已有账号，去登录
         </Link>

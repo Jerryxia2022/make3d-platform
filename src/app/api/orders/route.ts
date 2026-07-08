@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import {
+  createContentSha256,
+  createOrderEvidenceSnapshot,
   createOrderWithFiles,
+  createOrderRiskAcceptance,
   createSliceJob,
   getCustomerAddressByIdForCustomer,
+  getCustomerInvoiceProfileByIdForCustomer,
+  getBeijingTimestamp,
   getCustomerById,
   getOrderById,
   markActiveQuoteDraftSubmitted,
   openDatabase,
+  type OrderDetail,
   updateSliceJobSuccess,
 } from "@/backend/database";
 import {
@@ -24,6 +32,24 @@ import {
   type SavedUpload,
 } from "@/backend/uploads";
 import { isValidMainlandPhone, mainlandPhoneErrorMessage } from "@/shared/phoneValidation";
+import {
+  INVOICE_TYPE_LABELS,
+  calculateInvoiceTotalCents,
+  centsToYuan,
+  invoiceTypes,
+  maskTaxpayerId,
+  type InvoiceType,
+  yuanToCents,
+} from "@/shared/invoice";
+import {
+  CANCELLATION_POLICY_SNAPSHOT,
+  COMPANY_LEGAL_SNAPSHOT,
+  FILE_RETENTION_SNAPSHOT,
+  LEGAL_PUBLIC_VERSION,
+  LEGAL_SOURCE_VERSION,
+  ORDER_RISK_CONFIRMATION_ITEMS,
+  ORDER_RISK_CONFIRMATION_VERSION,
+} from "@/shared/legalPolicy";
 import { calculateLinePrintTotal, isSameMoney, roundMoney, safePositiveMoney } from "@/shared/pricing";
 
 export const runtime = "nodejs";
@@ -44,7 +70,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "请先登录后提交订单" }, { status: 401 });
     }
 
-    const rateLimit = consumeUploadRateLimit(getClientIp(request));
+    const clientIp = getClientIp(request);
+    const rateLimit = consumeUploadRateLimit(clientIp);
 
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -66,6 +93,10 @@ export async function POST(request: Request) {
         { error: `缺少必填字段：${missingField}` },
         { status: 400 },
       );
+    }
+
+    if (!isChecked(formData, "riskAccepted")) {
+      return NextResponse.json({ error: "请先确认下单风险、定制制造和售后规则" }, { status: 400 });
     }
 
     const phone = getString(formData, "phone");
@@ -224,6 +255,12 @@ export async function POST(request: Request) {
       (total, file) => total + (file.quantity || 1),
       0,
     );
+    const savedFileHashes = await Promise.all(
+      savedFilesWithPackaging.map(async (file) => ({
+        filepath: file.filepath,
+        sha256: await hashFileContent(file.filepath),
+      })),
+    );
     const db = openDatabase();
 
     try {
@@ -257,6 +294,55 @@ export async function POST(request: Request) {
         postalCode: shippingAddress.postalCode,
         label: shippingAddress.label,
       };
+      const rawInvoiceType = getString(formData, "invoiceType");
+
+      if (!invoiceTypes.includes(rawInvoiceType as InvoiceType)) {
+        return NextResponse.json({ error: "请先选择发票类型" }, { status: 400 });
+      }
+
+      const invoiceType = rawInvoiceType as InvoiceType;
+      const invoiceProfileId = getPositiveInteger(formData, "invoiceProfileId");
+      const invoiceProfile =
+        invoiceType === "none"
+          ? null
+          : getCustomerInvoiceProfileByIdForCustomer(db, customer.id, invoiceProfileId || 0);
+
+      if (invoiceProfile && invoiceProfile.invoiceType !== invoiceType) {
+        return NextResponse.json({ error: "请选择对应类型的发票资料" }, { status: 400 });
+      }
+
+      const baseAmountCents = yuanToCents(exactOrderPrice ?? autoPrintPrice + shippingAmount);
+      const invoiceCalculation = calculateInvoiceTotalCents(baseAmountCents, invoiceType);
+      const adjustedOrderPrice = centsToYuan(invoiceCalculation.invoiceTotalAmountCents);
+      const invoiceProfileSnapshot = invoiceProfile
+        ? {
+            id: invoiceProfile.id,
+            invoiceType: invoiceProfile.invoiceType,
+            title: invoiceProfile.title,
+            taxpayerIdMasked: maskTaxpayerId(invoiceProfile.taxpayerId),
+            registeredAddress: invoiceProfile.registeredAddress,
+            registeredPhone: invoiceProfile.registeredPhone,
+            bankName: invoiceProfile.bankName,
+            bankAccountMasked: maskTaxpayerId(invoiceProfile.bankAccount),
+            receiverContact: invoiceProfile.receiverContact,
+          }
+        : null;
+      const invoiceJson = {
+        invoice_required: invoiceCalculation.invoiceRequired,
+        invoice_type: invoiceType,
+        invoice_type_label: INVOICE_TYPE_LABELS[invoiceType],
+        invoice_title: invoiceProfile?.title || "",
+        taxpayer_id_masked_or_hash: maskTaxpayerId(invoiceProfile?.taxpayerId),
+        invoice_rate: invoiceCalculation.invoiceRateBps,
+        invoice_price_adjustment_rate: invoiceCalculation.invoicePriceAdjustmentBps,
+        invoice_base_amount_cents: invoiceCalculation.invoiceBaseAmountCents,
+        invoice_adjustment_amount_cents: invoiceCalculation.invoiceAdjustmentAmountCents,
+        invoice_total_amount_cents: invoiceCalculation.invoiceTotalAmountCents,
+        invoice_profile_snapshot: invoiceProfileSnapshot,
+        selected_at: getBeijingTimestamp(),
+        policy_version: LEGAL_PUBLIC_VERSION,
+        source_version: LEGAL_SOURCE_VERSION,
+      };
 
       const orderInput = {
         customerId: customer.id,
@@ -269,15 +355,15 @@ export async function POST(request: Request) {
         color: firstFile.color,
         quantity: totalQuantity,
         remark: getString(formData, "remark"),
-        estimatedPrice: exactOrderPrice ?? autoPrintPrice,
-        estimatedPriceMin: exactOrderPrice,
-        estimatedPriceMax: exactOrderPrice,
+        estimatedPrice: adjustedOrderPrice,
+        estimatedPriceMin: exactOrderPrice == null ? null : adjustedOrderPrice,
+        estimatedPriceMax: exactOrderPrice == null ? null : adjustedOrderPrice,
         estimatedLeadTimeMinHours: exactLeadTimeHours,
         estimatedLeadTimeMaxHours: exactLeadTimeHours,
         packagingFee: estimate.packagingFee,
         shippingFee: allFilesAutoQuoted ? shipping.amount : null,
         printFeeTotal: autoPrintPrice,
-        payablePrice: exactOrderPrice,
+        payablePrice: exactOrderPrice == null ? null : adjustedOrderPrice,
         estimatedLeadTimeHours: exactLeadTimeHours,
         shippingMethod: getString(formData, "shippingMethod"),
         shippingFeeEstimate: shipping.label,
@@ -301,10 +387,49 @@ export async function POST(request: Request) {
         shippingLabel: shippingAddress.label,
         shippingAddressSnapshot: JSON.stringify(addressSnapshot),
         shippingRemark: getString(formData, "shippingRemark"),
+        invoiceJson: JSON.stringify(invoiceJson),
+        cancellationPolicyJson: JSON.stringify(CANCELLATION_POLICY_SNAPSHOT),
+        fileRetentionJson: JSON.stringify(FILE_RETENTION_SNAPSHOT),
+        companySnapshotJson: JSON.stringify(COMPANY_LEGAL_SNAPSHOT),
         files: savedFilesWithPackaging,
       };
       const order = createOrderWithFiles(db, orderInput);
       const orderDetail = getOrderById(db, order.id);
+      const riskContentJson = JSON.stringify({
+        version: ORDER_RISK_CONFIRMATION_VERSION,
+        items: ORDER_RISK_CONFIRMATION_ITEMS,
+        legalVersion: LEGAL_PUBLIC_VERSION,
+      });
+
+      createOrderRiskAcceptance(db, {
+        orderId: order.id,
+        customerId: customer.id,
+        version: ORDER_RISK_CONFIRMATION_VERSION,
+        contentJson: riskContentJson,
+        contentSha256: createContentSha256(riskContentJson),
+        ipAddress: clientIp,
+        userAgent: request.headers.get("user-agent"),
+      });
+
+      const evidenceSnapshotJson = await buildOrderEvidenceSnapshotJson({
+        order: orderDetail,
+        invoiceJson,
+        cancellationPolicyJson: CANCELLATION_POLICY_SNAPSHOT,
+        fileRetentionJson: FILE_RETENTION_SNAPSHOT,
+        companySnapshotJson: COMPANY_LEGAL_SNAPSHOT,
+        riskContentJson,
+        fileHashes: savedFileHashes,
+      });
+      createOrderEvidenceSnapshot(db, {
+        orderId: order.id,
+        customerId: customer.id,
+        snapshotJson: evidenceSnapshotJson,
+        snapshotSha256: createContentSha256(evidenceSnapshotJson),
+        invoiceJson: JSON.stringify(invoiceJson),
+        cancellationPolicyJson: JSON.stringify(CANCELLATION_POLICY_SNAPSHOT),
+        fileRetentionJson: JSON.stringify(FILE_RETENTION_SNAPSHOT),
+        companySnapshotJson: JSON.stringify(COMPANY_LEGAL_SNAPSHOT),
+      });
 
       orderDetail.files.forEach((file, index) => {
         const sliceQuote = sliceQuotes[index];
@@ -357,6 +482,99 @@ export async function POST(request: Request) {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isChecked(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value === "on" || value === "true" || value === "1";
+}
+
+function parseJsonRecord(value: string | null) {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function hashFileContent(filepath: string) {
+  const buffer = await readFile(filepath);
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+async function buildOrderEvidenceSnapshotJson({
+  order,
+  invoiceJson,
+  cancellationPolicyJson,
+  fileRetentionJson,
+  companySnapshotJson,
+  riskContentJson,
+  fileHashes,
+}: {
+  order: OrderDetail;
+  invoiceJson: Record<string, unknown>;
+  cancellationPolicyJson: Record<string, unknown>;
+  fileRetentionJson: Record<string, unknown>;
+  companySnapshotJson: Record<string, unknown>;
+  riskContentJson: string;
+  fileHashes: Array<{ filepath: string; sha256: string }>;
+}) {
+  const hashByPath = new Map(fileHashes.map((file) => [file.filepath, file.sha256]));
+  const files = order.files.map((file) => ({
+    id: file.id,
+    filename: file.filename,
+    filesize: file.filesize,
+    file_sha256: hashByPath.get(file.filepath) || "",
+    material: file.material,
+    color: file.color,
+    quantity: file.quantity,
+    unit_price: file.unitPrice,
+    subtotal_price: file.subtotalPrice,
+    dimensions_mm: {
+      x: file.boundingBoxX,
+      y: file.boundingBoxY,
+      z: file.boundingBoxZ,
+    },
+    risk_notice: file.riskNotice,
+    risk_level: file.riskLevel,
+    requires_manual_confirmation: file.requiresManualConfirmation,
+  }));
+
+  return JSON.stringify({
+    snapshot_version: "order-evidence-v1",
+    created_at: getBeijingTimestamp(),
+    order: {
+      id: order.id,
+      order_no: order.orderNo,
+      customer_id: order.customerId,
+      status: order.status,
+      created_at: order.createdAt,
+    },
+    quote_amounts: {
+      estimated_price: order.estimatedPrice,
+      estimated_price_min: order.estimatedPriceMin,
+      estimated_price_max: order.estimatedPriceMax,
+      print_fee_total: order.printFeeTotal,
+      packaging_fee: order.packagingFee,
+      shipping_fee: order.shippingFee,
+      payable_price: order.payablePrice,
+    },
+    invoice_json: invoiceJson,
+    cancellation_policy_json: cancellationPolicyJson,
+    file_retention_json: fileRetentionJson,
+    company_snapshot_json: companySnapshotJson,
+    files,
+    address_snapshot: parseJsonRecord(order.shippingAddressSnapshot),
+    agreement_version: LEGAL_PUBLIC_VERSION,
+    legal_source_version: LEGAL_SOURCE_VERSION,
+    risk_confirmation_version: ORDER_RISK_CONFIRMATION_VERSION,
+    risk_confirmation_sha256: createContentSha256(riskContentJson),
+  });
 }
 
 function getPositiveInteger(formData: FormData, key: string) {

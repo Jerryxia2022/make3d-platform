@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import {
   getWechatAccountByCustomerId,
   listCustomerAddresses,
+  listCustomerInvoiceProfiles,
   listOrdersByCustomerId,
   openDatabase,
   type CustomerAddressRecord,
@@ -31,6 +32,7 @@ export default async function AccountPage() {
   try {
     const orders = listOrdersByCustomerId(db, customer.id);
     const addresses = listCustomerAddresses(db, customer.id);
+    const invoiceProfiles = listCustomerInvoiceProfiles(db, customer.id);
     const wechatAccount = getWechatAccountByCustomerId(db, customer.id);
     const activeBindCode =
       wechatAccount?.bindCode &&
@@ -75,6 +77,20 @@ export default async function AccountPage() {
               </Link>
             </div>
             <AddressSummary addresses={addresses} />
+          </section>
+
+          <section className="surface-card mt-5 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold">发票资料</h2>
+                <p className="mt-2 text-sm text-graphite">
+                  已保存 {invoiceProfiles.length}/2 条资料。提交订单时请选择发票类型和对应资料。
+                </p>
+              </div>
+              <Link className="btn-primary px-4 py-2" href="/account/invoices">
+                管理发票资料
+              </Link>
+            </div>
           </section>
 
           <WechatBindCard
