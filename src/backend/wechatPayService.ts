@@ -331,6 +331,7 @@ export async function queryWechatRefund(
     requestId: result.requestId,
     successAt: status === "success" ? result.data.success_time || refund.successAt || getBeijingTimestamp() : null,
   });
+  syncRefundsToPayment(db, refund.paymentId);
 
   return getWechatRefundByRefundNo(db, refundNo);
 }
@@ -956,6 +957,50 @@ function applyRefundToPayment(db: DatabaseSync, paymentId: number, amountCents: 
          updated_at = ?
      WHERE id = ?`,
   ).run(nextStatus, nextRefunded, nextStatus, nextRefunded, getBeijingTimestamp(), paymentId);
+}
+
+function syncRefundsToPayment(db: DatabaseSync, paymentId: number) {
+  const payment = db
+    .prepare("SELECT expected_amount_cents AS amountCents FROM order_payments WHERE id = ?")
+    .get(paymentId) as { amountCents: number } | undefined;
+  if (!payment) {
+    return;
+  }
+
+  const summary = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN status IN ('success', 'processing') THEN amount_cents ELSE 0 END), 0) AS refundableCents,
+         COALESCE(SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END), 0) AS processingCount
+       FROM wechat_refunds
+       WHERE payment_id = ?`,
+    )
+    .get(paymentId) as { refundableCents: number; processingCount: number } | undefined;
+  const refunded = Math.min(payment.amountCents, Number(summary?.refundableCents || 0));
+  const refundStatus =
+    Number(summary?.processingCount || 0) > 0
+      ? "refunding"
+      : refunded >= payment.amountCents
+        ? "refunded"
+        : refunded > 0
+          ? "partially_refunded"
+          : "none";
+  const paymentStatus =
+    refundStatus === "none"
+      ? "paid"
+      : refundStatus === "refunding"
+        ? "refunding"
+        : refundStatus;
+
+  db.prepare(
+    `UPDATE order_payments
+     SET status = ?,
+         refunded_amount_cents = ?,
+         refund_status = ?,
+         refund_amount_cents = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  ).run(paymentStatus, refunded, refundStatus, refunded || null, getBeijingTimestamp(), paymentId);
 }
 
 function buildCreatePaymentResponse(config: WechatPayConfig, payment: WechatPaymentRecord) {
