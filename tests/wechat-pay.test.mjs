@@ -12,6 +12,7 @@ import {
   isValidApiV3Key,
   verifyWechatPayHeaders,
   verifyWechatPaySignature,
+  WechatPayApiClient,
 } from "../src/backend/wechatPay.ts";
 import {
   confirmOrderFinalQuote,
@@ -120,6 +121,40 @@ test("wechat pay JSAPI params are RSA signed with prepay_id package", () => {
     ),
     true,
   );
+});
+
+test("wechat pay client requests identity response encoding for signature verification", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+  let observedHeaders;
+  const client = new WechatPayApiClient(
+    {
+      enabled: true,
+      testOnly: true,
+      jsapiAuthReady: true,
+      mchId: "1114987934",
+      appId: "wx8b173c450927acac",
+      merchantCertSerial: "ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+      publicKeyId: "PUB_KEY_ID_1234567890",
+      notifyUrl: "https://www.make3d.com.cn/api/payments/wechat/notify",
+      privateKeyPem,
+      merchantCertPem: "",
+      publicKeyPem,
+      apiV3Key: "Aa1234567890Bb1234567890Cc123456",
+      testCustomerIds: [5],
+    },
+    {
+      fetchImpl: async (_url, init) => {
+        observedHeaders = init.headers;
+        return new Response("", { status: 200 });
+      },
+    },
+  );
+
+  await client.closeByOutTradeNo("M3DPTEST");
+
+  assert.equal(observedHeaders["Accept-Encoding"], "identity");
 });
 
 test("wechat pay TEST_ONLY availability requires explicit test account whitelist", () => {

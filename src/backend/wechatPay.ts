@@ -617,6 +617,7 @@ export class WechatPayApiClient {
         method,
         headers: {
           Accept: "application/json",
+          "Accept-Encoding": "identity",
           Authorization: auth.authorization,
           "Content-Type": "application/json",
           "User-Agent": "Make3D-WechatPay/1.0",
@@ -628,7 +629,10 @@ export class WechatPayApiClient {
       const requestId = response.headers.get("Request-ID") || response.headers.get("Wechatpay-Request-Id");
 
       if (responseBody && !verifyWechatPayHeaders(this.config, response.headers, responseBody)) {
-        throw new Error("wechat pay response signature verification failed");
+        const serial = response.headers.get("Wechatpay-Serial") || "-";
+        throw new Error(
+          `wechat pay response signature verification failed (status ${response.status}, request ${requestId || "-"}, serial ${maskWechatIdentifier(serial)})`,
+        );
       }
 
       if (!response.ok) {
