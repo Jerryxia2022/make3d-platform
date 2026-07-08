@@ -370,16 +370,16 @@ export function buildWechatPayAuthorization(
 ) {
   const message = [method.toUpperCase(), canonicalUrl, timestamp, nonce, body].join("\n") + "\n";
   const signature = createWechatPaySignature(config.privateKeyPem, message);
+  const authorizationParameters = [
+    `mchid="${config.mchId}"`,
+    `nonce_str="${nonce}"`,
+    `signature="${signature}"`,
+    `timestamp="${timestamp}"`,
+    `serial_no="${config.merchantCertSerial}"`,
+  ].join(",");
 
   return {
-    authorization: [
-      "WECHATPAY2-SHA256-RSA2048",
-      `mchid="${config.mchId}"`,
-      `nonce_str="${nonce}"`,
-      `signature="${signature}"`,
-      `timestamp="${timestamp}"`,
-      `serial_no="${config.merchantCertSerial}"`,
-    ].join(" "),
+    authorization: `WECHATPAY2-SHA256-RSA2048 ${authorizationParameters}`,
     timestamp,
     nonce,
     signature,
@@ -627,12 +627,22 @@ export class WechatPayApiClient {
       });
       const responseBody = await response.text();
       const requestId = response.headers.get("Request-ID") || response.headers.get("Wechatpay-Request-Id");
+      const hasSignatureHeaders = Boolean(
+        response.headers.get("Wechatpay-Timestamp") &&
+          response.headers.get("Wechatpay-Nonce") &&
+          response.headers.get("Wechatpay-Signature") &&
+          response.headers.get("Wechatpay-Serial"),
+      );
 
-      if (responseBody && !verifyWechatPayHeaders(this.config, response.headers, responseBody)) {
+      if (responseBody && hasSignatureHeaders && !verifyWechatPayHeaders(this.config, response.headers, responseBody)) {
         const serial = response.headers.get("Wechatpay-Serial") || "-";
         throw new Error(
           `wechat pay response signature verification failed (status ${response.status}, request ${requestId || "-"}, serial ${maskWechatIdentifier(serial)})`,
         );
+      }
+
+      if (response.ok && responseBody && !hasSignatureHeaders) {
+        throw new Error(`wechat pay response signature headers missing (status ${response.status})`);
       }
 
       if (!response.ok) {

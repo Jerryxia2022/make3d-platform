@@ -43,6 +43,7 @@ test("wechat pay APIv3 signs authorization and verifies platform style headers",
 
   assert.match(auth.authorization, /^WECHATPAY2-SHA256-RSA2048 /);
   assert.match(auth.authorization, /mchid="1114987934"/);
+  assert.match(auth.authorization, /^WECHATPAY2-SHA256-RSA2048 mchid="1114987934",nonce_str="nonce-for-test",signature="[^"]+",timestamp="1718000000",serial_no="ABCDEF1234567890ABCDEF1234567890ABCDEF12"$/);
   assert.equal(
     verifyWechatPaySignature(
       publicKeyPem,
