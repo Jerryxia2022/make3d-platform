@@ -552,6 +552,50 @@ export type OrderFileRecord = {
   createdAt: string;
 };
 
+export const LOCAL_FILE_SYNC_STATUSES = [
+  "pending",
+  "locked",
+  "downloaded",
+  "verified",
+  "local_synced",
+  "failed",
+] as const;
+
+export type LocalFileSyncStatus = (typeof LOCAL_FILE_SYNC_STATUSES)[number];
+
+export type LocalFileSyncJobRecord = {
+  id: number;
+  fileId: number;
+  orderId: number;
+  customerId: number | null;
+  orderNo: string;
+  sourceType: string;
+  sourceVersion: string;
+  originalFilename: string;
+  storedFilename: string;
+  relativePath: string;
+  fileSizeBytes: number;
+  sha256: string | null;
+  syncStatus: LocalFileSyncStatus;
+  attemptCount: number;
+  workerId: string | null;
+  lockedAt: string | null;
+  localPath: string | null;
+  localSha256: string | null;
+  localSyncedAt: string | null;
+  lastError: string | null;
+  schemaVersion: number;
+  workerVersion: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LocalFileSyncJobWithFileRecord = LocalFileSyncJobRecord & {
+  sourceFilepath: string;
+  sourceFilename: string;
+  sourceFilesize: number;
+};
+
 export type OrderRecord = {
   id: number;
   orderNo: string;
@@ -1297,6 +1341,39 @@ export function initDatabase(dbPath = getDatabasePath()) {
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS local_file_sync_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_id INTEGER NOT NULL UNIQUE,
+      order_id INTEGER NOT NULL,
+      customer_id INTEGER,
+      order_no TEXT NOT NULL,
+      source_type TEXT NOT NULL DEFAULT 'order_file',
+      source_version TEXT NOT NULL DEFAULT 'upload_v1',
+      original_filename TEXT NOT NULL,
+      stored_filename TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      file_size_bytes INTEGER NOT NULL,
+      sha256 TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'pending',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      worker_id TEXT,
+      locked_at DATETIME,
+      local_path TEXT,
+      local_sha256 TEXT,
+      local_synced_at DATETIME,
+      last_error TEXT,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      worker_version TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE RESTRICT,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      CHECK (source_type IN ('order_file')),
+      CHECK (sync_status IN ('pending', 'locked', 'downloaded', 'verified', 'local_synced', 'failed')),
+      CHECK (attempt_count >= 0)
+    );
+
     CREATE TABLE IF NOT EXISTS slice_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
@@ -1750,6 +1827,23 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["unit_price", "REAL"],
     ["subtotal_price", "REAL"],
   ]);
+  ensureColumns(db, "local_file_sync_jobs", [
+    ["source_version", "TEXT NOT NULL DEFAULT 'upload_v1'"],
+    ["schema_version", "INTEGER NOT NULL DEFAULT 1"],
+    ["worker_version", "TEXT"],
+  ]);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_local_file_sync_jobs_file
+      ON local_file_sync_jobs(file_id);
+    CREATE INDEX IF NOT EXISTS idx_local_file_sync_jobs_pickup
+      ON local_file_sync_jobs(sync_status, locked_at, attempt_count, created_at);
+    CREATE INDEX IF NOT EXISTS idx_local_file_sync_jobs_order
+      ON local_file_sync_jobs(order_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_local_file_sync_jobs_worker
+      ON local_file_sync_jobs(worker_id, locked_at);
+    CREATE INDEX IF NOT EXISTS idx_local_file_sync_jobs_synced
+      ON local_file_sync_jobs(local_synced_at);
+  `);
   ensureColumns(db, "slice_jobs", [
     ["order_id", "INTEGER"],
     ["file_id", "INTEGER"],
@@ -2911,7 +3005,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
     );
 
     for (const file of input.files) {
-      insertFile.run(
+      const insertedFile = insertFile.run(
         orderId,
         file.filename,
         file.filepath,
@@ -2935,6 +3029,17 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         file.subtotalPrice ?? null,
         now,
       );
+      createLocalFileSyncJobForOrderFile(db, {
+        fileId: Number(insertedFile.lastInsertRowid),
+        orderId,
+        customerId: input.customerId ?? null,
+        orderNo,
+        originalFilename: file.filename,
+        storedFilename: file.filename,
+        relativePath: file.filename,
+        fileSizeBytes: file.filesize,
+        sourceVersion: "upload_v1",
+      });
     }
 
     db.exec("COMMIT");
@@ -3110,6 +3215,236 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
   }
 
   return normalizeFileRecord(file) as OrderFileRecord;
+}
+
+export function listPendingLocalFileSyncJobs(
+  db: DatabaseSync,
+  options: {
+    limit?: number;
+    maxAttempts?: number;
+    lockTimeoutMinutes?: number;
+  } = {},
+): LocalFileSyncJobRecord[] {
+  const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 5);
+  const lockTimeoutMinutes = Math.max(1, options.lockTimeoutMinutes ?? 15);
+
+  return db
+    .prepare(
+      localFileSyncJobSelectSql(
+        `WHERE sync_status = 'pending'
+            OR (
+              sync_status = 'locked'
+              AND locked_at < datetime('now', ?)
+            )
+            OR (
+              sync_status = 'failed'
+              AND attempt_count < ?
+            )
+         ORDER BY created_at ASC, id ASC
+         LIMIT ?`,
+      ),
+    )
+    .all(`-${lockTimeoutMinutes} minutes`, maxAttempts, limit)
+    .map(normalizeLocalFileSyncJobRecord) as LocalFileSyncJobRecord[];
+}
+
+export function getLocalFileSyncJobById(
+  db: DatabaseSync,
+  id: number,
+): LocalFileSyncJobRecord {
+  const job = db
+    .prepare(localFileSyncJobSelectSql("WHERE id = ?"))
+    .get(id);
+
+  if (!job) {
+    throw new Error("同步任务不存在");
+  }
+
+  return normalizeLocalFileSyncJobRecord(job);
+}
+
+export function getLocalFileSyncJobWithFileById(
+  db: DatabaseSync,
+  id: number,
+): LocalFileSyncJobWithFileRecord {
+  const job = db
+    .prepare(
+      `SELECT
+        local_file_sync_jobs.id,
+        local_file_sync_jobs.file_id AS fileId,
+        local_file_sync_jobs.order_id AS orderId,
+        local_file_sync_jobs.customer_id AS customerId,
+        local_file_sync_jobs.order_no AS orderNo,
+        local_file_sync_jobs.source_type AS sourceType,
+        local_file_sync_jobs.source_version AS sourceVersion,
+        local_file_sync_jobs.original_filename AS originalFilename,
+        local_file_sync_jobs.stored_filename AS storedFilename,
+        local_file_sync_jobs.relative_path AS relativePath,
+        local_file_sync_jobs.file_size_bytes AS fileSizeBytes,
+        local_file_sync_jobs.sha256,
+        local_file_sync_jobs.sync_status AS syncStatus,
+        local_file_sync_jobs.attempt_count AS attemptCount,
+        local_file_sync_jobs.worker_id AS workerId,
+        local_file_sync_jobs.locked_at AS lockedAt,
+        local_file_sync_jobs.local_path AS localPath,
+        local_file_sync_jobs.local_sha256 AS localSha256,
+        local_file_sync_jobs.local_synced_at AS localSyncedAt,
+        local_file_sync_jobs.last_error AS lastError,
+        local_file_sync_jobs.schema_version AS schemaVersion,
+        local_file_sync_jobs.worker_version AS workerVersion,
+        local_file_sync_jobs.created_at AS createdAt,
+        local_file_sync_jobs.updated_at AS updatedAt,
+        files.filepath AS sourceFilepath,
+        files.filename AS sourceFilename,
+        files.filesize AS sourceFilesize
+      FROM local_file_sync_jobs
+      JOIN files ON files.id = local_file_sync_jobs.file_id
+      WHERE local_file_sync_jobs.id = ?`,
+    )
+    .get(id);
+
+  if (!job) {
+    throw new Error("同步任务不存在");
+  }
+
+  return normalizeLocalFileSyncJobRecord(job) as LocalFileSyncJobWithFileRecord;
+}
+
+export function updateLocalFileSyncJobSha256(
+  db: DatabaseSync,
+  id: number,
+  sha256: string,
+) {
+  db.prepare(
+    `UPDATE local_file_sync_jobs
+     SET sha256 = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  ).run(sha256, getBeijingTimestamp(), id);
+}
+
+export function lockLocalFileSyncJob(
+  db: DatabaseSync,
+  input: {
+    id: number;
+    workerId: string;
+    workerVersion?: string | null;
+    maxAttempts?: number;
+    lockTimeoutMinutes?: number;
+  },
+): LocalFileSyncJobRecord | null {
+  const maxAttempts = Math.max(1, input.maxAttempts ?? 5);
+  const lockTimeoutMinutes = Math.max(1, input.lockTimeoutMinutes ?? 15);
+  const timestamp = getBeijingTimestamp();
+  const result = db
+    .prepare(
+      `UPDATE local_file_sync_jobs
+       SET sync_status = 'locked',
+           worker_id = ?,
+           worker_version = ?,
+           locked_at = ?,
+           attempt_count = attempt_count + 1,
+           last_error = NULL,
+           updated_at = ?
+       WHERE id = ?
+         AND (
+           sync_status = 'pending'
+           OR (
+             sync_status = 'locked'
+             AND locked_at < datetime('now', ?)
+           )
+           OR (
+             sync_status = 'failed'
+             AND attempt_count < ?
+           )
+         )`,
+    )
+    .run(
+      input.workerId,
+      normalizeOptionalText(input.workerVersion),
+      timestamp,
+      timestamp,
+      input.id,
+      `-${lockTimeoutMinutes} minutes`,
+      maxAttempts,
+    );
+
+  if (result.changes !== 1) {
+    return null;
+  }
+
+  return getLocalFileSyncJobById(db, input.id);
+}
+
+export function markLocalFileSyncJobDownloaded(
+  db: DatabaseSync,
+  id: number,
+  workerId: string,
+) {
+  const result = db.prepare(
+    `UPDATE local_file_sync_jobs
+     SET sync_status = 'downloaded',
+         updated_at = ?
+     WHERE id = ?
+       AND worker_id = ?
+       AND sync_status = 'locked'`,
+  ).run(getBeijingTimestamp(), id, workerId);
+
+  return result.changes === 1;
+}
+
+export function markLocalFileSyncJobVerified(
+  db: DatabaseSync,
+  input: {
+    id: number;
+    workerId: string;
+    localPath: string;
+    localSha256: string;
+  },
+) {
+  const timestamp = getBeijingTimestamp();
+  const result = db.prepare(
+    `UPDATE local_file_sync_jobs
+     SET sync_status = 'verified',
+         local_path = ?,
+         local_sha256 = ?,
+         updated_at = ?
+     WHERE id = ?
+       AND worker_id = ?
+       AND sync_status IN ('locked', 'downloaded')`,
+  ).run(input.localPath, input.localSha256, timestamp, input.id, input.workerId);
+
+  return result.changes === 1;
+}
+
+export function markLocalFileSyncJobFailed(
+  db: DatabaseSync,
+  input: {
+    id: number;
+    workerId?: string | null;
+    error: string;
+  },
+) {
+  const timestamp = getBeijingTimestamp();
+  const result = input.workerId
+    ? db.prepare(
+        `UPDATE local_file_sync_jobs
+         SET sync_status = 'failed',
+             last_error = ?,
+             updated_at = ?
+         WHERE id = ?
+           AND (worker_id = ? OR worker_id IS NULL)`,
+      ).run(input.error, timestamp, input.id, input.workerId)
+    : db.prepare(
+        `UPDATE local_file_sync_jobs
+         SET sync_status = 'failed',
+             last_error = ?,
+             updated_at = ?
+         WHERE id = ?`,
+      ).run(input.error, timestamp, input.id);
+
+  return result.changes === 1;
 }
 
 export function createServiceRequest(
@@ -5037,6 +5372,36 @@ function orderPaymentSelectSql(suffix: string) {
   ${suffix}`;
 }
 
+function localFileSyncJobSelectSql(suffix: string) {
+  return `SELECT
+    id,
+    file_id AS fileId,
+    order_id AS orderId,
+    customer_id AS customerId,
+    order_no AS orderNo,
+    source_type AS sourceType,
+    source_version AS sourceVersion,
+    original_filename AS originalFilename,
+    stored_filename AS storedFilename,
+    relative_path AS relativePath,
+    file_size_bytes AS fileSizeBytes,
+    sha256,
+    sync_status AS syncStatus,
+    attempt_count AS attemptCount,
+    worker_id AS workerId,
+    locked_at AS lockedAt,
+    local_path AS localPath,
+    local_sha256 AS localSha256,
+    local_synced_at AS localSyncedAt,
+    last_error AS lastError,
+    schema_version AS schemaVersion,
+    worker_version AS workerVersion,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM local_file_sync_jobs
+  ${suffix}`;
+}
+
 function customerServiceRequestSelectSql(suffix: string) {
   return `SELECT
     customer_service_requests.id,
@@ -5096,6 +5461,10 @@ function normalizeFileRecord(file: unknown) {
     ...record,
     requiresManualConfirmation: Boolean(record.requiresManualConfirmation),
   } as OrderFileRecord;
+}
+
+function normalizeLocalFileSyncJobRecord(job: unknown) {
+  return job as LocalFileSyncJobRecord;
 }
 
 function normalizeQuoteDraftRecord(draft: unknown) {
@@ -5417,6 +5786,48 @@ function migrateOrderPaymentMetadata(db: DatabaseSync) {
      SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
      WHERE updated_at IS NULL`,
   ).run();
+}
+
+function createLocalFileSyncJobForOrderFile(
+  db: DatabaseSync,
+  input: {
+    fileId: number;
+    orderId: number;
+    customerId: number | null;
+    orderNo: string;
+    originalFilename: string;
+    storedFilename: string;
+    relativePath: string;
+    fileSizeBytes: number;
+    sourceVersion: string;
+  },
+) {
+  db.prepare(
+    `INSERT OR IGNORE INTO local_file_sync_jobs (
+      file_id,
+      order_id,
+      customer_id,
+      order_no,
+      source_type,
+      source_version,
+      original_filename,
+      stored_filename,
+      relative_path,
+      file_size_bytes,
+      sync_status,
+      schema_version
+    ) VALUES (?, ?, ?, ?, 'order_file', ?, ?, ?, ?, ?, 'pending', 1)`,
+  ).run(
+    input.fileId,
+    input.orderId,
+    input.customerId,
+    input.orderNo,
+    input.sourceVersion,
+    input.originalFilename,
+    input.storedFilename,
+    input.relativePath,
+    input.fileSizeBytes,
+  );
 }
 
 function ensureColumns(

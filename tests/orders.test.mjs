@@ -68,7 +68,7 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
   const db = initDatabase(":memory:");
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'slice_jobs', 'payment_settings', 'order_payments', 'quote_drafts', 'quote_draft_files', 'customer_addresses', 'customer_invoice_profiles', 'legal_documents', 'legal_document_versions', 'user_legal_acceptances', 'order_risk_acceptances', 'order_evidence_snapshots') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('orders', 'files', 'local_file_sync_jobs', 'slice_jobs', 'payment_settings', 'order_payments', 'quote_drafts', 'quote_draft_files', 'customer_addresses', 'customer_invoice_profiles', 'legal_documents', 'legal_document_versions', 'user_legal_acceptances', 'order_risk_acceptances', 'order_evidence_snapshots') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
@@ -79,6 +79,7 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     "files",
     "legal_document_versions",
     "legal_documents",
+    "local_file_sync_jobs",
     "order_evidence_snapshots",
     "order_payments",
     "order_risk_acceptances",
@@ -308,7 +309,118 @@ test("initializes orders, files, slice_jobs, and payment settings tables", async
     assert.equal(invoiceProfileColumns.includes(column), true);
   }
 
+  const localFileSyncColumns = db
+    .prepare("PRAGMA table_info(local_file_sync_jobs)")
+    .all()
+    .map((row) => row.name);
+  for (const column of [
+    "file_id",
+    "order_id",
+    "customer_id",
+    "order_no",
+    "source_type",
+    "source_version",
+    "original_filename",
+    "stored_filename",
+    "relative_path",
+    "file_size_bytes",
+    "sha256",
+    "sync_status",
+    "attempt_count",
+    "worker_id",
+    "locked_at",
+    "local_path",
+    "local_sha256",
+    "local_synced_at",
+    "last_error",
+    "schema_version",
+    "worker_version",
+  ]) {
+    assert.equal(localFileSyncColumns.includes(column), true);
+  }
+
   db.close();
+});
+
+test("creates local file sync jobs for future order files without init backfill", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-local-sync-schema-"));
+  const dbPath = join(root, "orders.sqlite");
+
+  try {
+    let db = initDatabase(dbPath);
+    const order = createOrderWithFiles(db, {
+      customerId: null,
+      customerName: "Sync Customer",
+      phone: "13900008001",
+      wechat: "sync-customer",
+      material: "PLA",
+      color: "black",
+      quantity: 1,
+      estimatedPrice: 18,
+      files: [
+        {
+          filename: "sync-a.stl",
+          filepath: "uploads/sync-a.stl",
+          filesize: 123,
+          material: "PLA",
+          color: "black",
+        },
+        {
+          filename: "sync-b.stl",
+          filepath: "uploads/sync-b.stl",
+          filesize: 456,
+          material: "PLA",
+          color: "white",
+        },
+      ],
+    });
+
+    const jobs = db
+      .prepare(
+        `SELECT file_id, order_id, order_no, source_type, source_version, sync_status
+         FROM local_file_sync_jobs
+         ORDER BY id ASC`,
+      )
+      .all();
+    assert.equal(jobs.length, 2);
+    assert.deepEqual(
+      jobs.map((job) => ({
+        orderId: job.order_id,
+        orderNo: job.order_no,
+        sourceType: job.source_type,
+        sourceVersion: job.source_version,
+        syncStatus: job.sync_status,
+      })),
+      [
+        {
+          orderId: order.id,
+          orderNo: order.orderNo,
+          sourceType: "order_file",
+          sourceVersion: "upload_v1",
+          syncStatus: "pending",
+        },
+        {
+          orderId: order.id,
+          orderNo: order.orderNo,
+          sourceType: "order_file",
+          sourceVersion: "upload_v1",
+          syncStatus: "pending",
+        },
+      ],
+    );
+
+    db.prepare("DELETE FROM local_file_sync_jobs").run();
+    db.close();
+
+    db = initDatabase(dbPath);
+    const backfilledCount = db
+      .prepare("SELECT COUNT(*) AS count FROM local_file_sync_jobs")
+      .get().count;
+    assert.equal(backfilledCount, 0);
+    db.close();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("seeds legal versions and records customer/order evidence acceptances", () => {
