@@ -1,14 +1,16 @@
-# Phase05-J0 Release Candidate File List
+# Phase05-J-A Release Candidate File List
 
 Date: 2026-07-16
 
 ## Production Baseline
 
 - Production HEAD: `5566384c8f42778df834737b92d5886392acf093`
-- RC branch base: `5566384c8f42778df834737b92d5886392acf093`
-- RC branch: `codex/phase05-j0-rc`
+- Candidate branch base: `5566384c8f42778df834737b92d5886392acf093`
+- Candidate branch: `phase05-worker-slicing-candidate`
+- Candidate code commit before J-A report closeout: `9a5377e114bb7ac46fdea0c2e007d4fdf2c097d2`
+- Previous preparation branch: `codex/phase05-j0-rc`
 
-## Must Enter Phase05-J0 Release Commit
+## Must Enter Phase05-J-A Release Candidate
 
 Database/schema:
 
