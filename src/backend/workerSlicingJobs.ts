@@ -70,6 +70,9 @@ export type SlicingJobRecord = {
   sliceParamsJson: string;
   sliceParamsSha256: string;
   sliceCacheKeySha256: string;
+  orderNoSnapshot: string | null;
+  inputRelativePath: string;
+  inputSizeBytes: number;
   inputSha256: string;
   resultOrigin: "executed" | "metrics_cache";
   cacheReusedAtMs: number | null;
@@ -384,6 +387,7 @@ export function createSlicingJobForVerifiedFile(
     slicerPackageVersion: input.requiredSlicerPackageVersion,
   });
   const requiredParserVersion = normalizeRequiredText(input.requiredParserVersion, "required_parser_version");
+  const inputRelativePath = normalizeWorkerInputRelativePath(syncJob.relativePath);
   const identity = {
     fileSyncJobId: syncJob.id,
     sliceCacheKeySha256,
@@ -441,7 +445,7 @@ export function createSlicingJobForVerifiedFile(
       sliceParamsSha256,
       sliceCacheKeySha256,
       syncJob.storedFilename,
-      syncJob.localPath || syncJob.relativePath,
+      inputRelativePath,
       syncJob.fileSizeBytes,
       syncJob.localSha256,
       requiredParserVersion,
@@ -470,6 +474,21 @@ export function listPendingSlicingJobsForWorker(db: DatabaseSync, workerId: stri
     .prepare(
       `${slicingJobSelectSql()}
        WHERE input_worker_id = ?
+         AND EXISTS (
+           SELECT 1
+           FROM local_file_sync_jobs
+           WHERE local_file_sync_jobs.id = slicing_jobs.file_sync_job_id
+             AND local_file_sync_jobs.file_id = slicing_jobs.file_id
+             AND local_file_sync_jobs.sync_status = 'verified'
+             AND local_file_sync_jobs.worker_id = slicing_jobs.input_worker_id
+             AND local_file_sync_jobs.worker_id = ?
+             AND (
+               local_file_sync_jobs.relative_path = slicing_jobs.input_relative_path
+               OR local_file_sync_jobs.local_path LIKE '%' || slicing_jobs.input_relative_path
+             )
+             AND local_file_sync_jobs.file_size_bytes = slicing_jobs.input_size_bytes
+             AND local_file_sync_jobs.local_sha256 = slicing_jobs.input_sha256
+         )
          AND (
            status = 'pending'
            OR (
@@ -480,17 +499,22 @@ export function listPendingSlicingJobsForWorker(db: DatabaseSync, workerId: stri
          )
        ORDER BY created_at, id`,
     )
-    .all(normalizeRequiredText(workerId, "worker_id"), ...retryableCodes)
-    .map(normalizeSlicingJobRecord) as SlicingJobRecord[];
+    .all(normalizeRequiredText(workerId, "worker_id"), normalizeRequiredText(workerId, "worker_id"), ...retryableCodes)
+    .map(normalizeSlicingJobRecord)
+    .filter((job) => isWorkerInputRelativePathSafe(job.inputRelativePath)) as SlicingJobRecord[];
 }
 
 export function toPendingSlicingJobPayload(job: SlicingJobRecord) {
+  const inputRelativePath = normalizeWorkerInputRelativePath(job.inputRelativePath);
   return {
     job_id: job.id,
     file_id: job.fileId,
     file_sync_job_id: job.fileSyncJobId,
+    order_no: job.orderNoSnapshot,
     input_worker_id: job.inputWorkerId,
+    input_relative_path: inputRelativePath,
     input_sha256: job.inputSha256,
+    input_size_bytes: job.inputSizeBytes,
     profile_key: job.profileKey,
     profile_version: job.profileVersion,
     profile_sha256: job.profileSha256,
@@ -1230,7 +1254,7 @@ export function createMetricsCacheReuseJob(
     syncJob.orderNo,
     syncJob.workerId,
     syncJob.storedFilename,
-    syncJob.localPath || syncJob.relativePath,
+    normalizeWorkerInputRelativePath(syncJob.relativePath),
     syncJob.fileSizeBytes,
     syncJob.localSha256,
     nowMs,
@@ -1575,10 +1599,12 @@ function getVerifiedSyncJob(db: DatabaseSync, fileSyncJobId: number, fileId: num
   if (Number(job.fileId) !== Number(fileId)) throw new Error("file_id does not match sync job");
   if (job.syncStatus !== "verified") throw new Error("local file sync job is not verified");
   if (!job.workerId) throw new Error("verified sync job is missing worker_id");
+  if (!job.localPath) throw new Error("verified sync job is missing local_path");
   if (!job.localSha256) throw new Error("verified sync job is missing local_sha256");
 
   return {
     ...job,
+    relativePath: normalizeWorkerInputRelativePathFromSyncJob(job),
     localSha256: normalizeSha256(job.localSha256, "local_sha256"),
     workerId: normalizeRequiredText(job.workerId, "worker_id"),
   };
@@ -1590,6 +1616,7 @@ function slicingJobSelectSql() {
     file_id AS fileId,
     file_sync_job_id AS fileSyncJobId,
     source_slicing_job_id AS sourceSlicingJobId,
+    order_no_snapshot AS orderNoSnapshot,
     input_worker_id AS inputWorkerId,
     artifact_worker_id AS artifactWorkerId,
     worker_id AS workerId,
@@ -1613,6 +1640,8 @@ function slicingJobSelectSql() {
     slice_params_json AS sliceParamsJson,
     slice_params_sha256 AS sliceParamsSha256,
     slice_cache_key_sha256 AS sliceCacheKeySha256,
+    input_relative_path AS inputRelativePath,
+    input_size_bytes AS inputSizeBytes,
     input_sha256 AS inputSha256,
     result_origin AS resultOrigin,
     cache_reused_at_ms AS cacheReusedAtMs,
@@ -1690,6 +1719,44 @@ function normalizeRequiredText(value: string, fieldName: string) {
   const normalized = String(value || "").trim();
   if (!normalized) throw new Error(`${fieldName} is required`);
   return normalized;
+}
+
+export function isWorkerInputRelativePathSafe(value: unknown) {
+  try {
+    normalizeWorkerInputRelativePath(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeWorkerInputRelativePath(value: unknown) {
+  const normalized = normalizeRequiredText(String(value || ""), "input_relative_path");
+  if (normalized.includes("\0")) throw new Error("input_relative_path must not contain null bytes");
+  if (normalized.includes("\\")) throw new Error("input_relative_path must not contain backslashes");
+  if (normalized.includes("%")) throw new Error("input_relative_path must not contain URL encoding");
+  if (normalized.startsWith("/") || normalized.startsWith("//") || /^[A-Za-z]:[\\/]/.test(normalized)) {
+    throw new Error("input_relative_path must be relative");
+  }
+  const parts = normalized.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) {
+    throw new Error("input_relative_path contains unsafe path segments");
+  }
+  return normalized;
+}
+
+function normalizeWorkerInputRelativePathFromSyncJob(job: { relativePath: string; localPath: string | null }) {
+  if (isWorkerInputRelativePathSafe(job.relativePath) && String(job.relativePath).startsWith("files/")) {
+    return normalizeWorkerInputRelativePath(job.relativePath);
+  }
+
+  const localPath = String(job.localPath || "").trim().replace(/\\/g, "/");
+  const productionRootPrefix = "/srv/make3d-worker/";
+  if (localPath.startsWith(productionRootPrefix)) {
+    return normalizeWorkerInputRelativePath(localPath.slice(productionRootPrefix.length));
+  }
+
+  return normalizeWorkerInputRelativePath(job.relativePath);
 }
 
 function normalizeNonNegativeInteger(value: number, fieldName: string) {

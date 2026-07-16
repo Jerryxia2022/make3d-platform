@@ -895,6 +895,7 @@ function createVerifiedSyncFixture(db, options = {}) {
     `UPDATE local_file_sync_jobs
      SET sync_status = ?,
          worker_id = ?,
+         relative_path = ?,
          local_path = ?,
          local_sha256 = ?,
          local_synced_at = CURRENT_TIMESTAMP,
@@ -903,6 +904,7 @@ function createVerifiedSyncFixture(db, options = {}) {
   ).run(
     options.syncStatus || "verified",
     options.workerId || "worker-a",
+    `files/${order.orderNo}/${file.id}-${fileName}`,
     `/srv/make3d-worker/files/${order.orderNo}/${file.id}-${fileName}`,
     options.sha || SHA_A,
     sync.id,

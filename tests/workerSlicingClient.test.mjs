@@ -150,7 +150,20 @@ test("spawn wrapper uses argument arrays and forbids shell mode", async () => {
 
 test("local path mapping and artifact mapping stay inside integration root", async () => {
   const root = await mkdtemp(join(tmpdir(), "make3d-paths-"));
-  assert.equal(mapInputPath(root, { file_id: 5 }), join(root, "files", "5-synthetic-cube.stl"));
+  assert.equal(mapInputPath(root, { file_id: 5, input_relative_path: "files/model.stl" }), join(root, "files", "model.stl"));
+  assert.throws(() => mapInputPath(root, { file_id: 5 }), /input_relative_path is required/);
+  assert.equal(
+    mapInputPath(root, { file_id: 5 }, { integrationTestMode: true, serverUrl: "http://127.0.0.1:3100" }),
+    join(root, "files", "5-synthetic-cube.stl"),
+  );
+  assert.equal(
+    mapInputPath(root, { file_id: 6 }, { integrationTestMode: true, serverUrl: "http://localhost:3100" }),
+    join(root, "files", "6-synthetic-cube.stl"),
+  );
+  assert.throws(() => mapInputPath(root, { file_id: 5 }, { integrationTestMode: true, serverUrl: "https://make3d.com.cn" }), /input_relative_path is required/);
+  for (const bad of ["../model.stl", "files\\model.stl", "files/%2e%2e/model.stl", "/srv/make3d-worker/files/model.stl", "files//model.stl"]) {
+    assert.throws(() => mapInputPath(root, { file_id: 5, input_relative_path: bad }), /input_relative_path/);
+  }
   assert.throws(() => assertInsideRoot(root, join(root, "..", "files", "customer.stl")), /escapes/);
   assert.throws(() => resolveArtifactPaths(root, 9), /attempt_no/);
   const attemptPaths = resolveArtifactPaths(root, 9, 2);
@@ -167,12 +180,67 @@ test("local input verification checks file size and SHA", async () => {
     const inputPath = join(root, "files", "11-synthetic-cube.stl");
     await writeFile(inputPath, "solid cube\nendsolid cube\n");
     const sha = sha256String("solid cube\nendsolid cube\n");
-    const input = await verifyLocalInput({ rootDir: root }, { file_id: 11, input_sha256: sha });
+    const input = await verifyLocalInput({ rootDir: root }, { file_id: 11, input_relative_path: "files/11-synthetic-cube.stl", input_size_bytes: 25, input_sha256: sha });
     assert.equal(input.sha256, sha);
     assert.equal(input.sizeBytes, 25);
-    await assert.rejects(() => verifyLocalInput({ rootDir: root }, { file_id: 11, input_sha256: SHA_A }), /SHA mismatch/);
+    await assert.rejects(
+      () => verifyLocalInput({ rootDir: root }, { file_id: 11, input_relative_path: "files/11-synthetic-cube.stl", input_size_bytes: 26, input_sha256: sha }),
+      /size mismatch/,
+    );
+    await assert.rejects(
+      () => verifyLocalInput({ rootDir: root }, { file_id: 11, input_relative_path: "files/11-synthetic-cube.stl", input_size_bytes: 25, input_sha256: SHA_A }),
+      /SHA mismatch/,
+    );
+    await assert.rejects(
+      () => verifyLocalInput({ rootDir: root }, { file_id: 11, input_relative_path: "files/missing.stl", input_size_bytes: 25, input_sha256: sha }),
+      /input file is missing/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("runOnce reports failed when formal input path contract cannot be verified", async () => {
+  const cases = [
+    ["missing-path", {}],
+    ["missing-file", { input_relative_path: "files/missing.stl", input_size_bytes: 25 }],
+    ["wrong-size", { input_relative_path: "files/21-synthetic-cube.stl", input_size_bytes: 26 }],
+    ["wrong-sha", { input_relative_path: "files/21-synthetic-cube.stl", input_size_bytes: 25, input_sha256: SHA_A }],
+  ];
+
+  for (const [label, mutation] of cases) {
+    const root = await mkdtemp(join(tmpdir(), `make3d-input-${label}-`));
+    const requests = [];
+    try {
+      await mkdir(join(root, "files"), { recursive: true });
+      await writeFile(join(root, "files", "21-synthetic-cube.stl"), "solid cube\nendsolid cube\n");
+      const job = pendingJobFixture({ jobId: 21, inputSha: sha256String("solid cube\nendsolid cube\n") });
+      if (label === "missing-path") delete job.input_relative_path;
+      Object.assign(job, mutation);
+      const config = mockConfig(
+        [
+          { jobs: [job] },
+          {
+            job_id: 21,
+            attempt_no: 1,
+            lock_owner: "123e4567-e89b-42d3-a456-426614174000",
+            lease_renewed_at_ms: 1000,
+            lease_expires_at_ms: 121000,
+            resume_from: null,
+          },
+          { job_id: 21, status: "failed" },
+        ],
+        requests,
+      );
+      config.rootDir = root;
+      const result = await runOnce(config);
+      assert.equal(result.status, "failed", label);
+      assert.ok(requests.some((request) => request.url.pathname.endsWith("/failed")), label);
+      const failedRequest = requests.find((request) => request.url.pathname.endsWith("/failed"));
+      assert.equal(JSON.parse(failedRequest.init.body).error_code, "WORKER_IO_ERROR");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   }
 });
 
@@ -415,6 +483,8 @@ function pendingJobFixture({ jobId = 3, inputSha, profileSha, resumeFrom = null 
     file_id: jobId,
     file_sync_job_id: jobId,
     input_worker_id: "wsl-worker-01",
+    input_relative_path: `files/${jobId}-synthetic-cube.stl`,
+    input_size_bytes: 25,
     input_sha256: inputSha || sha256String("solid cube\nendsolid cube\n"),
     profile_key: "bambu-p1s",
     profile_version: "phase05-b",

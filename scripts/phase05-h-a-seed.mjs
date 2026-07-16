@@ -42,6 +42,7 @@ try {
   });
 
   const file = db.prepare("SELECT id, filename FROM files WHERE order_id = ? ORDER BY id DESC LIMIT 1").get(order.id);
+  const inputRelativePath = `files/${file.id}-synthetic-cube.stl`;
   const localPath = join(filesDir, `${file.id}-synthetic-cube.stl`);
   await copyFile(sourceStl, localPath);
   const localSha = await sha256File(localPath);
@@ -52,12 +53,13 @@ try {
     `UPDATE local_file_sync_jobs
      SET sync_status = 'verified',
          worker_id = ?,
+         relative_path = ?,
          local_path = ?,
          local_sha256 = ?,
          local_synced_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
-  ).run(workerId, localPath, localSha, sync.id);
+  ).run(workerId, inputRelativePath, localPath, localSha, sync.id);
 
   const slicing = createSlicingJobForVerifiedFile(db, {
     fileSyncJobId: sync.id,

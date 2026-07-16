@@ -226,11 +226,18 @@ function createSyntheticSlicingJob(db) {
     `UPDATE local_file_sync_jobs
      SET sync_status = 'verified',
          worker_id = ?,
+         relative_path = ?,
          local_path = ?,
          local_sha256 = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
-  ).run(WORKER_ID, `/srv/make3d-worker/test-integration/phase05-h-b/files/${file.id}-synthetic-cube.stl`, SHA_A, sync.id);
+  ).run(
+    WORKER_ID,
+    `files/${file.id}-synthetic-cube.stl`,
+    `/srv/make3d-worker/test-integration/phase05-h-b/files/${file.id}-synthetic-cube.stl`,
+    SHA_A,
+    sync.id,
+  );
 
   return createSlicingJobForVerifiedFile(db, {
     fileSyncJobId: sync.id,

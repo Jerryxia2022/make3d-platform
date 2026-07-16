@@ -447,6 +447,8 @@ function pendingJob({ jobId, inputSha, profileSha, resumeFrom }) {
     file_id: jobId,
     file_sync_job_id: jobId,
     input_worker_id: "wsl-worker-01",
+    input_relative_path: `files/${jobId}-synthetic-cube.stl`,
+    input_size_bytes: 25,
     input_sha256: inputSha,
     profile_key: "bambu-p1s",
     profile_version: "phase05-b",

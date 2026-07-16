@@ -322,13 +322,23 @@ export function buildResultPayload(lockOwner, job, parsed) {
 }
 
 export async function verifyLocalInput(config, job) {
-  const sourcePath = mapInputPath(config.rootDir, job);
-  await access(sourcePath);
+  const sourcePath = mapInputPath(config.rootDir, job, {
+    integrationTestMode: config.integrationTestMode,
+    serverUrl: config.serverUrl,
+  });
+  try {
+    await access(sourcePath);
+  } catch {
+    throwWorkerIo("input file is missing");
+  }
   const info = await stat(sourcePath);
-  if (!info.isFile()) throw new Error("input is not a file");
-  if (info.size <= 0) throw new Error("input file is empty");
+  if (!info.isFile()) throwWorkerIo("input is not a file");
+  if (info.size <= 0) throwWorkerIo("input file is empty");
+  const expectedSize = Number(job.input_size_bytes);
+  if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) throwWorkerIo("input_size_bytes is invalid");
+  if (info.size !== expectedSize) throwWorkerIo("input file size mismatch");
   const sha256 = await sha256File(sourcePath);
-  if (sha256 !== String(job.input_sha256 || "").toLowerCase()) throw new Error("input SHA mismatch");
+  if (sha256 !== String(job.input_sha256 || "").toLowerCase()) throwWorkerIo("input SHA mismatch");
   return { path: sourcePath, sizeBytes: info.size, sha256 };
 }
 
@@ -521,10 +531,47 @@ export function resolveArtifactPaths(rootDir, jobId, attemptNo) {
   };
 }
 
-export function mapInputPath(rootDir, job) {
-  const candidate = job.local_path || job.input_local_path || job.input_relative_path || `files/${job.file_id}-synthetic-cube.stl`;
-  if (isAbsolute(String(candidate))) return assertInsideRoot(rootDir, candidate);
-  return assertInsideRoot(rootDir, join(rootDir, candidate));
+export function mapInputPath(rootDir, job, options = {}) {
+  const relativePath = normalizeInputRelativePath(job.input_relative_path, job, options);
+  return assertInsideRoot(rootDir, join(rootDir, relativePath));
+}
+
+function normalizeInputRelativePath(value, job, options) {
+  let candidate = String(value || "").trim();
+  if (!candidate) {
+    if (!isLocalIntegrationFallbackAllowed(options)) {
+      throwWorkerIo("input_relative_path is required");
+    }
+    candidate = `files/${requirePositiveInteger(job.file_id, "file_id")}-synthetic-cube.stl`;
+  }
+
+  if (candidate.includes("\0")) throwWorkerIo("input_relative_path contains null bytes");
+  if (candidate.includes("\\")) throwWorkerIo("input_relative_path contains backslashes");
+  if (candidate.includes("%")) throwWorkerIo("input_relative_path contains URL encoding");
+  if (candidate.startsWith("/") || candidate.startsWith("//") || /^[A-Za-z]:[\\/]/.test(candidate) || isAbsolute(candidate)) {
+    throwWorkerIo("input_relative_path must be relative");
+  }
+  const parts = candidate.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) {
+    throwWorkerIo("input_relative_path contains unsafe path segments");
+  }
+  return candidate;
+}
+
+function isLocalIntegrationFallbackAllowed(options) {
+  if (!options?.integrationTestMode) return false;
+  try {
+    const url = new URL(String(options.serverUrl || ""));
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+function throwWorkerIo(message) {
+  const error = new Error(message);
+  error.workerErrorCode = "WORKER_IO_ERROR";
+  throw error;
 }
 
 export function startLeaseHeartbeat(config, context, intervalMs = LEASE_INTERVAL_MS, monotonic = performance) {

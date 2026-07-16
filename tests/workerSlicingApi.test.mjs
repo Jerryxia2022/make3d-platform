@@ -55,6 +55,49 @@ test("slicing API authentication, job id, lock body, and response cache policy",
   });
 });
 
+test("pending route returns only safe verified worker input paths", async () => {
+  await withFixture(async ({ dbPath, jobId, url }) => {
+    const response = await pendingGET(workerRequest(`${url}/pending`));
+    assert.equal(response.status, 200);
+    const [job] = (await response.json()).jobs;
+    assert.equal(job.job_id, jobId);
+    assert.equal(job.order_no.startsWith("M3D"), true);
+    assert.equal(job.input_relative_path, "files/model.stl");
+    assert.equal(job.input_size_bytes, 123);
+    assert.equal(job.input_sha256, SHA_A);
+    assert.doesNotMatch(job.input_relative_path, /^[A-Za-z]:|^\/|\\|\.\.|%/);
+    assert.equal(JSON.stringify(job).includes("/srv/make3d-worker"), false);
+
+    const db = initDatabase(dbPath);
+    try {
+      db.prepare("UPDATE local_file_sync_jobs SET sync_status = 'pending' WHERE file_id = ?").run(job.file_id);
+      let filtered = await pendingGET(workerRequest(`${url}/pending`));
+      assert.deepEqual((await filtered.json()).jobs, []);
+
+      db.prepare("UPDATE local_file_sync_jobs SET sync_status = 'verified', worker_id = 'worker-b' WHERE file_id = ?").run(job.file_id);
+      filtered = await pendingGET(workerRequest(`${url}/pending`));
+      assert.deepEqual((await filtered.json()).jobs, []);
+
+      db.prepare("UPDATE local_file_sync_jobs SET worker_id = ?, relative_path = ? WHERE file_id = ?").run(WORKER_ID, "../model.stl", job.file_id);
+      db.prepare("UPDATE slicing_jobs SET input_relative_path = ? WHERE id = ?").run("../model.stl", jobId);
+      filtered = await pendingGET(workerRequest(`${url}/pending`));
+      assert.deepEqual((await filtered.json()).jobs, []);
+
+      db.prepare("UPDATE local_file_sync_jobs SET relative_path = ? WHERE file_id = ?").run("files/%2e%2e/model.stl", job.file_id);
+      db.prepare("UPDATE slicing_jobs SET input_relative_path = ? WHERE id = ?").run("files/%2e%2e/model.stl", jobId);
+      filtered = await pendingGET(workerRequest(`${url}/pending`));
+      assert.deepEqual((await filtered.json()).jobs, []);
+
+      db.prepare("UPDATE local_file_sync_jobs SET relative_path = ? WHERE file_id = ?").run("/srv/make3d-worker/files/model.stl", job.file_id);
+      db.prepare("UPDATE slicing_jobs SET input_relative_path = ? WHERE id = ?").run("/srv/make3d-worker/files/model.stl", jobId);
+      filtered = await pendingGET(workerRequest(`${url}/pending`));
+      assert.deepEqual((await filtered.json()).jobs, []);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 test("slicing API runs normal flow with real parser payload and preserves null metrics", async () => {
   await withFixture(async ({ dbPath, jobId, url }) => {
     const lockBody = await (await lockPOST(workerRequest(`${url}/${jobId}/lock`, { method: "POST" }), params(jobId))).json();
@@ -766,16 +809,18 @@ async function withFixture(run) {
       file: { filename: "model.stl", filepath: "uploads/model.stl", filesize: 123 },
     });
     const file = db.prepare("SELECT id FROM files WHERE order_id = ?").get(order.id);
+    const sourceRelativePath = "uploads/model.stl";
     const sync = db.prepare("SELECT id FROM local_file_sync_jobs WHERE file_id = ?").get(file.id);
     db.prepare(
       `UPDATE local_file_sync_jobs
        SET sync_status = 'verified',
            worker_id = ?,
+           relative_path = ?,
            local_path = ?,
            local_sha256 = ?,
            local_synced_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-    ).run(WORKER_ID, "/srv/make3d-worker/files/model.stl", SHA_A, sync.id);
+    ).run(WORKER_ID, sourceRelativePath, "/srv/make3d-worker/files/model.stl", SHA_A, sync.id);
     const created = createSlicingJobForVerifiedFile(db, {
       fileSyncJobId: sync.id,
       fileId: file.id,
@@ -830,16 +875,18 @@ function createExtraSlicingJob(dbPath, options = {}) {
       file: { filename: fileName, filepath: `uploads/${fileName}`, filesize: 123 },
     });
     const file = db.prepare("SELECT id FROM files WHERE order_id = ?").get(order.id);
+    const sourceRelativePath = `uploads/${fileName}`;
     const sync = db.prepare("SELECT id FROM local_file_sync_jobs WHERE file_id = ?").get(file.id);
     db.prepare(
       `UPDATE local_file_sync_jobs
        SET sync_status = 'verified',
            worker_id = ?,
+           relative_path = ?,
            local_path = ?,
            local_sha256 = ?,
            local_synced_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-    ).run(options.workerId || WORKER_ID, `/srv/make3d-worker/files/${fileName}`, sha, sync.id);
+    ).run(options.workerId || WORKER_ID, sourceRelativePath, `/srv/make3d-worker/files/${fileName}`, sha, sync.id);
     return createSlicingJobForVerifiedFile(db, {
       fileSyncJobId: sync.id,
       fileId: file.id,
