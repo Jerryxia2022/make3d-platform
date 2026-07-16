@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "backup": "bash scripts/backup.sh",
+    "report:phase": "node scripts/create-phase-report.mjs",
     "wechat:menu": "node scripts/wechat-menu.mjs",
     "payments:reconcile-wechat": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/reconcile-wechat-payments.mjs",
     "test": "node --experimental-strip-types --experimental-specifier-resolution=node --test"

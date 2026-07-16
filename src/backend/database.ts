@@ -1374,6 +1374,168 @@ export function initDatabase(dbPath = getDatabasePath()) {
       CHECK (attempt_count >= 0)
     );
 
+    CREATE TABLE IF NOT EXISTS slicing_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_id INTEGER NOT NULL,
+      file_sync_job_id INTEGER NOT NULL,
+      source_slicing_job_id INTEGER,
+      customer_id_snapshot INTEGER,
+      order_id_snapshot INTEGER,
+      order_no_snapshot TEXT,
+      input_worker_id TEXT NOT NULL,
+      artifact_worker_id TEXT,
+      worker_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      lock_owner TEXT,
+      locked_at_ms INTEGER,
+      lock_expires_at_ms INTEGER,
+      lease_expires_at_ms INTEGER,
+      lease_renewed_at_ms INTEGER,
+      started_at_ms INTEGER,
+      finished_at_ms INTEGER,
+      failed_at_ms INTEGER,
+      slicer_name TEXT NOT NULL DEFAULT 'PrusaSlicer',
+      required_slicer_package_version TEXT NOT NULL,
+      actual_slicer_package_version TEXT,
+      slicer_banner_version TEXT,
+      binary_path TEXT,
+      profile_key TEXT NOT NULL,
+      profile_name TEXT,
+      profile_version TEXT NOT NULL,
+      profile_path TEXT,
+      profile_sha256 TEXT NOT NULL,
+      slice_params_json TEXT NOT NULL,
+      slice_params_sha256 TEXT NOT NULL,
+      slice_cache_key_version TEXT NOT NULL DEFAULT '1.0',
+      slice_cache_key_sha256 TEXT NOT NULL,
+      input_filename TEXT NOT NULL,
+      input_relative_path TEXT NOT NULL,
+      input_size_bytes INTEGER NOT NULL,
+      input_sha256 TEXT NOT NULL,
+      result_origin TEXT NOT NULL DEFAULT 'executed',
+      cache_reused_at_ms INTEGER,
+      slice_duration_ms INTEGER,
+      exit_code INTEGER,
+      stdout_relative_path TEXT,
+      stderr_relative_path TEXT,
+      gcode_relative_path TEXT,
+      gcode_size_bytes INTEGER,
+      gcode_sha256 TEXT,
+      required_parser_version TEXT NOT NULL,
+      actual_parser_version TEXT,
+      parse_cache_key_version TEXT,
+      parse_cache_key_sha256 TEXT,
+      parse_status TEXT,
+      metrics_status TEXT,
+      parser_quote_ready INTEGER NOT NULL DEFAULT 0,
+      print_time_seconds INTEGER,
+      silent_print_time_seconds INTEGER,
+      filament_length_microns INTEGER,
+      filament_volume_mm3 INTEGER,
+      filament_weight_mg INTEGER,
+      layer_count INTEGER,
+      max_layer_z_microns INTEGER,
+      filament_type TEXT,
+      printer_model TEXT,
+      nozzle_diameter_microns INTEGER,
+      layer_height_microns INTEGER,
+      metric_sources_json TEXT,
+      metric_validation_json TEXT,
+      missing_fields_json TEXT,
+      warnings_json TEXT,
+      weight_source TEXT,
+      weight_policy_version TEXT,
+      derived_weight_mg INTEGER,
+      retention_status TEXT NOT NULL DEFAULT 'active',
+      retention_until DATETIME,
+      deleted_at DATETIME,
+      last_error_code TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE RESTRICT,
+      FOREIGN KEY (file_sync_job_id) REFERENCES local_file_sync_jobs(id) ON DELETE RESTRICT,
+      FOREIGN KEY (source_slicing_job_id) REFERENCES slicing_jobs(id) ON DELETE RESTRICT,
+      CHECK (status IN ('pending', 'locked', 'slicing', 'sliced', 'parsing', 'completed', 'partial', 'failed', 'cancelled')),
+      CHECK (attempt_count >= 0),
+      CHECK (max_attempts >= 1),
+      CHECK (parser_quote_ready IN (0, 1)),
+      CHECK (input_size_bytes > 0),
+      CHECK (locked_at_ms IS NULL OR locked_at_ms >= 0),
+      CHECK (lock_expires_at_ms IS NULL OR lock_expires_at_ms >= 0),
+      CHECK (lease_expires_at_ms IS NULL OR lease_expires_at_ms >= 0),
+      CHECK (lease_renewed_at_ms IS NULL OR lease_renewed_at_ms >= 0),
+      CHECK (started_at_ms IS NULL OR started_at_ms >= 0),
+      CHECK (finished_at_ms IS NULL OR finished_at_ms >= 0),
+      CHECK (failed_at_ms IS NULL OR failed_at_ms >= 0),
+      CHECK (cache_reused_at_ms IS NULL OR cache_reused_at_ms >= 0),
+      CHECK (slice_duration_ms IS NULL OR slice_duration_ms >= 0),
+      CHECK (gcode_size_bytes IS NULL OR gcode_size_bytes > 0),
+      CHECK (print_time_seconds IS NULL OR print_time_seconds >= 0),
+      CHECK (silent_print_time_seconds IS NULL OR silent_print_time_seconds >= 0),
+      CHECK (filament_length_microns IS NULL OR filament_length_microns >= 0),
+      CHECK (filament_volume_mm3 IS NULL OR filament_volume_mm3 >= 0),
+      CHECK (filament_weight_mg IS NULL OR filament_weight_mg >= 0),
+      CHECK (derived_weight_mg IS NULL OR derived_weight_mg >= 0),
+      CHECK (layer_count IS NULL OR layer_count >= 0),
+      CHECK (max_layer_z_microns IS NULL OR max_layer_z_microns >= 0),
+      CHECK (result_origin IN ('executed', 'metrics_cache')),
+      CHECK (retention_status IN ('active', 'retain_until', 'legal_hold', 'deleted')),
+      CHECK (metrics_status IS NULL OR metrics_status IN ('valid', 'warning', 'invalid')),
+      CHECK (parse_status IS NULL OR parse_status IN ('parsed', 'partial', 'failed')),
+      CHECK (result_origin != 'metrics_cache' OR cache_reused_at_ms IS NOT NULL),
+      CHECK (result_origin != 'metrics_cache' OR status IN ('completed', 'partial')),
+      CHECK (
+        result_origin = 'executed'
+        OR (
+          result_origin = 'metrics_cache'
+          AND source_slicing_job_id IS NOT NULL
+          AND attempt_count = 0
+          AND gcode_relative_path IS NULL
+          AND stdout_relative_path IS NULL
+          AND stderr_relative_path IS NULL
+          AND slice_duration_ms IS NULL
+        )
+      )
+    );
+
+    CREATE TABLE IF NOT EXISTS slicing_job_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slicing_job_id INTEGER NOT NULL,
+      attempt_no INTEGER NOT NULL,
+      worker_id TEXT NOT NULL,
+      lock_owner TEXT NOT NULL,
+      status TEXT NOT NULL,
+      started_at_ms INTEGER,
+      finished_at_ms INTEGER,
+      lease_expires_at_ms INTEGER,
+      lease_renewed_at_ms INTEGER,
+      slice_duration_ms INTEGER,
+      exit_code INTEGER,
+      stdout_relative_path TEXT,
+      stderr_relative_path TEXT,
+      gcode_relative_path TEXT,
+      gcode_size_bytes INTEGER,
+      gcode_sha256 TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (slicing_job_id) REFERENCES slicing_jobs(id) ON DELETE RESTRICT,
+      UNIQUE (slicing_job_id, attempt_no),
+      UNIQUE (lock_owner),
+      CHECK (attempt_no >= 1),
+      CHECK (status IN ('locked', 'slicing', 'sliced', 'parsing', 'completed', 'partial', 'failed', 'expired')),
+      CHECK (started_at_ms IS NULL OR started_at_ms >= 0),
+      CHECK (finished_at_ms IS NULL OR finished_at_ms >= 0),
+      CHECK (lease_expires_at_ms IS NULL OR lease_expires_at_ms >= 0),
+      CHECK (lease_renewed_at_ms IS NULL OR lease_renewed_at_ms >= 0),
+      CHECK (slice_duration_ms IS NULL OR slice_duration_ms >= 0),
+      CHECK (gcode_size_bytes IS NULL OR gcode_size_bytes > 0)
+    );
+
     CREATE TABLE IF NOT EXISTS slice_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
@@ -1843,6 +2005,35 @@ export function initDatabase(dbPath = getDatabasePath()) {
       ON local_file_sync_jobs(worker_id, locked_at);
     CREATE INDEX IF NOT EXISTS idx_local_file_sync_jobs_synced
       ON local_file_sync_jobs(local_synced_at);
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_pickup
+      ON slicing_jobs(status, input_worker_id, lease_expires_at_ms, lock_expires_at_ms, attempt_count, created_at);
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_file
+      ON slicing_jobs(file_id, created_at);
+    DROP INDEX IF EXISTS idx_slicing_jobs_file_sync_unique;
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_file_sync
+      ON slicing_jobs(file_sync_job_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_slicing_jobs_active_identity_unique
+      ON slicing_jobs(file_sync_job_id, slice_cache_key_sha256, required_parser_version)
+      WHERE status IN ('pending', 'locked', 'slicing', 'sliced', 'parsing');
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_order_snapshot
+      ON slicing_jobs(order_id_snapshot, created_at);
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_worker
+      ON slicing_jobs(worker_id, status, locked_at_ms);
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_slice_cache
+      ON slicing_jobs(slice_cache_key_sha256, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_parse_cache
+      ON slicing_jobs(parse_cache_key_sha256, required_parser_version, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_slicing_jobs_reusable_metrics
+      ON slicing_jobs(slice_cache_key_sha256, status, parser_quote_ready, created_at)
+      WHERE status IN ('completed', 'partial');
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_slicing_jobs_active_lock_owner
+      ON slicing_jobs(lock_owner)
+      WHERE lock_owner IS NOT NULL
+        AND status IN ('locked', 'slicing', 'sliced', 'parsing');
+    CREATE INDEX IF NOT EXISTS idx_slicing_job_attempts_job
+      ON slicing_job_attempts(slicing_job_id, attempt_no);
+    CREATE INDEX IF NOT EXISTS idx_slicing_job_attempts_worker
+      ON slicing_job_attempts(worker_id, status, created_at);
   `);
   ensureColumns(db, "slice_jobs", [
     ["order_id", "INTEGER"],

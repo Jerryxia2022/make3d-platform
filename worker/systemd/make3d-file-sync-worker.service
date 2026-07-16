@@ -1,0 +1,22 @@
+[Unit]
+Description=Make3D Local File Sync Worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=make3d-worker
+Group=make3d-worker
+EnvironmentFile=/etc/make3d-worker.env
+WorkingDirectory=/srv/make3d-worker
+ExecStart=/usr/bin/node /srv/make3d-worker/make3d-file-sync-worker.mjs
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/make3d-worker
+
+[Install]
+WantedBy=multi-user.target

@@ -68,9 +68,21 @@ test("worker API locks jobs atomically and lets timed-out locks recover", async 
 
     const db = initDatabase(dbPath);
     db.prepare(
-      "UPDATE local_file_sync_jobs SET locked_at = datetime('now', '-20 minutes'), worker_id = 'old-worker' WHERE id = ?",
+      "UPDATE local_file_sync_jobs SET locked_at = datetime('now', '-14 minutes'), worker_id = 'old-worker' WHERE id = ?",
     ).run(jobId);
     db.close();
+
+    const notYetRecoveredLock = await lockPOST(
+      workerRequest(`${url}/${jobId}/lock`, { workerId: "early-recovery-worker" }),
+      params(jobId),
+    );
+    assert.equal(notYetRecoveredLock.status, 409);
+
+    const recoveryDb = initDatabase(dbPath);
+    recoveryDb.prepare(
+      "UPDATE local_file_sync_jobs SET locked_at = datetime('now', '-20 minutes'), worker_id = 'old-worker' WHERE id = ?",
+    ).run(jobId);
+    recoveryDb.close();
 
     const recoveredLock = await lockPOST(
       workerRequest(`${url}/${jobId}/lock`, { workerId: "recovery-worker" }),
