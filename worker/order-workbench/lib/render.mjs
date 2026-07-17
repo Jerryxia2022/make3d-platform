@@ -1,3 +1,9 @@
+const TEXT = {
+  title: "\u672c\u5730\u8ba2\u5355\u5de5\u4f5c\u53f0",
+  localOnly: "\u4ec5\u672c\u673a\u8bbf\u95ee",
+  readonly: "\u5f53\u524d\u4e3a\u53ea\u8bfb\u6a21\u5f0f",
+};
+
 export function renderLayout({ title, body, csrfToken }) {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -29,8 +35,8 @@ export function renderLayout({ title, body, csrfToken }) {
 </head>
 <body>
   <header>
-    <strong>Make3D 本地订单工作台</strong>
-    <div class="banner">仅本机访问 · 当前为只读模式 · 不修改订单、价格、支付、退款、微信支付或切片任务</div>
+    <strong>Make3D ${TEXT.title}</strong>
+    <div class="banner">${TEXT.localOnly} | ${TEXT.readonly} | Read-only: no order, quote, payment, refund, WeChat Pay, or slicing changes.</div>
   </header>
   <main data-csrf="${escapeHtml(csrfToken)}">${body}</main>
 </body>
@@ -58,28 +64,28 @@ export function renderOrderListPage({ orders, query, csrfToken }) {
   const body = `
     <section class="panel">
       <form method="GET" action="/">
-        <label>订单号搜索 <input name="q" value="${escapeHtml(query.q || "")}"></label>
-        <label>订单状态 <input name="status" value="${escapeHtml(query.status || "")}"></label>
-        <label>同步状态
+        <label>Order search <input name="q" value="${escapeHtml(query.q || "")}"></label>
+        <label>Order status <input name="status" value="${escapeHtml(query.status || "")}"></label>
+        <label>Sync status
           <select name="sync_status">
             ${["", "verified", "syncing", "failed", "missing_sync_job", "no_files"].map((value) =>
-              `<option value="${value}" ${query.sync_status === value ? "selected" : ""}>${value || "全部"}</option>`,
+              `<option value="${value}" ${query.sync_status === value ? "selected" : ""}>${value || "all"}</option>`,
             ).join("")}
           </select>
         </label>
-        <button type="submit">刷新</button>
+        <button type="submit">Refresh</button>
       </form>
     </section>
     <section class="panel">
       <table>
         <thead><tr>
-          <th>订单号</th><th>创建时间</th><th>订单状态</th><th>支付</th><th>材料</th><th>颜色</th><th>数量</th>
-          <th>当前报价</th><th>当前货期</th><th>客户备注摘要</th><th>文件数</th><th>文件同步</th><th>最后同步</th>
+          <th>Order no</th><th>Created</th><th>Order status</th><th>Payment</th><th>Material</th><th>Color</th><th>Qty</th>
+          <th>Quote</th><th>Lead time</th><th>Customer note summary</th><th>Files</th><th>File sync</th><th>Checked at</th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="13" class="muted">暂无订单</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="13" class="muted">No orders</td></tr>'}</tbody>
       </table>
     </section>`;
-  return renderLayout({ title: "Make3D 本地订单工作台", body, csrfToken });
+  return renderLayout({ title: `Make3D ${TEXT.title}`, body, csrfToken });
 }
 
 export function renderOrderDetailPage({ detail, localChecks, csrfToken }) {
@@ -102,13 +108,13 @@ export function renderOrderDetailPage({ detail, localChecks, csrfToken }) {
           <form class="inline" method="POST" action="/local/files/${file.local_file_sync_job_id}/verify-sha">
             <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
             <input type="hidden" name="order_id" value="${escapeHtml(order.id)}">
-            <button type="submit">验证 SHA</button>
+            <button type="submit">Verify SHA</button>
           </form>
           <form class="inline" method="POST" action="/local/files/${file.local_file_sync_job_id}/open-directory">
             <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
             <input type="hidden" name="order_id" value="${escapeHtml(order.id)}">
-            <button type="submit">打开目录</button>
-          </form>` : '<span class="muted">无同步任务</span>'}
+            <button type="submit">Open directory</button>
+          </form>` : '<span class="muted">No sync job</span>'}
       </td>
     </tr>`;
   }).join("");
@@ -118,37 +124,37 @@ export function renderOrderDetailPage({ detail, localChecks, csrfToken }) {
       <strong>${escapeHtml(item.created_at || "")}</strong>
       <span class="pill">${escapeHtml(item.status || "")}</span>
       <div>${escapeHtml(item.message || "")}</div>
-      ${item.customer_visible_reply ? `<div class="muted">可见回复：${escapeHtml(item.customer_visible_reply)}</div>` : ""}
+      ${item.customer_visible_reply ? `<div class="muted">Visible reply: ${escapeHtml(item.customer_visible_reply)}</div>` : ""}
     </li>`).join("");
 
   const body = `
-    <p><a href="/">返回订单列表</a></p>
+    <p><a href="/">Back to order list</a></p>
     <section class="panel">
       <h2>${escapeHtml(order.order_no)} ${order.is_test_account ? '<span class="pill">TEST</span>' : ""}</h2>
-      <p>线上数据：订单状态 ${escapeHtml(order.status)}，支付状态 ${escapeHtml(order.payment_status || "")}</p>
-      <p>材料 ${escapeHtml(order.material)}，颜色 ${escapeHtml(order.color || "")}，数量 ${escapeHtml(order.quantity)}</p>
-      <p>报价 ${escapeHtml(formatMoney(order.final_price ?? order.payable_price ?? order.estimated_price))}，货期 ${escapeHtml(formatLeadTime(order))}</p>
-      <p>客户备注：${escapeHtml(order.remark || "无")}</p>
+      <p>Online data: order status ${escapeHtml(order.status)}, payment status ${escapeHtml(order.payment_status || "")}</p>
+      <p>Material ${escapeHtml(order.material)}, color ${escapeHtml(order.color || "")}, quantity ${escapeHtml(order.quantity)}</p>
+      <p>Quote ${escapeHtml(formatMoney(order.final_price ?? order.payable_price ?? order.estimated_price))}, lead time ${escapeHtml(formatLeadTime(order))}</p>
+      <p>Customer note: ${escapeHtml(order.remark || "none")}</p>
     </section>
     <section class="panel">
-      <h3>文件同步与本地验证</h3>
+      <h3>File sync and local verification</h3>
       <table>
-        <thead><tr><th>ID</th><th>文件</th><th>格式</th><th>大小</th><th>SHA</th><th>安全相对路径</th><th>同步</th><th>存在</th><th>大小</th><th>SHA</th><th>操作</th></tr></thead>
-        <tbody>${fileRows || '<tr><td colspan="11" class="muted">暂无文件</td></tr>'}</tbody>
+        <thead><tr><th>ID</th><th>File</th><th>Format</th><th>Size</th><th>SHA</th><th>Safe relative path</th><th>Sync</th><th>Exists</th><th>Size</th><th>SHA</th><th>Actions</th></tr></thead>
+        <tbody>${fileRows || '<tr><td colspan="11" class="muted">No files</td></tr>'}</tbody>
       </table>
     </section>
     <section class="panel">
-      <h3>现有客户留言 / 可见回复</h3>
-      <ul>${messages || '<li class="muted">暂无记录</li>'}</ul>
+      <h3>Existing customer messages / visible replies</h3>
+      <ul>${messages || '<li class="muted">No records</li>'}</ul>
     </section>`;
-  return renderLayout({ title: `${order.order_no} - 本地订单工作台`, body, csrfToken });
+  return renderLayout({ title: `${order.order_no} - Make3D ${TEXT.title}`, body, csrfToken });
 }
 
 export function renderMessagePage({ title, message, backHref = "/" }) {
   return renderLayout({
     title,
     csrfToken: "",
-    body: `<section class="panel"><p>${escapeHtml(message)}</p><p><a href="${escapeHtml(backHref)}">返回</a></p></section>`,
+    body: `<section class="panel"><p>${escapeHtml(message)}</p><p><a href="${escapeHtml(backHref)}">Back</a></p></section>`,
   });
 }
 
@@ -159,23 +165,23 @@ function renderSyncSummary(summary = {}) {
 }
 
 function renderCheck(value) {
-  if (value === true) return '<span class="ok">通过</span>';
-  if (value === false) return '<span class="danger">失败</span>';
-  return '<span class="muted">未验证</span>';
+  if (value === true) return '<span class="ok">passed</span>';
+  if (value === false) return '<span class="danger">failed</span>';
+  return '<span class="muted">not checked</span>';
 }
 
 function formatMoney(value) {
-  if (value == null || value === "") return "未确认";
+  if (value == null || value === "") return "not confirmed";
   const amount = Number(value);
-  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : "未确认";
+  return Number.isFinite(amount) ? `RMB ${amount.toFixed(2)}` : "not confirmed";
 }
 
 function formatLeadTime(order) {
-  if (order.final_lead_time_hours) return `${order.final_lead_time_hours} 小时`;
+  if (order.final_lead_time_hours) return `${order.final_lead_time_hours} hours`;
   const min = order.estimated_lead_time_min_hours;
   const max = order.estimated_lead_time_max_hours;
-  if (min && max) return `${min}-${max} 小时`;
-  return "未确认";
+  if (min && max) return `${min}-${max} hours`;
+  return "not confirmed";
 }
 
 function shortSha(value) {
