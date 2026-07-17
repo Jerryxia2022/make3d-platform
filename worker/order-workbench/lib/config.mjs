@@ -1,6 +1,12 @@
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 5177;
 export const DEFAULT_LOCAL_FILES_ROOT = "/srv/make3d-worker/files";
+export const DEFAULT_WORKBENCH_DB_PATH = "/srv/make3d-worker/order-workbench/workbench.db";
+export const DEFAULT_WORKER_ROOT = "/srv/make3d-worker";
+export const DEFAULT_PRUSASLICER_BIN = "/usr/bin/prusa-slicer";
+export const DEFAULT_PRUSASLICER_PROFILE_KEY = "bambu-p1s";
+export const DEFAULT_PRUSASLICER_PROFILE_NAME = "Bambu P1S 0.4mm / 0.2mm / 50%";
+export const DEFAULT_PRUSASLICER_PROFILE_PATH = "/srv/make3d-worker/config/prusaslicer/bambu-p1s.ini";
 
 export function loadWorkbenchConfig(env = process.env, overrides = {}) {
   const host = String(overrides.host || env.MAKE3D_ORDER_WORKBENCH_HOST || DEFAULT_HOST).trim();
@@ -11,6 +17,22 @@ export function loadWorkbenchConfig(env = process.env, overrides = {}) {
   ).trim();
   const localFilesRoot = String(
     overrides.localFilesRoot || env.MAKE3D_LOCAL_FILES_ROOT || DEFAULT_LOCAL_FILES_ROOT,
+  ).trim();
+  const workbenchDbPath = String(
+    overrides.workbenchDbPath || env.MAKE3D_ORDER_WORKBENCH_DB || DEFAULT_WORKBENCH_DB_PATH,
+  ).trim();
+  const workerRoot = String(overrides.workerRoot || env.MAKE3D_WORKER_ROOT || DEFAULT_WORKER_ROOT).trim();
+  const prusaSlicerBin = String(
+    overrides.prusaSlicerBin || env.MAKE3D_PRUSASLICER_BIN || DEFAULT_PRUSASLICER_BIN,
+  ).trim();
+  const profileKey = String(
+    overrides.profileKey || env.MAKE3D_PRUSASLICER_PROFILE_KEY || DEFAULT_PRUSASLICER_PROFILE_KEY,
+  ).trim();
+  const profileName = String(
+    overrides.profileName || env.MAKE3D_PRUSASLICER_PROFILE_NAME || DEFAULT_PRUSASLICER_PROFILE_NAME,
+  ).trim();
+  const profilePath = String(
+    overrides.profilePath || env.MAKE3D_PRUSASLICER_PROFILE_PATH || DEFAULT_PRUSASLICER_PROFILE_PATH,
   ).trim();
 
   assertLoopbackHost(host);
@@ -23,6 +45,12 @@ export function loadWorkbenchConfig(env = process.env, overrides = {}) {
     serverUrl,
     operatorToken,
     localFilesRoot,
+    workbenchDbPath,
+    workerRoot,
+    prusaSlicerBin,
+    profileKey,
+    profileName,
+    profilePath,
   };
 }
 

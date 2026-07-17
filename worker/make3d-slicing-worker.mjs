@@ -651,6 +651,12 @@ export async function spawnPrusaSlicer(config, args, stdoutPath, stderrPath, lea
       shell: false,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        LANG: "en_US.UTF-8",
+        LANGUAGE: "en_US:en",
+        LC_ALL: "en_US.UTF-8",
+      },
     });
     trackSlicerChildForCleanup(child);
     const ownershipTimer = leaseControllerWatch(child, reject, leaseController);
