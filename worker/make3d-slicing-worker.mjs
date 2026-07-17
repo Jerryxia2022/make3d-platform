@@ -367,7 +367,10 @@ export async function runPrusaSlicer(config, context, input, profile, actualSlic
   assertLeaseOwnership(leaseController);
 
   if (result.exitCode !== 0) {
-    const error = new Error(`PrusaSlicer exited with code ${result.exitCode}`);
+    const message = result.exitCode === 75 && config.globalSliceLockPath
+      ? "Another local slicing operation is already running."
+      : `PrusaSlicer exited with code ${result.exitCode}`;
+    const error = new Error(message);
     error.workerErrorCode = "SLICER_NON_ZERO_EXIT";
     throw error;
   }
@@ -653,6 +656,9 @@ export async function spawnPrusaSlicer(config, args, stdoutPath, stderrPath, lea
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
+        PATH: process.env.PATH || process.env.Path || "",
+        HOME: process.env.HOME || process.env.USERPROFILE || "",
+        TMPDIR: process.env.TMPDIR || process.env.TEMP || process.env.TMP || "/tmp",
         LANG: "en_US.UTF-8",
         LANGUAGE: "en_US:en",
         LC_ALL: "en_US.UTF-8",

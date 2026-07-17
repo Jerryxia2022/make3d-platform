@@ -18,9 +18,12 @@ import {
 import {
   assertNoExistingPrusaSlicerProcess,
   assertPrusaSlicerLocale,
+  createGlobalSliceLockSpawnImpl,
+  FLOCK_LOCK_CONFLICT_EXIT_CODE,
+  getGlobalSliceLockPath,
   verifySliceInputFile,
 } from "../worker/order-workbench/lib/localSlicing.mjs";
-import { spawnPrusaSlicer } from "../worker/make3d-slicing-worker.mjs";
+import { runPrusaSlicer, spawnPrusaSlicer } from "../worker/make3d-slicing-worker.mjs";
 
 test("local review drafts are stored only in the local database with audit redaction", () => {
   const db = new DatabaseSync(":memory:");
@@ -127,6 +130,115 @@ test("PrusaSlicer child process is spawned with locale env and shell=false", asy
     assert.equal(capturedOptions.env.LANG, "en_US.UTF-8");
     assert.equal(capturedOptions.env.LANGUAGE, "en_US:en");
     assert.equal(capturedOptions.env.LC_ALL, "en_US.UTF-8");
+    assert.ok(capturedOptions.env.PATH);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("global slice lock wraps PrusaSlicer with fixed flock arguments and shell=false", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-a3-flock-"));
+  const calls = [];
+  try {
+    const spawnImpl = await createGlobalSliceLockSpawnImpl({
+      workerRoot: root,
+      flockBin: "/usr/bin/flock",
+      baseSpawnImpl(command, args, options) {
+        calls.push({ command, args, options });
+        const child = new EventEmitter();
+        child.stdout = Readable.from(["ok"]);
+        child.stderr = Readable.from([]);
+        child.unref = () => {};
+        process.nextTick(() => child.emit("close", 0, null));
+        return child;
+      },
+    });
+
+    await spawnPrusaSlicer(
+      { prusaSlicerBin: "/usr/bin/prusa-slicer", spawnImpl },
+      ["--export-gcode", "--output", "out.gcode", "input.stl"],
+      join(root, "stdout.log"),
+      join(root, "stderr.log"),
+    );
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].command, "/usr/bin/flock");
+    assert.deepEqual(calls[0].args.slice(0, 4), ["-n", "-E", String(FLOCK_LOCK_CONFLICT_EXIT_CODE), getGlobalSliceLockPath(root)]);
+    assert.equal(calls[0].args[4], "/usr/bin/prusa-slicer");
+    assert.equal(calls[0].options.shell, false);
+    assert.equal(calls[0].options.env.LANG, "en_US.UTF-8");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("global slice lock conflict is reported as a clear local slicing message", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-a3-flock-conflict-"));
+  const inputPath = join(root, "input.stl");
+  const profilePath = join(root, "profile.ini");
+  try {
+    await writeFile(inputPath, "solid cube\nendsolid cube\n");
+    await writeFile(profilePath, "profile");
+    await assert.rejects(
+      () => runPrusaSlicer(
+        {
+          rootDir: root,
+          prusaSlicerBin: "/usr/bin/prusa-slicer",
+          globalSliceLockPath: getGlobalSliceLockPath(root),
+          spawnImpl() {
+            const child = new EventEmitter();
+            child.stdout = Readable.from([]);
+            child.stderr = Readable.from(["lock busy"]);
+            child.unref = () => {};
+            process.nextTick(() => child.emit("close", FLOCK_LOCK_CONFLICT_EXIT_CODE, null));
+            return child;
+          },
+        },
+        {
+          job: {
+            job_id: 7,
+            slice_params: {
+              material: "PLA",
+              printer_model: "Bambu Lab P1S",
+              nozzle_diameter_microns: 400,
+              layer_height_microns: 200,
+              fill_density_percent: 50,
+              support_mode: "none",
+              brim_width_microns: 0,
+            },
+          },
+          lock: { attempt_no: 1 },
+        },
+        { path: inputPath, sizeBytes: 24, sha256: "a".repeat(64) },
+        { path: profilePath, profileKey: "fixture", sha256: "b".repeat(64) },
+        "2.7.2",
+      ),
+      /Another local slicing operation is already running/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stale lock path alone does not block when flock grants the descriptor lock", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-a3-stale-lock-"));
+  try {
+    await mkdir(join(root, "order-workbench"), { recursive: true });
+    await writeFile(getGlobalSliceLockPath(root), "stale path only");
+    const spawnImpl = await createGlobalSliceLockSpawnImpl({
+      workerRoot: root,
+      baseSpawnImpl(command, args, options) {
+        assert.equal(command, "/usr/bin/flock");
+        assert.equal(options.shell, false);
+        const child = new EventEmitter();
+        child.stdout = Readable.from([]);
+        child.stderr = Readable.from([]);
+        child.unref = () => {};
+        process.nextTick(() => child.emit("close", 0, null));
+        return child;
+      },
+    });
+    await spawnPrusaSlicer({ spawnImpl }, ["--help"], join(root, "stdout.log"), join(root, "stderr.log"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -264,4 +376,3 @@ function dispatch(app, options) {
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
-

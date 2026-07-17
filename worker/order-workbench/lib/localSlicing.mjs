@@ -1,6 +1,7 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn as defaultSpawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { promisify } from "node:util";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import {
   DEFAULT_PRUSASLICER_BIN,
@@ -26,6 +27,9 @@ export const DEFAULT_PROFILE_NAME = "Bambu P1S 0.4mm / 0.2mm / 50%";
 export const DEFAULT_PROFILE_PATH = "/srv/make3d-worker/config/prusaslicer/bambu-p1s.ini";
 export const REQUIRED_LOCALE = "en_US.UTF-8";
 export const ALLOWED_MODEL_EXTENSIONS = new Set([".stl", ".3mf"]);
+export const DEFAULT_GLOBAL_SLICE_LOCK_RELATIVE_PATH = "order-workbench/prusaslicer.lock";
+export const DEFAULT_FLOCK_BIN = "/usr/bin/flock";
+export const FLOCK_LOCK_CONFLICT_EXIT_CODE = 75;
 
 const execFileAsync = promisify(execFile);
 let activeLocalSlice = false;
@@ -86,7 +90,14 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       rootDir: workerRoot,
       prusaSlicerBin: config.prusaSlicerBin || DEFAULT_PRUSASLICER_BIN,
       execFileImpl: options.execFileImpl || execFile,
-      spawnImpl: options.spawnImpl,
+      spawnImpl: options.disableGlobalSliceLock
+        ? options.spawnImpl
+        : await createGlobalSliceLockSpawnImpl({
+            workerRoot,
+            baseSpawnImpl: options.spawnImpl,
+            flockBin: options.flockBin,
+          }),
+      globalSliceLockPath: getGlobalSliceLockPath(workerRoot),
       profileWhitelist: {
         [profileKey]: { path: profilePath },
       },
@@ -287,6 +298,34 @@ export function getLocalSliceChildEnv(env = process.env) {
     LANG: REQUIRED_LOCALE,
     LANGUAGE: "en_US:en",
     LC_ALL: REQUIRED_LOCALE,
+  };
+}
+
+export function getGlobalSliceLockPath(workerRoot = DEFAULT_WORKER_ROOT) {
+  return resolve(workerRoot, DEFAULT_GLOBAL_SLICE_LOCK_RELATIVE_PATH);
+}
+
+export async function createGlobalSliceLockSpawnImpl(options = {}) {
+  const workerRoot = resolve(options.workerRoot || DEFAULT_WORKER_ROOT);
+  const lockPath = getGlobalSliceLockPath(workerRoot);
+  await mkdir(dirname(lockPath), { recursive: true, mode: 0o750 });
+  const baseSpawnImpl = options.baseSpawnImpl;
+  const flockBin = options.flockBin || DEFAULT_FLOCK_BIN;
+
+  return function spawnWithGlobalSliceLock(command, args, spawnOptions) {
+    const fixedArgs = [
+      "-n",
+      "-E",
+      String(FLOCK_LOCK_CONFLICT_EXIT_CODE),
+      lockPath,
+      command,
+      ...args,
+    ];
+    const spawnImpl = baseSpawnImpl || defaultSpawn;
+    return spawnImpl(flockBin, fixedArgs, {
+      ...spawnOptions,
+      shell: false,
+    });
   };
 }
 
