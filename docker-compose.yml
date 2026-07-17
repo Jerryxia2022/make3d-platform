@@ -45,6 +45,7 @@ services:
       WECHAT_PAY_PUBLIC_KEY_FILE: /run/secrets/wechatpay/wechatpay_public_key.pem
       WECHAT_PAY_API_V3_KEY_FILE: /run/secrets/wechatpay/api_v3_key
       MAKE3D_WORKER_TOKEN: ${MAKE3D_WORKER_TOKEN:-}
+      MAKE3D_LOCAL_WORKBENCH_TOKEN: ${MAKE3D_LOCAL_WORKBENCH_TOKEN:-}
       PRUSASLICER_ENABLED: ${PRUSASLICER_ENABLED:-false}
       PRUSASLICER_BIN: ${PRUSASLICER_BIN:-prusa-slicer}
       PRUSASLICER_PROFILE_PATH: ${PRUSASLICER_PROFILE_PATH:-/app/profiles/bambu-p1s.ini}
