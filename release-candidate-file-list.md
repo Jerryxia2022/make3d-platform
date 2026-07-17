@@ -123,3 +123,68 @@ The release candidate must not include:
 ## Security Scan Notes
 
 Keyword scan found only placeholders, test tokens, test passwords, sanitized examples, and documentation references in the candidate files. No production token, APIv3 key, private key, payment certificate, production database, or `.env` file is included in the release candidate.
+
+---
+
+# Phase05-L3-RC Release Candidate Addendum
+
+Date: 2026-07-17
+
+## Baseline
+
+- Baseline HEAD: `052ab1aa28676087f246b2d4659048868cdb5147`
+- Branch: `phase05-worker-slicing-candidate`
+- Release commit message: `Phase05-L approval candidate schema helpers`
+- Production deploy: not included
+- Live production migration: not included
+
+## Included Candidate Files
+
+Backend schema and helpers:
+
+- `src/backend/productionCandidateTypes.ts`
+- `src/backend/productionCandidateCanonicalJson.ts`
+- `src/backend/productionCandidateSchema.ts`
+- `src/backend/productionCandidateHelpers.ts`
+
+Scripts:
+
+- `scripts/phase05-l2-local-schema-helper-integration.mjs`
+- `scripts/phase05-l3-readonly-migration-rehearsal.mjs`
+- `scripts/phase05-l4-apply-approval-candidate-schema.mjs`
+
+Tests:
+
+- `tests/productionCandidateTestUtils.mjs`
+- `tests/productionCandidateSchema.test.mjs`
+- `tests/productionCandidateCanonicalJson.test.mjs`
+- `tests/productionCandidateApprovalHelpers.test.mjs`
+- `tests/productionCandidateHelpers.test.mjs`
+- `tests/productionCandidateMigration.test.mjs`
+- `tests/productionCandidateMigrationScript.test.mjs`
+
+Reports and changelog:
+
+- `reports/phase05-l1-approval-candidate-schema-freeze-final.md`
+- `reports/phase05-l2-local-schema-helper-implementation-final.md`
+- `reports/phase05-l3-production-readonly-migration-rehearsal-final.md`
+- `changelog/CHANGELOG.md`
+
+## Excluded Files and Artifacts
+
+- `.env`, `.env.local`, `.env.production`, and all environment files
+- `/etc/make3d-worker.env` content
+- Worker Token, Authorization values, OpenID values, phone numbers, email addresses, payment identifiers, private keys, certificates, and APIv3 key material
+- `make3d.db`, `*.db`, `*.sqlite`, `*.bak`, and database backups
+- G-code, STL, STEP/STP, uploaded customer models, and slicing output artifacts
+- `node_modules`, temporary directories, local test databases, and `/tmp` artifacts
+- Production deployment commands, production schema execution results, and any live production database writes
+
+## Safety Boundaries
+
+- No Worker start.
+- No PrusaSlicer run.
+- No real approval creation.
+- No real production candidate creation.
+- No `slicing_job` creation.
+- No order, quote, payment, refund, WeChat Pay, upload, file, or customer-status modification.
