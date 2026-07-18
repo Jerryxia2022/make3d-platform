@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { NextResponse } from "next/server.js";
+import { classifyTestSubject } from "./testClassification.ts";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -18,6 +19,7 @@ export type OperatorWorkbenchOrderFilters = {
 
 type OrderSummaryRow = {
   id: number;
+  customerId: number | null;
   orderNo: string;
   createdAt: string;
   updatedAt: string | null;
@@ -124,6 +126,7 @@ export function listOperatorWorkbenchOrders(db: DatabaseSync, filters: OperatorW
   const sql = `
     SELECT
       orders.id,
+      orders.customer_id AS customerId,
       orders.order_no AS orderNo,
       orders.created_at AS createdAt,
       orders.updated_at AS updatedAt,
@@ -183,6 +186,7 @@ export function getOperatorWorkbenchOrderDetail(db: DatabaseSync, id: number) {
       `
       SELECT
         orders.id,
+        orders.customer_id AS customerId,
         orders.order_no AS orderNo,
         orders.created_at AS createdAt,
         orders.updated_at AS updatedAt,
@@ -277,6 +281,12 @@ export function getOperatorWorkbenchOrderDetail(db: DatabaseSync, id: number) {
 }
 
 function toOrderSummary(row: OrderSummaryRow) {
+  const testClassification = classifyTestSubject({
+    customerId: row.customerId,
+    customerIsTestAccount: row.isTestAccount,
+    sourceMarkers: [row.orderNo],
+  });
+
   return {
     id: row.id,
     order_no: row.orderNo,
@@ -296,7 +306,12 @@ function toOrderSummary(row: OrderSummaryRow) {
     remark: summarizeText(row.remark, 240),
     file_count: Number(row.fileCount || 0),
     file_sync_summary: buildFileSyncSummary(row),
-    is_test_account: Boolean(row.isTestAccount),
+    is_test_account: testClassification.isTest,
+    test_classification: {
+      authoritative_test_flag: testClassification.authoritativeTestFlag,
+      fail_closed: testClassification.failClosed,
+      reasons: testClassification.reasons,
+    },
   };
 }
 

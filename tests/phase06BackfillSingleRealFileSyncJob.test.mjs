@@ -116,7 +116,7 @@ test("single real file backfill concurrent execution creates at most one row", a
 test("single real file backfill rejects TEST orders and wrong order ownership", async () => {
   const testOrder = await createFixture({ isTest: true, customerId: 5 });
   try {
-    await assert.rejects(() => runBackfill({ dbPath: testOrder.dbPath, uploadRoot: testOrder.uploadRoot, fileId: TARGET_FILE_ID }), /TEST orders/);
+    await assert.rejects(() => runBackfill({ dbPath: testOrder.dbPath, uploadRoot: testOrder.uploadRoot, fileId: TARGET_FILE_ID }), /marked as TEST/);
   } finally {
     await testOrder.cleanup();
   }
@@ -126,6 +126,40 @@ test("single real file backfill rejects TEST orders and wrong order ownership", 
     await assert.rejects(() => runBackfill({ dbPath: wrongOrder.dbPath, uploadRoot: wrongOrder.uploadRoot, fileId: TARGET_FILE_ID }), /approved order/);
   } finally {
     await wrongOrder.cleanup();
+  }
+});
+
+test("single real file backfill rejects TEST flag even when customer id is not 5", async () => {
+  const fixture = await createFixture({ isTest: true, customerId: 7 });
+  try {
+    await assert.rejects(
+      () => runBackfill({ dbPath: fixture.dbPath, uploadRoot: fixture.uploadRoot, fileId: TARGET_FILE_ID }),
+      /marked as TEST/,
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("single real file backfill fails closed for NULL test flags and explicit TEST markers", async () => {
+  const nullFlag = await createFixture({ testFlagNull: true, customerId: 8 });
+  try {
+    await assert.rejects(
+      () => runBackfill({ dbPath: nullFlag.dbPath, uploadRoot: nullFlag.uploadRoot, fileId: TARGET_FILE_ID }),
+      /marked as TEST/,
+    );
+  } finally {
+    await nullFlag.cleanup();
+  }
+
+  const marker = await createFixture({ orderNo: "PHASE05_K_D_TEST" });
+  try {
+    await assert.rejects(
+      () => runBackfill({ dbPath: marker.dbPath, uploadRoot: marker.uploadRoot, fileId: TARGET_FILE_ID }),
+      /marked as TEST/,
+    );
+  } finally {
+    await marker.cleanup();
   }
 });
 
@@ -234,11 +268,23 @@ async function createFixture(options = {}) {
   migrateFixtureDb(db);
   const orderId = options.orderId || TARGET_ORDER_ID;
   const customerId = options.customerId === undefined ? 7 : options.customerId;
-  db.prepare("INSERT INTO customers (id, is_test_account) VALUES (?, ?)").run(customerId, options.isTest ? 1 : 0);
+  db.prepare("INSERT INTO customers (id, is_test_account) VALUES (?, ?)").run(
+    customerId,
+    options.testFlagNull ? null : options.isTest ? 1 : 0,
+  );
   db.prepare(`
     INSERT INTO orders (id, order_no, customer_id, material, color, quantity, status)
     VALUES (?, 'M3D20260718082459', ?, ?, ?, ?, 'pending')
-  `).run(orderId, customerId, options.material === undefined ? "PLA" : options.material, "black", 1);
+  `).run(
+    orderId,
+    customerId,
+    options.material === undefined ? "PLA" : options.material,
+    "black",
+    1,
+  );
+  if (options.orderNo) {
+    db.prepare("UPDATE orders SET order_no = ? WHERE id = ?").run(options.orderNo, orderId);
+  }
   db.prepare(`
     INSERT INTO files (
       id, order_id, filename, filepath, filesize, material, color, quantity, risk_level, requires_manual_confirmation

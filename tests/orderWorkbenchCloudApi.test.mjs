@@ -36,11 +36,15 @@ test("operator workbench API returns allowlisted order and detail payloads", asy
     assert.equal(listBody.orders[0].id, orderId);
     assert.equal(listBody.orders[0].file_count, 1);
     assert.equal(listBody.orders[0].file_sync_summary.status, "verified");
+    assert.equal(listBody.orders[0].is_test_account, true);
+    assert.deepEqual(listBody.orders[0].test_classification.reasons, ["customer_is_test_account"]);
 
     const detail = await detailGET(authRequest(detailUrl), params(orderId));
     assert.equal(detail.status, 200);
     const detailBody = await detail.json();
     assert.equal(detailBody.order.order_no, listBody.orders[0].order_no);
+    assert.equal(detailBody.order.is_test_account, true);
+    assert.deepEqual(detailBody.order.test_classification.reasons, ["customer_is_test_account"]);
     assert.equal(detailBody.files.length, 1);
     assert.equal(detailBody.files[0].relative_path, "M3DTEST/1-model.stl");
     assert.equal(detailBody.files[0].expected_sha256, sha256("solid model"));
@@ -82,8 +86,12 @@ async function withFixture(run) {
     await mkdir(uploadDir, { recursive: true });
     await writeFile(filePath, fileContent);
     const db = initDatabase(dbPath);
+    db.prepare(`
+      INSERT INTO customers (id, phone, password_hash, name, wechat, email, is_test_account)
+      VALUES (7, '13900000007', 'hash', 'Workbench Test Customer', 'wx-fixture', 'email-fixture', 1)
+    `).run();
     createOrderWithFile(db, {
-      customerId: null,
+      customerId: 7,
       customerName: "Workbench Test",
       phone: "phone-fixture",
       wechat: "wechat-secret",

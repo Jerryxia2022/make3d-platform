@@ -5,6 +5,7 @@ import { lstat, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { classifyTestSubject } from "./lib/testClassification.mjs";
 
 export const TARGET_FILE_ID = 25;
 export const TARGET_ORDER_ID = 22;
@@ -139,8 +140,14 @@ export async function validateCandidate(db, options) {
     throw new Error("customer relationship is inconsistent");
   }
 
-  const isTest = Number(row.customer_id) === 5 || Number(row.customer_is_test_account) === 1;
-  if (isTest) throw new Error("TEST orders are not allowed for this real-file backfill");
+  const testClassification = classifyTestSubject({
+    customerId: row.customer_id,
+    customerIsTestAccount: row.customer_is_test_account,
+    sourceMarkers: [row.order_no, row.filename, row.filepath],
+  });
+  if (testClassification.isTest) {
+    throw new Error("Target order is marked as TEST and is not eligible for real-file backfill.");
+  }
 
   const extension = getExtension(row.filename || row.filepath);
   if (extension !== "stl") throw new Error("target file extension is not approved");
@@ -184,6 +191,7 @@ export async function validateCandidate(db, options) {
     orderMasked: maskOrderNo(row.order_no),
     format: extension,
     isTest: false,
+    testClassification,
     originalFilename: String(row.filename || ""),
     storedFilename: source.storedFilename,
     relativePath: source.relativePath,
