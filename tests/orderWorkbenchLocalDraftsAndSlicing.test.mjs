@@ -432,6 +432,7 @@ test("local workbench displays parser metric sources, dimensions, and warning se
   assert.match(response.body, /20mm \/ 20mm \/ 20mm/);
   assert.match(response.body, /Slicing output range/);
   assert.match(response.body, /32\.714mm \/ 32\.714mm \/ 20mm \(gcode_bounds\)/);
+  assert.match(response.body, /warning severity \/ code \/ message/);
   assert.match(response.body, /NON_BLOCKING/);
   assert.match(response.body, /PARSER_NOTE/);
 });

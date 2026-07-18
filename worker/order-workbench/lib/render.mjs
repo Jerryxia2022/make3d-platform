@@ -345,8 +345,8 @@ function renderWarnings(value) {
   } catch {
     warnings = [];
   }
-  if (!warnings.length) return '<p class="muted">No parser warnings</p>';
-  return `<ul>${warnings.map((warning) => {
+  if (!warnings.length) return '<h4>Parser warnings (warning severity / code / message)</h4><p class="muted">No parser warnings</p>';
+  return `<h4>Parser warnings (warning severity / code / message)</h4><ul>${warnings.map((warning) => {
     const parsed = parseWarning(warning);
     return `<li class="warn"><strong>${escapeHtml(parsed.severity)}</strong> ${escapeHtml(parsed.code)}: ${escapeHtml(parsed.message)}</li>`;
   }).join("")}</ul>`;
