@@ -254,7 +254,8 @@ function renderSliceResult(slice) {
         <p><strong>Completed</strong><br>${escapeHtml(slice.completed_at || "")}</p>
         <p><strong>Duration</strong><br>${escapeHtml(slice.duration_seconds ?? "")} seconds</p>
         <p><strong>Print time</strong><br>${escapeHtml(slice.print_time_seconds ?? "")} seconds</p>
-        <p><strong>Weight</strong><br>${escapeHtml(slice.material_weight_grams ?? "")} g</p>
+        <p><strong>Material weight</strong><br>${escapeHtml(slice.material_weight_grams ?? "")} g</p>
+        <p><strong>Weight source</strong><br>${escapeHtml(formatWeightSource(slice))}</p>
         <p><strong>Upload model dimensions</strong><br>${escapeHtml(formatUploadDimensions(slice))}</p>
         <p><strong>Slicing output range</strong><br>${escapeHtml(formatSlicingDimensions(slice))}</p>
         <p><strong>G-code size</strong><br>${escapeHtml(slice.gcode_size_bytes ?? "")} bytes</p>
@@ -313,6 +314,11 @@ function formatUploadDimensions(slice) {
   return formatDimensionObject(dimensions, "temporarily unavailable");
 }
 
+function formatWeightSource(slice) {
+  const metrics = parseMetricsJson(slice.metrics_json);
+  return metrics.metric_sources?.filament_weight_source || "unavailable";
+}
+
 function formatSlicingDimensions(slice) {
   const metrics = parseMetricsJson(slice.metrics_json);
   const dimensions = metrics.dimension_sources?.parser_dimensions || {
@@ -340,7 +346,25 @@ function renderWarnings(value) {
     warnings = [];
   }
   if (!warnings.length) return '<p class="muted">No parser warnings</p>';
-  return `<ul>${warnings.map((warning) => `<li class="warn">${escapeHtml(warning)}</li>`).join("")}</ul>`;
+  return `<ul>${warnings.map((warning) => {
+    const parsed = parseWarning(warning);
+    return `<li class="warn"><strong>${escapeHtml(parsed.severity)}</strong> ${escapeHtml(parsed.code)}: ${escapeHtml(parsed.message)}</li>`;
+  }).join("")}</ul>`;
+}
+
+function parseWarning(warning) {
+  if (typeof warning !== "string") {
+    return { severity: "UNKNOWN", code: "PARSER_NOTE", message: String(warning || "") };
+  }
+  const match = warning.match(/^([A-Z_]+):([A-Z0-9_]+):(.*)$/);
+  if (!match) {
+    return { severity: "UNKNOWN", code: "PARSER_NOTE", message: warning };
+  }
+  return {
+    severity: match[1],
+    code: match[2],
+    message: match[3],
+  };
 }
 
 function parseMetricsJson(value) {

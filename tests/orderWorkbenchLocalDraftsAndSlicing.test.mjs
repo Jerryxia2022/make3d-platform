@@ -10,9 +10,11 @@ import { DatabaseSync } from "node:sqlite";
 
 import { createWorkbenchApp } from "../worker/order-workbench/server.mjs";
 import {
+  createLocalSliceResult,
   getLocalReviewByOrderId,
   listAuditEventsForOrder,
   migrateWorkbenchDatabase,
+  updateLocalSliceResult,
   updateLocalReview,
 } from "../worker/order-workbench/lib/localDb.mjs";
 import {
@@ -352,6 +354,86 @@ test("local workbench validation errors return 422 and keep the previous valid d
   assert.equal(review.lead_time_min_hours, 12);
   assert.equal(review.lead_time_max_hours, 24);
   assert.equal(review.reply_draft, "valid");
+});
+
+test("local workbench displays parser metric sources, dimensions, and warning severity", async () => {
+  const db = new DatabaseSync(":memory:");
+  migrateWorkbenchDatabase(db);
+  const order = { id: 1, order_no: "M3DLOCAL001", created_at: "2026-07-17 10:00:00", updated_at: "2026-07-17 10:00:00" };
+  const slice = createLocalSliceResult(db, {
+    order_id: order.id,
+    order_no: order.order_no,
+    file_id: 1,
+    sync_job_id: 10,
+    input_relative_path: "files/M3DLOCAL/cube.stl",
+    input_sha256: "a".repeat(64),
+    input_size_bytes: 1517,
+    profile_key: "bambu-p1s",
+    profile_name: "Bambu P1S",
+    profile_sha256: "b".repeat(64),
+    parser_version: "phase05-c-parser-v1",
+    status: "slicing",
+    started_at: "2026-07-17T10:00:00Z",
+  });
+  const updated = updateLocalSliceResult(db, slice.id, {
+    status: "parsed",
+    slicer_version: "2.7.2+dfsg-1build2",
+    parse_status: "parsed",
+    metrics_status: "ok",
+    parser_quote_ready: true,
+    completed_at: "2026-07-17T10:00:01Z",
+    duration_seconds: 1,
+    print_time_seconds: 1496,
+    material_weight_grams: 6.313,
+    dimensions_x: 32.714,
+    dimensions_y: 32.714,
+    dimensions_z: 20,
+    gcode_size_bytes: 284994,
+    gcode_sha256: "c".repeat(64),
+    warnings_json: JSON.stringify(["NON_BLOCKING:PARSER_NOTE:layer_count derived from LAYER_CHANGE markers"]),
+    metrics_json: JSON.stringify({
+      metric_sources: { filament_weight_source: "calculated_from_length_density" },
+      dimension_sources: {
+        upload_model_dimensions: { x_mm: 20, y_mm: 20, z_mm: 20, source: "cloud_file_geometry" },
+        parser_dimensions: { x_mm: 32.714, y_mm: 32.714, z_mm: 20, source: "gcode_bounds" },
+        parser_dimensions_source: "gcode_bounds",
+      },
+    }),
+  });
+  updateLocalReview(db, order, {
+    state: "SLICE_REVIEWED",
+    selected_file_id: 1,
+    selected_sync_job_id: 10,
+    slice_result_id: updated.id,
+  });
+  const app = createWorkbenchApp(
+    {
+      host: "127.0.0.1",
+      port: 5177,
+      serverUrl: "https://make3d.test",
+      operatorToken: "phase06-token",
+      localFilesRoot: "/tmp/make3d-files",
+      profileName: "profile",
+      profileKey: "bambu-p1s",
+    },
+    {
+      csrfToken: "csrf-test-token",
+      localDb: db,
+      cloudClient: createFakeCloudClient(),
+    },
+  );
+
+  const response = await dispatch(app, { method: "GET", url: "/orders/1", host: "127.0.0.1:5177" });
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Material weight/);
+  assert.match(response.body, /Weight source/);
+  assert.match(response.body, /calculated_from_length_density/);
+  assert.match(response.body, /Upload model dimensions/);
+  assert.match(response.body, /20mm \/ 20mm \/ 20mm/);
+  assert.match(response.body, /Slicing output range/);
+  assert.match(response.body, /32\.714mm \/ 32\.714mm \/ 20mm \(gcode_bounds\)/);
+  assert.match(response.body, /NON_BLOCKING/);
+  assert.match(response.body, /PARSER_NOTE/);
 });
 
 function createFakeCloudClient() {
