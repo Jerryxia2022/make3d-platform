@@ -1,7 +1,7 @@
 const TEXT = {
   title: "\u672c\u5730\u8ba2\u5355\u5de5\u4f5c\u53f0",
   localOnly: "\u4ec5\u672c\u673a\u8bbf\u95ee",
-  readonly: "\u5f53\u524d\u4e3a\u53ea\u8bfb\u6a21\u5f0f",
+  readonly: "TEST\u8ba2\u5355\u53ef\u4eba\u5de5\u540c\u6b65 | \u771f\u5b9e\u8ba2\u5355\u53ea\u8bfb",
   draftMode: "\u672c\u5730\u8349\u7a3f\u6a21\u5f0f",
   notSynced: "\u5c1a\u672a\u540c\u6b65\u5ba2\u6237",
 };
@@ -31,6 +31,10 @@ export function renderLayout({ title, body, csrfToken }) {
     .ok { color: #0f766e; font-weight: 700; }
     .warn { color: #9a5b00; font-weight: 700; }
     .pill { display: inline-block; border: 1px solid #ccd3dd; border-radius: 999px; padding: 2px 8px; background: #f8fafc; font-size: 12px; }
+    .order-kind { display: inline-block; border: 2px solid; border-radius: 6px; padding: 3px 8px; margin-left: 8px; font-size: 12px; font-weight: 800; vertical-align: middle; }
+    .order-kind-test { color: #075985; border-color: #38bdf8; background: #e0f2fe; }
+    .order-kind-real { color: #9f1239; border-color: #fb7185; background: #fff1f2; }
+    .order-kind-unknown { color: #854d0e; border-color: #facc15; background: #fefce8; }
     form.inline { display: inline; }
     button { border: 1px solid #9aa4b2; border-radius: 6px; background: #fff; padding: 6px 10px; cursor: pointer; }
     button:hover { background: #f1f5f9; }
@@ -52,7 +56,7 @@ export function renderLayout({ title, body, csrfToken }) {
 export function renderOrderListPage({ orders, query, csrfToken }) {
   const rows = orders.map((order) => `
     <tr>
-      <td><a href="/orders/${order.id}">${escapeHtml(order.order_no)}</a>${order.is_test_account ? ' <span class="pill">TEST</span>' : ""}</td>
+      <td><a href="/orders/${order.id}">${escapeHtml(order.order_no)}</a>${renderOrderKindBadge(order)}</td>
       <td>${escapeHtml(order.created_at || "")}</td>
       <td>${escapeHtml(order.status || "")}</td>
       <td>${escapeHtml(order.payment_status || "")}</td>
@@ -142,7 +146,8 @@ export function renderOrderDetailPage({ detail, localChecks, review, sliceResult
   const body = `
     <p><a href="/">Back to order list</a></p>
     <section class="panel">
-      <h2>${escapeHtml(order.order_no)} ${order.is_test_account ? '<span class="pill">TEST</span>' : ""}</h2>
+      <h2>${escapeHtml(order.order_no)} ${renderOrderKindBadge(order)}</h2>
+      ${renderOrderWriteBoundary(order)}
       <p>Online data: order status ${escapeHtml(order.status)}, payment status ${escapeHtml(order.payment_status || "")}</p>
       <p>Material ${escapeHtml(order.material)}, color ${escapeHtml(order.color || "")}, quantity ${escapeHtml(order.quantity)}</p>
       <p>Online quote ${escapeHtml(formatMoney(order.final_price ?? order.payable_price ?? order.estimated_price))}, online lead time ${escapeHtml(formatLeadTime(order))}</p>
@@ -222,7 +227,7 @@ export function renderOnlineSyncConfirmPage({ detail, payload, csrfToken }) {
         ${Object.entries(payload).map(([key, value]) =>
           `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value ?? "")}">`,
         ).join("")}
-        <button type="submit" ${order.is_test_account ? "" : "disabled"}>Confirm and sync to TEST order</button>
+        <button type="submit" ${order.is_test_account === true ? "" : "disabled"}>${order.is_test_account === true ? "Confirm and sync to TEST order" : "Real order sync disabled"}</button>
       </form>
     </section>`;
   return renderLayout({ title: `Confirm TEST sync - ${order.order_no}`, body, csrfToken });
@@ -272,10 +277,12 @@ function renderLocalDraftForm(order, review, csrfToken) {
 }
 
 function renderOnlineSyncPreparation(order, review, orderVersion, csrfToken) {
+  const canSync = order.is_test_account === true;
   return `
     <section class="panel">
       <h3>Online TEST sync preparation</h3>
       <p class="warn">Prepare sync only after the local quote, lead time, and reply draft are reviewed. Final sync requires a second confirmation.</p>
+      ${canSync ? "" : '<p class="danger">\u771f\u5b9e\u8ba2\u5355\u4ec5\u5141\u8bb8\u672c\u5730\u67e5\u770b\u548c\u8349\u7a3f\uff0c\u201c\u540c\u6b65\u7ebf\u4e0a\u201d\u5df2\u7981\u7528\u3002</p>'}
       <div class="grid">
         <p><strong>Draft quote</strong><br>${escapeHtml(formatCents(review?.confirmed_price_cents))}</p>
         <p><strong>Draft lead time</strong><br>${escapeHtml(formatHourRange(review?.lead_time_min_hours, review?.lead_time_max_hours))}</p>
@@ -285,9 +292,25 @@ function renderOnlineSyncPreparation(order, review, orderVersion, csrfToken) {
       <pre>${escapeHtml(review?.reply_draft || "")}</pre>
       <form method="POST" action="/orders/${order.id}/online-sync/prepare">
         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
-        <button type="submit" ${order.is_test_account ? "" : "disabled"}>Prepare sync</button>
+        <button type="submit" ${canSync ? "" : "disabled"}>${canSync ? "Prepare sync" : "\u771f\u5b9e\u8ba2\u5355\u7981\u6b62\u540c\u6b65"}</button>
       </form>
     </section>`;
+}
+
+function renderOrderKindBadge(order) {
+  if (order?.is_test_account === true) {
+    return '<span class="order-kind order-kind-test">TEST\u8ba2\u5355</span>';
+  }
+  if (order?.is_test_account === false) {
+    return '<span class="order-kind order-kind-real">\u771f\u5b9e\u8ba2\u5355 \u00b7 \u53ea\u8bfb</span>';
+  }
+  return '<span class="order-kind order-kind-unknown">\u8eab\u4efd\u672a\u786e\u8ba4 \u00b7 \u7981\u6b62\u540c\u6b65</span>';
+}
+
+function renderOrderWriteBoundary(order) {
+  return order?.is_test_account === true
+    ? '<p class="ok">TEST\u8ba2\u5355\uff1a\u5141\u8bb8\u7ecf\u4e8c\u6b21\u786e\u8ba4\u540e\u540c\u6b65\u4eba\u5de5\u62a5\u4ef7\u3001\u8d27\u671f\u548c\u5ba2\u6237\u53ef\u89c1\u56de\u590d\u3002</p>'
+    : '<p class="danger">\u771f\u5b9e\u8ba2\u5355\uff1a\u53ea\u8bfb\u9884\u89c8\uff0c\u4e0d\u4f1a\u540c\u6b65\u7ebf\u4e0a\u3002</p>';
 }
 
 function renderLatestOnlineConfirmation(confirmation) {

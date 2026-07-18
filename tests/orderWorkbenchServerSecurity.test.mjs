@@ -33,6 +33,29 @@ test("local workbench renders orders without leaking operator token or sensitive
   assert.equal(response.headers["Cache-Control"], "no-store");
 });
 
+test("local workbench prominently marks real orders and blocks online sync locally", async () => {
+  const app = createAppFixture({ isTestAccount: false });
+
+  const list = await dispatch(app, { method: "GET", url: "/", host: "127.0.0.1:5177" });
+  assert.equal(list.statusCode, 200);
+  assert.match(list.body, /\u771f\u5b9e\u8ba2\u5355 \u00b7 \u53ea\u8bfb/);
+
+  const detail = await dispatch(app, { method: "GET", url: "/orders/1", host: "127.0.0.1:5177" });
+  assert.equal(detail.statusCode, 200);
+  assert.match(detail.body, /\u771f\u5b9e\u8ba2\u5355\uff1a\u53ea\u8bfb\u9884\u89c8/);
+  assert.match(detail.body, /<button type="submit" disabled>\u771f\u5b9e\u8ba2\u5355\u7981\u6b62\u540c\u6b65<\/button>/);
+
+  const directRun = await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/online-sync/run",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: "csrf=csrf-test-token&client_request_id=blocked",
+  });
+  assert.equal(directRun.statusCode, 403);
+  assert.match(directRun.body, /read-only/);
+});
+
 test("local workbench open-directory requires CSRF and same-origin POST", async () => {
   const root = await mkdtemp(join(tmpdir(), "make3d-order-workbench-server-"));
   const content = "solid cube";
@@ -84,6 +107,7 @@ test("local workbench open-directory requires CSRF and same-origin POST", async 
 function createAppFixture(options = {}) {
   const sha = options.sha256 || "a".repeat(64);
   const size = options.size || 10;
+  const isTestAccount = options.isTestAccount ?? true;
   return createWorkbenchApp(
     {
       host: "127.0.0.1",
@@ -112,7 +136,7 @@ function createAppFixture(options = {}) {
                 remark: "客户备注",
                 file_count: 1,
                 file_sync_summary: { status: "verified", verified_count: 1, file_count: 1 },
-                is_test_account: true,
+                is_test_account: isTestAccount,
               },
             ],
           };
@@ -129,7 +153,7 @@ function createAppFixture(options = {}) {
               quantity: 1,
               estimated_price: 12.5,
               remark: "客户备注",
-              is_test_account: true,
+              is_test_account: isTestAccount,
             },
             files: [
               {
@@ -146,6 +170,9 @@ function createAppFixture(options = {}) {
             ],
             customer_service_requests: [],
           };
+        },
+        async confirmAndReply() {
+          throw new Error("confirmAndReply must not be called for a real order");
         },
       },
     },

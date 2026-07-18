@@ -1,0 +1,31 @@
+[Unit]
+Description=Make3D Local Order Workbench
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=make3d-worker
+Group=make3d-worker
+EnvironmentFile=/etc/make3d-order-workbench.env
+WorkingDirectory=@REPO_ROOT@
+ExecStart=/usr/bin/env MAKE3D_ORDER_WORKBENCH_HOST=127.0.0.1 MAKE3D_ORDER_WORKBENCH_PORT=5177 /usr/bin/node worker/order-workbench/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/make3d-worker
+CapabilityBoundingSet=
+LockPersonality=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -87,6 +87,10 @@ export function createWorkbenchApp(config, options = {}) {
         if (!assertLocalPost(request, response, config, body, csrfToken)) return;
         if (!localDb) throw new Error("local workbench database is not available");
         const detail = await loadDetailWithLocalChecks(cloudClient, Number(onlineSyncPrepareMatch[1]), localFilesRoot, localDb);
+        if (detail.detail.order?.is_test_account !== true) {
+          send(response, 403, "Real orders are read-only in the local workbench", "text/plain");
+          return;
+        }
         const payload = buildOnlineSyncPayload(detail.review, detail.detail.order_version, randomUUID());
         send(response, 200, renderOnlineSyncConfirmPage({ detail, payload, csrfToken }));
         return;
@@ -97,7 +101,13 @@ export function createWorkbenchApp(config, options = {}) {
         const body = await readBody(request);
         if (!assertLocalPost(request, response, config, body, csrfToken)) return;
         const form = parse(body);
-        const result = await cloudClient.confirmAndReply(Number(onlineSyncRunMatch[1]), {
+        const orderId = Number(onlineSyncRunMatch[1]);
+        const latest = await cloudClient.getOrder(orderId);
+        if (latest.order?.is_test_account !== true) {
+          send(response, 403, "Real orders are read-only in the local workbench", "text/plain");
+          return;
+        }
+        const result = await cloudClient.confirmAndReply(orderId, {
           client_request_id: form.client_request_id,
           expected_order_version: form.expected_order_version,
           confirmed_quote_amount_cents: form.confirmed_quote_amount_cents,
@@ -110,7 +120,7 @@ export function createWorkbenchApp(config, options = {}) {
         send(response, 200, renderMessagePage({
           title: "TEST order synced",
           message: `Online TEST confirmation saved. created=${String(result.result?.created)} message_id=${result.result?.message?.id || "-"}`,
-          backHref: `/orders/${Number(onlineSyncRunMatch[1])}`,
+          backHref: `/orders/${orderId}`,
         }));
         return;
       }
