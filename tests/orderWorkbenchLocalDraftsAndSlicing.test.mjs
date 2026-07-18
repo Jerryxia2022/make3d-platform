@@ -299,6 +299,61 @@ test("local workbench POST actions require CSRF and do not call online write API
   assert.deepEqual(calls, [{ orderId: 1, syncJobId: 10 }]);
 });
 
+test("local workbench validation errors return 422 and keep the previous valid draft", async () => {
+  const db = new DatabaseSync(":memory:");
+  migrateWorkbenchDatabase(db);
+  const app = createWorkbenchApp(
+    {
+      host: "127.0.0.1",
+      port: 5177,
+      serverUrl: "https://make3d.test",
+      operatorToken: "phase06-token",
+      localFilesRoot: "/tmp/make3d-files",
+      profileName: "profile",
+      profileKey: "bambu-p1s",
+    },
+    {
+      csrfToken: "csrf-test-token",
+      localDb: db,
+      cloudClient: createFakeCloudClient(),
+    },
+  );
+
+  const saved = await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/local-review",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: "csrf=csrf-test-token&state=REVIEWING&confirmed_price_cents=1200&lead_time_min_hours=12&lead_time_max_hours=24&reply_draft=valid",
+  });
+  assert.equal(saved.statusCode, 200);
+
+  const badPrice = await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/local-review",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: "csrf=csrf-test-token&state=REVIEWING&confirmed_price_cents=12.5",
+  });
+  assert.equal(badPrice.statusCode, 422);
+  assert.match(badPrice.body, /validation error/i);
+
+  const badLeadTime = await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/local-review",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: "csrf=csrf-test-token&state=REVIEWING&lead_time_min_hours=30&lead_time_max_hours=20",
+  });
+  assert.equal(badLeadTime.statusCode, 422);
+
+  const review = getLocalReviewByOrderId(db, 1);
+  assert.equal(review.confirmed_price_cents, 1200);
+  assert.equal(review.lead_time_min_hours, 12);
+  assert.equal(review.lead_time_max_hours, 24);
+  assert.equal(review.reply_draft, "valid");
+});
+
 function createFakeCloudClient() {
   const detail = {
     order: {

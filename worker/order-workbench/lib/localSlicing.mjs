@@ -133,6 +133,11 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
         path: null,
         sha256: input.sha256,
         size_bytes: input.size,
+        dimensions: {
+          x_mm: file.bounding_box_x ?? file.boundingBoxX ?? null,
+          y_mm: file.bounding_box_y ?? file.boundingBoxY ?? null,
+          z_mm: file.bounding_box_z ?? file.boundingBoxZ ?? null,
+        },
       },
       slicer: {
         name: "PrusaSlicer",
@@ -149,7 +154,8 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       },
     });
 
-    const finalStatus = parsed.validation.quote_ready ? "parsed" : "partial";
+    const finalStatus = parsed.validation.metrics_status === "error" ? "partial" : "parsed";
+    const dimensions = parsed.result.dimensions || {};
     const updatedSlice = updateLocalSliceResult(db, sliceRow.id, {
       status: finalStatus,
       slicer_version: slicerVersion,
@@ -160,9 +166,9 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       duration_seconds: Math.round(sliceResult.durationMs / 1000),
       print_time_seconds: parsed.result.print_time_seconds,
       material_weight_grams: parsed.result.filament_weight_mg == null ? null : parsed.result.filament_weight_mg / 1000,
-      dimensions_x: null,
-      dimensions_y: null,
-      dimensions_z: parsed.result.max_layer_z_microns == null ? null : parsed.result.max_layer_z_microns / 1000,
+      dimensions_x: dimensions.x_mm ?? null,
+      dimensions_y: dimensions.y_mm ?? null,
+      dimensions_z: dimensions.z_mm ?? null,
       gcode_relative_path: toWorkerRelative(workerRoot, sliceResult.gcodePath),
       gcode_size_bytes: sliceResult.gcodeSizeBytes,
       gcode_sha256: sliceResult.gcodeSha256,
@@ -174,6 +180,16 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
         metric_sources: parsed.metric_sources,
         validation: parsed.validation,
         slice_params: parsed.slice_params,
+        dimension_sources: {
+          upload_model_dimensions: {
+            x_mm: file.bounding_box_x ?? file.boundingBoxX ?? null,
+            y_mm: file.bounding_box_y ?? file.boundingBoxY ?? null,
+            z_mm: file.bounding_box_z ?? file.boundingBoxZ ?? null,
+            source: "cloud_file_geometry",
+          },
+          parser_dimensions: parsed.result.dimensions,
+          parser_dimensions_source: parsed.metric_sources.dimensions_source,
+        },
       }),
     });
 

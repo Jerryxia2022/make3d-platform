@@ -255,7 +255,8 @@ function renderSliceResult(slice) {
         <p><strong>Duration</strong><br>${escapeHtml(slice.duration_seconds ?? "")} seconds</p>
         <p><strong>Print time</strong><br>${escapeHtml(slice.print_time_seconds ?? "")} seconds</p>
         <p><strong>Weight</strong><br>${escapeHtml(slice.material_weight_grams ?? "")} g</p>
-        <p><strong>Dimensions</strong><br>${escapeHtml(formatDimensions(slice))}</p>
+        <p><strong>Upload model dimensions</strong><br>${escapeHtml(formatUploadDimensions(slice))}</p>
+        <p><strong>Slicing output range</strong><br>${escapeHtml(formatSlicingDimensions(slice))}</p>
         <p><strong>G-code size</strong><br>${escapeHtml(slice.gcode_size_bytes ?? "")} bytes</p>
         <p><strong>G-code SHA</strong><br>${escapeHtml(shortSha(slice.gcode_sha256))}</p>
         <p><strong>Parse status</strong><br>${escapeHtml(slice.parse_status || "")}</p>
@@ -306,10 +307,28 @@ function formatLeadTime(order) {
   return "not confirmed";
 }
 
-function formatDimensions(slice) {
-  const x = slice.dimensions_x == null ? "unknown" : `${slice.dimensions_x}mm`;
-  const y = slice.dimensions_y == null ? "unknown" : `${slice.dimensions_y}mm`;
-  const z = slice.dimensions_z == null ? "unknown" : `${slice.dimensions_z}mm`;
+function formatUploadDimensions(slice) {
+  const metrics = parseMetricsJson(slice.metrics_json);
+  const dimensions = metrics.dimension_sources?.upload_model_dimensions;
+  return formatDimensionObject(dimensions, "temporarily unavailable");
+}
+
+function formatSlicingDimensions(slice) {
+  const metrics = parseMetricsJson(slice.metrics_json);
+  const dimensions = metrics.dimension_sources?.parser_dimensions || {
+    x_mm: slice.dimensions_x,
+    y_mm: slice.dimensions_y,
+    z_mm: slice.dimensions_z,
+    source: metrics.dimension_sources?.parser_dimensions_source,
+  };
+  return `${formatDimensionObject(dimensions, "temporarily unavailable")} (${dimensions?.source || "unavailable"})`;
+}
+
+function formatDimensionObject(dimensions, fallback) {
+  if (!dimensions) return fallback;
+  const x = dimensions.x_mm == null ? "temporarily unavailable" : `${dimensions.x_mm}mm`;
+  const y = dimensions.y_mm == null ? "temporarily unavailable" : `${dimensions.y_mm}mm`;
+  const z = dimensions.z_mm == null ? "temporarily unavailable" : `${dimensions.z_mm}mm`;
   return `${x} / ${y} / ${z}`;
 }
 
@@ -322,6 +341,15 @@ function renderWarnings(value) {
   }
   if (!warnings.length) return '<p class="muted">No parser warnings</p>';
   return `<ul>${warnings.map((warning) => `<li class="warn">${escapeHtml(warning)}</li>`).join("")}</ul>`;
+}
+
+function parseMetricsJson(value) {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function shortSha(value) {

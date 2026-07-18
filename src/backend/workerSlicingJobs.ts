@@ -932,7 +932,7 @@ export function completeSlicingJobResult(
   input: ActiveTransitionInput & {
     actualParserVersion: string;
     parseStatus: "parsed" | "partial";
-    metricsStatus: "valid" | "warning";
+    metricsStatus: "ok" | "warning" | "error" | "valid";
     parserQuoteReady: boolean;
     gcodeSha256: string;
     printTimeSeconds?: number | null;
@@ -955,7 +955,7 @@ export function completeSlicingJobResult(
   const nowMs = normalizeNonNegativeInteger(input.nowMs ?? Date.now(), "now_ms");
   const workerId = normalizeRequiredText(input.workerId, "worker_id");
   const lockOwner = normalizeRequiredText(input.lockOwner, "lock_owner");
-  const finalStatus = input.parseStatus === "parsed" && input.metricsStatus === "valid" && input.parserQuoteReady ? "completed" : "partial";
+  const finalStatus = input.parseStatus === "parsed" && (input.metricsStatus === "ok" || input.metricsStatus === "valid") && input.parserQuoteReady ? "completed" : "partial";
   const parseCacheKeySha256 = computeParseCacheKey({
     gcodeSha256: input.gcodeSha256,
     parserVersion: input.actualParserVersion,

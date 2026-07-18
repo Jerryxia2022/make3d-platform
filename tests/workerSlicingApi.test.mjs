@@ -164,13 +164,13 @@ test("slicing API runs normal flow with real parser payload and preserves null m
       params(jobId),
     );
     assert.equal(result.status, 200);
-    assert.equal((await result.json()).status, "partial");
+    assert.equal((await result.json()).status, "completed");
 
     const db = initDatabase(dbPath);
     const job = getSlicingJobById(db, jobId);
-    assert.equal(job.status, "partial");
-    assert.equal(job.filamentWeightMg, 0);
-    assert.equal(job.parserQuoteReady, false);
+    assert.equal(job.status, "completed");
+    assert.equal(job.filamentWeightMg, 6310);
+    assert.equal(job.parserQuoteReady, true);
     db.close();
   });
 });
@@ -184,7 +184,7 @@ test("result schema rejects unknown fields, inconsistent quote readiness, and pa
     assert.equal((await resultPOST(workerRequest(`${url}/${jobId}/result`, { method: "POST", body: unknown }), params(jobId))).status, 422);
 
     const inconsistent = resultPayload(parsed, lockOwner);
-    inconsistent.parser_quote_ready = true;
+    inconsistent.metric_validation.quote_ready = false;
     assert.equal(
       (await resultPOST(workerRequest(`${url}/${jobId}/result`, { method: "POST", body: inconsistent }), params(jobId))).status,
       422,
@@ -676,7 +676,7 @@ test("result route covers completed, partial, forbidden statuses, unknown fields
   }
 
   await withFixture(async ({ dbPath, jobId, url }) => {
-    const { lockOwner, parsed } = await reachParsing(url, jobId, { omitWeight: true });
+    const { lockOwner, parsed } = await reachParsing(url, jobId, { omitWeight: true, omitDensity: true });
     const response = await resultPOST(workerRequest(`${url}/${jobId}/result`, { method: "POST", body: resultPayload(parsed, lockOwner) }), params(jobId));
     assert.equal(response.status, 200);
     const job = getJob(dbPath, jobId);
@@ -1083,9 +1083,14 @@ function resultPayload(parsed, lockOwner) {
     parse_status: parsed.parse.status,
     metrics_status: parsed.validation.metrics_status,
     parser_quote_ready: parsed.validation.quote_ready,
-    metrics: structuredClone(parsed.result),
-    metric_sources: structuredClone(parsed.metric_sources),
-    metric_validation: structuredClone(parsed.validation),
+    metrics: pickResultMetrics(parsed.result),
+    metric_sources: pickMetricSources(parsed.metric_sources),
+    metric_validation: {
+      metrics_status: parsed.validation.metrics_status,
+      quote_ready: parsed.validation.quote_ready,
+      invalid_fields: [...parsed.validation.invalid_fields],
+      warnings: [...parsed.validation.warnings],
+    },
     missing_fields: [...parsed.parse.missing_fields],
     warnings: [...parsed.parse.warnings],
   };
@@ -1119,16 +1124,55 @@ function completeGcode(options = {}) {
   lines.push(
     "; filament used [mm] = 2116.64",
     "; filament used [cm3] = 5.09",
-    options.omitWeight ? null : `; total filament used [g] = ${options.weight ?? "0.00"}`,
+    options.omitWeight ? null : `; filament used [g] = ${options.weight ?? "6.31"}`,
     "; estimated printing time (normal mode) = 24m 56s",
     "; estimated printing time (silent mode) = 25m 44s",
     "; filament_type = PLA",
     "; printer_model = Bambu Lab P1S",
     "; nozzle_diameter = 0.4",
     "; layer_height = 0.2",
+    options.omitDensity ? null : "; filament_density = 1.24",
+    options.omitDensity ? null : "; filament_diameter = 1.75",
     "; prusaslicer_config = end",
   );
   return `${lines.filter(Boolean).join("\n")}\n`;
+}
+
+const RESULT_METRIC_KEYS = [
+  "print_time_seconds",
+  "silent_print_time_seconds",
+  "filament_length_microns",
+  "filament_volume_mm3",
+  "filament_weight_mg",
+  "layer_count",
+  "max_layer_z_microns",
+  "filament_type",
+  "printer_model",
+  "nozzle_diameter_microns",
+  "layer_height_microns",
+  "gcode_size_bytes",
+  "gcode_sha256",
+];
+
+const RESULT_SOURCE_KEYS = [
+  "print_time_source",
+  "filament_length_source",
+  "filament_volume_source",
+  "filament_weight_source",
+  "layer_count_source",
+  "max_layer_z_source",
+  "filament_type_source",
+  "printer_model_source",
+  "nozzle_diameter_source",
+  "layer_height_source",
+];
+
+function pickResultMetrics(result) {
+  return Object.fromEntries(RESULT_METRIC_KEYS.map((key) => [key, result[key] ?? null]));
+}
+
+function pickMetricSources(sources) {
+  return Object.fromEntries(RESULT_SOURCE_KEYS.map((key) => [key, sources[key] || "missing"]));
 }
 
 function snapshotNonInterference(dbPath) {

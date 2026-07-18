@@ -23,10 +23,29 @@ const SLICE_PARAM_ORDER = [
 
 const SOURCE = {
   gcodeTailStat: "gcode_tail_stat",
+  gcodeDirect: "gcode_direct",
+  calculatedFromLengthDensity: "calculated_from_length_density",
   gcodeConfig: "gcode_config",
+  gcodeBounds: "gcode_bounds",
+  cloudFileGeometry: "cloud_file_geometry",
   derivedLayerMarkers: "derived_layer_markers",
   derivedZMarkers: "derived_z_markers",
   missing: "missing",
+  unavailable: "unavailable",
+};
+
+const WARNING_SEVERITY = {
+  nonBlocking: "NON_BLOCKING",
+  manualReviewRequired: "MANUAL_REVIEW_REQUIRED",
+  blocking: "BLOCKING",
+};
+
+const MAX_REASONABLE_FILAMENT_WEIGHT_G = 1_000_000;
+const MATERIAL_DENSITY_G_CM3 = {
+  PLA: 1.24,
+  PETG: 1.27,
+  ABS: 1.04,
+  TPU: 1.21,
 };
 
 export function normalizeSliceParams(params = {}) {
@@ -146,7 +165,7 @@ export async function parsePrusaSlicerGcode(filePath, options = {}) {
 
   const tailFields = parseTailFields(tailData.text, parseWarnings);
   const structural = await scanStructuralMarkers(resolvedPath, parseWarnings);
-  const result = buildResult(tailFields, structural, fileStat.size, gcodeSha256, parseWarnings);
+  const result = buildResult(tailFields, structural, inputContext, slicerContext, paramsFingerprint.slice_params, fileStat.size, gcodeSha256, parseWarnings);
   const validation = validateMetrics(result.values, parseWarnings);
   const parseStatus = "parsed";
   const missingFields = collectMissingFields(result.values);
@@ -170,6 +189,7 @@ export async function parsePrusaSlicerGcode(filePath, options = {}) {
       path: inputContext.path || null,
       sha256: inputContext.sha256 || null,
       size_bytes: inputContext.size_bytes ?? null,
+      dimensions: result.values.dimensions,
     },
     slice: {
       started_at: sliceContext.started_at || null,
@@ -306,9 +326,17 @@ function parseTailFields(text, warnings) {
     }
     seenKeys.add(normalizedKey);
 
-    if (normalizedKey === "filament used [mm]") fields.stats.filamentLengthMm = parseDecimal(value, key, warnings);
-    else if (normalizedKey === "filament used [cm3]") fields.stats.filamentVolumeCm3 = parseDecimal(value, key, warnings);
-    else if (normalizedKey === "total filament used [g]") fields.stats.filamentWeightG = parseDecimal(value, key, warnings);
+    if (normalizedKey === "filament used [mm]") {
+      fields.stats.filamentLengthMmValues = parseDecimalList(value, key, warnings);
+      fields.stats.filamentLengthMm = sumDecimalList(fields.stats.filamentLengthMmValues);
+    } else if (normalizedKey === "filament used [cm3]") {
+      fields.stats.filamentVolumeCm3Values = parseDecimalList(value, key, warnings);
+      fields.stats.filamentVolumeCm3 = sumDecimalList(fields.stats.filamentVolumeCm3Values);
+    } else if (normalizedKey === "filament used [g]" || normalizedKey === "total filament used [g]") {
+      fields.stats.filamentWeightGValues = parseDecimalList(value, key, warnings);
+      fields.stats.filamentWeightG = sumDecimalList(fields.stats.filamentWeightGValues);
+      fields.stats.filamentWeightKey = normalizedKey;
+    }
     else if (normalizedKey === "estimated printing time (normal mode)") {
       fields.stats.printTimeSeconds = parseDurationWithWarning(value, key, warnings);
     } else if (normalizedKey === "estimated printing time (silent mode)") {
@@ -319,6 +347,8 @@ function parseTailFields(text, warnings) {
       "nozzle_diameter",
       "layer_height",
       "fill_density",
+      "filament_density",
+      "filament_diameter",
     ].includes(normalizedKey)) {
       fields.config[normalizedKey] = value;
     }
@@ -346,6 +376,22 @@ function parseDecimal(value, key, warnings) {
   return parsed;
 }
 
+function parseDecimalList(value, key, warnings) {
+  const parts = String(value || "").split(/[,;]/).map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) {
+    warnings.push(`invalid decimal for ${key}: ${value}`);
+    return [];
+  }
+  return parts
+    .map((part) => parseDecimal(part, key, warnings))
+    .filter((parsed) => parsed != null);
+}
+
+function sumDecimalList(values) {
+  if (!Array.isArray(values) || !values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
 function parseDurationWithWarning(value, key, warnings) {
   const parsed = parseDurationToSeconds(value);
   if (parsed.warning) {
@@ -359,6 +405,14 @@ async function scanStructuralMarkers(filePath, warnings) {
   const reader = createInterface({ input: stream, crlfDelay: Infinity });
   let layerCount = 0;
   let maxLayerZMicrons = null;
+  const bounds = {
+    x_min: null,
+    x_max: null,
+    y_min: null,
+    y_max: null,
+    z_min: null,
+    z_max: null,
+  };
 
   try {
     for await (const line of reader) {
@@ -375,6 +429,8 @@ async function scanStructuralMarkers(filePath, warnings) {
           maxLayerZMicrons = maxLayerZMicrons == null ? microns : Math.max(maxLayerZMicrons, microns);
         }
       }
+
+      updateGcodeBounds(bounds, line, warnings);
     }
   } finally {
     reader.close();
@@ -383,18 +439,52 @@ async function scanStructuralMarkers(filePath, warnings) {
   return {
     layer_count: layerCount || null,
     max_layer_z_microns: maxLayerZMicrons,
+    gcode_bounds: buildDimensionsFromBounds(bounds),
   };
 }
 
-function buildResult(fields, structural, gcodeSizeBytes, gcodeSha256, warnings) {
+function updateGcodeBounds(bounds, line, warnings) {
+  if (!/^(?:G0|G1)\b/i.test(line)) return;
+  const stripped = line.split(";")[0];
+  for (const axis of ["X", "Y", "Z"]) {
+    const match = new RegExp(`\\b${axis}([+-]?\\d+(?:\\.\\d+)?)`, "i").exec(stripped);
+    if (!match) continue;
+    const parsed = parseDecimal(match[1], `${axis} move`, warnings);
+    if (parsed == null || Math.abs(parsed) > 1_000_000) continue;
+    const minKey = `${axis.toLowerCase()}_min`;
+    const maxKey = `${axis.toLowerCase()}_max`;
+    bounds[minKey] = bounds[minKey] == null ? parsed : Math.min(bounds[minKey], parsed);
+    bounds[maxKey] = bounds[maxKey] == null ? parsed : Math.max(bounds[maxKey], parsed);
+  }
+}
+
+function buildDimensionsFromBounds(bounds) {
+  const x = finiteDimension(bounds.x_min, bounds.x_max);
+  const y = finiteDimension(bounds.y_min, bounds.y_max);
+  const z = Number.isFinite(bounds.z_max) && bounds.z_max >= 0 ? roundMm(bounds.z_max) : null;
+  if (x == null && y == null && z == null) return null;
+  return { x_mm: x, y_mm: y, z_mm: z, source: SOURCE.gcodeBounds };
+}
+
+function finiteDimension(min, max) {
+  if (min == null || max == null) return null;
+  const value = max - min;
+  if (!Number.isFinite(value) || value < 0) return null;
+  return roundMm(value);
+}
+
+function buildResult(fields, structural, inputContext, slicerContext, sliceParams, gcodeSizeBytes, gcodeSha256, warnings) {
+  const weight = resolveFilamentWeight(fields, sliceParams, warnings);
+  const dimensions = resolveDimensions(structural, inputContext);
   const values = {
     print_time_seconds: fields.stats.printTimeSeconds ?? null,
     silent_print_time_seconds: fields.stats.silentPrintTimeSeconds ?? null,
     filament_length_microns: convertMetric(fields.stats.filamentLengthMm, 1000),
     filament_volume_mm3: convertMetric(fields.stats.filamentVolumeCm3, 1000),
-    filament_weight_mg: convertMetric(fields.stats.filamentWeightG, 1000),
+    filament_weight_mg: weight.mg,
     layer_count: structural.layer_count,
     max_layer_z_microns: structural.max_layer_z_microns,
+    dimensions,
     filament_type: fields.config.filament_type || null,
     printer_model: fields.config.printer_model || null,
     nozzle_diameter_microns: convertMetric(
@@ -410,13 +500,15 @@ function buildResult(fields, structural, gcodeSizeBytes, gcodeSha256, warnings) 
     print_time_source: sourceFor(values.print_time_seconds, SOURCE.gcodeTailStat),
     filament_length_source: sourceFor(values.filament_length_microns, SOURCE.gcodeTailStat),
     filament_volume_source: sourceFor(values.filament_volume_mm3, SOURCE.gcodeTailStat),
-    filament_weight_source: sourceFor(values.filament_weight_mg, SOURCE.gcodeTailStat),
+    filament_weight_source: weight.source,
     layer_count_source: sourceFor(values.layer_count, SOURCE.derivedLayerMarkers),
     max_layer_z_source: sourceFor(values.max_layer_z_microns, SOURCE.derivedZMarkers),
+    dimensions_source: dimensions?.source || SOURCE.unavailable,
     filament_type_source: fields.config.filament_type ? SOURCE.gcodeConfig : SOURCE.missing,
     printer_model_source: fields.config.printer_model ? SOURCE.gcodeConfig : SOURCE.missing,
     nozzle_diameter_source: fields.config.nozzle_diameter ? SOURCE.gcodeConfig : SOURCE.missing,
     layer_height_source: fields.config.layer_height ? SOURCE.gcodeConfig : SOURCE.missing,
+    profile_identity_source: slicerContext.profile_sha256 ? "profile_sha256" : SOURCE.missing,
   };
 
   if (values.layer_count != null) {
@@ -427,6 +519,128 @@ function buildResult(fields, structural, gcodeSizeBytes, gcodeSha256, warnings) 
   }
 
   return { values, sources };
+}
+
+function resolveFilamentWeight(fields, sliceParams, warnings) {
+  const direct = sanitizeWeightGrams(fields.stats.filamentWeightG);
+  if (direct.ok && direct.grams > 0) {
+    return { mg: decimalToInteger(direct.grams, 1000), source: SOURCE.gcodeDirect };
+  }
+  if (fields.stats.filamentWeightG != null) {
+    warnings.push(
+      fields.stats.filamentWeightG === 0
+        ? "explicit filament weight is zero; attempting length/density calculation"
+        : "explicit filament weight is invalid; attempting length/density calculation",
+    );
+  }
+
+  const calculated = calculateWeightFromLengthDensity(fields, sliceParams, warnings);
+  if (calculated != null) {
+    return { mg: decimalToInteger(calculated, 1000), source: SOURCE.calculatedFromLengthDensity };
+  }
+  return { mg: null, source: SOURCE.unavailable };
+}
+
+function sanitizeWeightGrams(value) {
+  if (value == null || !Number.isFinite(value) || value <= 0 || value > MAX_REASONABLE_FILAMENT_WEIGHT_G) {
+    return { ok: false, grams: null };
+  }
+  return { ok: true, grams: value };
+}
+
+function calculateWeightFromLengthDensity(fields, sliceParams, warnings) {
+  const lengths = fields.stats.filamentLengthMmValues || [];
+  if (!lengths.length) return null;
+  const diameters = parseConfigDecimalList(fields.config.filament_diameter, "filament_diameter", warnings);
+  const densities = resolveDensityValues(fields, sliceParams, warnings);
+  if (!diameters.length || !densities.length) return null;
+
+  let grams = 0;
+  for (let index = 0; index < lengths.length; index += 1) {
+    const lengthMm = lengths[index];
+    const diameterMm = pickIndexedValue(diameters, index);
+    const densityGcm3 = pickIndexedValue(densities, index);
+    if (!Number.isFinite(lengthMm) || lengthMm < 0 || !Number.isFinite(diameterMm) || diameterMm <= 0 || !Number.isFinite(densityGcm3) || densityGcm3 <= 0) {
+      return null;
+    }
+    const radiusMm = diameterMm / 2;
+    const volumeMm3 = Math.PI * radiusMm * radiusMm * lengthMm;
+    grams += (volumeMm3 / 1000) * densityGcm3;
+  }
+
+  if (!Number.isFinite(grams) || grams <= 0 || grams > MAX_REASONABLE_FILAMENT_WEIGHT_G) {
+    warnings.push("calculated filament weight is outside the allowed range");
+    return null;
+  }
+  return grams;
+}
+
+function resolveDensityValues(fields, sliceParams, warnings) {
+  const parsed = parseConfigDecimalList(fields.config.filament_density, "filament_density", warnings).filter((value) => value > 0);
+  if (parsed.length) return parsed;
+  const material = String(sliceParams?.material || fields.config.filament_type || "").split(",")[0].trim().toUpperCase();
+  const fallback = MATERIAL_DENSITY_G_CM3[material];
+  if (fallback) {
+    warnings.push(`filament_density unavailable; used material default density for ${material}`);
+    return [fallback];
+  }
+  return [];
+}
+
+function parseConfigDecimalList(value, key, warnings) {
+  if (value == null) return [];
+  return parseDecimalList(value, key, warnings);
+}
+
+function pickIndexedValue(values, index) {
+  return values[index] ?? values[0];
+}
+
+function resolveDimensions(structural, inputContext = {}) {
+  const gcode = structural.gcode_bounds;
+  const cloud = normalizeCloudDimensions(inputContext.dimensions || inputContext);
+  if (hasCompleteDimensions(gcode)) return normalizeDimensions(gcode, SOURCE.gcodeBounds);
+  if (hasAnyDimension(cloud)) return normalizeDimensions(cloud, SOURCE.cloudFileGeometry);
+  if (hasAnyDimension(gcode)) return normalizeDimensions(gcode, SOURCE.gcodeBounds);
+  return { x_mm: null, y_mm: null, z_mm: null, source: SOURCE.unavailable };
+}
+
+function normalizeCloudDimensions(value = {}) {
+  return {
+    x_mm: firstFiniteNumber(value.x_mm, value.x, value.bounding_box_x, value.boundingBoxX),
+    y_mm: firstFiniteNumber(value.y_mm, value.y, value.bounding_box_y, value.boundingBoxY),
+    z_mm: firstFiniteNumber(value.z_mm, value.z, value.bounding_box_z, value.boundingBoxZ),
+  };
+}
+
+function normalizeDimensions(value, source) {
+  return {
+    x_mm: roundMm(value.x_mm),
+    y_mm: roundMm(value.y_mm),
+    z_mm: roundMm(value.z_mm),
+    source,
+  };
+}
+
+function hasAnyDimension(value) {
+  return Boolean(value && [value.x_mm, value.y_mm, value.z_mm].some((item) => Number.isFinite(item) && item > 0));
+}
+
+function hasCompleteDimensions(value) {
+  return Boolean(value && [value.x_mm, value.y_mm, value.z_mm].every((item) => Number.isFinite(item) && item > 0));
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return null;
+}
+
+function roundMm(value) {
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 1000) / 1000;
 }
 
 function convertMetric(value, multiplier) {
@@ -449,28 +663,69 @@ function sourceFor(value, presentSource) {
 
 function validateMetrics(values, parseWarnings) {
   const invalidFields = [];
-  const warnings = [];
+  const warningDetails = [];
 
-  if (values.print_time_seconds == null) invalidFields.push("print_time_seconds");
-  if (values.filament_volume_mm3 == null && values.filament_length_microns == null) {
-    invalidFields.push("filament_volume_mm3");
+  if (values.print_time_seconds == null || values.print_time_seconds <= 0) {
+    invalidFields.push("print_time_seconds");
+    warningDetails.push(createWarning("MISSING_PRINT_TIME", WARNING_SEVERITY.blocking, "print_time_seconds is required"));
   }
 
-  if (values.filament_weight_mg == null) {
-    invalidFields.push("filament_weight_mg");
-  } else if (values.filament_weight_mg === 0 && (values.filament_volume_mm3 || 0) > 0) {
-    invalidFields.push("filament_weight_mg");
-    warnings.push("explicit source weight is zero while filament volume is nonzero");
+  if (values.gcode_size_bytes == null || values.gcode_size_bytes <= 0) {
+    invalidFields.push("gcode_size_bytes");
+    warningDetails.push(createWarning("MISSING_GCODE_SIZE", WARNING_SEVERITY.blocking, "gcode_size_bytes is required"));
   }
 
-  const metricsStatus = invalidFields.length ? "warning" : "valid";
+  if (!/^[a-f0-9]{64}$/.test(String(values.gcode_sha256 || ""))) {
+    invalidFields.push("gcode_sha256");
+    warningDetails.push(createWarning("INVALID_GCODE_SHA", WARNING_SEVERITY.blocking, "gcode_sha256 is required"));
+  }
+
+  if (values.filament_weight_mg == null || values.filament_weight_mg <= 0) {
+    invalidFields.push("filament_weight_mg");
+    warningDetails.push(createWarning("MISSING_FILAMENT_WEIGHT", WARNING_SEVERITY.blocking, "material weight is required"));
+  } else if (values.filament_weight_mg > MAX_REASONABLE_FILAMENT_WEIGHT_G * 1000) {
+    invalidFields.push("filament_weight_mg");
+    warningDetails.push(createWarning("FILAMENT_WEIGHT_OUT_OF_RANGE", WARNING_SEVERITY.blocking, "material weight is outside allowed range"));
+  }
+
+  if (!hasAnyDimension(values.dimensions)) {
+    warningDetails.push(createWarning("DIMENSIONS_UNAVAILABLE", WARNING_SEVERITY.manualReviewRequired, "model dimensions are unavailable"));
+  } else if (values.dimensions?.source === SOURCE.cloudFileGeometry) {
+    warningDetails.push(createWarning("DIMENSIONS_FROM_UPLOAD_GEOMETRY", WARNING_SEVERITY.manualReviewRequired, "dimensions come from upload geometry, not G-code bounds"));
+  }
+
+  for (const warning of parseWarnings) {
+    warningDetails.push(createWarning("PARSER_NOTE", WARNING_SEVERITY.nonBlocking, warning));
+  }
+
+  const dedupedDetails = dedupeWarnings(warningDetails);
+  const metricsStatus = invalidFields.length
+    ? "error"
+    : dedupedDetails.some((warning) => warning.severity !== WARNING_SEVERITY.nonBlocking)
+      ? "warning"
+      : "ok";
 
   return {
     metrics_status: metricsStatus,
     quote_ready: invalidFields.length === 0,
-    invalid_fields: invalidFields,
-    warnings: [...new Set([...warnings, ...parseWarnings])],
+    invalid_fields: [...new Set(invalidFields)],
+    warnings: dedupedDetails.map((warning) => `${warning.severity}:${warning.code}:${warning.message}`),
+    warning_details: dedupedDetails,
   };
+}
+
+function createWarning(code, severity, message) {
+  return { code, severity, message };
+}
+
+function dedupeWarnings(warnings) {
+  const seen = new Set();
+  return warnings.filter((warning) => {
+    const key = `${warning.severity}:${warning.code}:${warning.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function collectMissingFields(values) {

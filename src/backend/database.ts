@@ -1483,7 +1483,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       CHECK (max_layer_z_microns IS NULL OR max_layer_z_microns >= 0),
       CHECK (result_origin IN ('executed', 'metrics_cache')),
       CHECK (retention_status IN ('active', 'retain_until', 'legal_hold', 'deleted')),
-      CHECK (metrics_status IS NULL OR metrics_status IN ('valid', 'warning', 'invalid')),
+      CHECK (metrics_status IS NULL OR metrics_status IN ('ok', 'warning', 'error', 'valid', 'invalid')),
       CHECK (parse_status IS NULL OR parse_status IN ('parsed', 'partial', 'failed')),
       CHECK (result_origin != 'metrics_cache' OR cache_reused_at_ms IS NOT NULL),
       CHECK (result_origin != 'metrics_cache' OR status IN ('completed', 'partial')),

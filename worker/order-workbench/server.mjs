@@ -161,8 +161,9 @@ export function createWorkbenchApp(config, options = {}) {
 
       send(response, 404, "Not found", "text/plain");
     } catch (error) {
-      send(response, 500, renderMessagePage({
-        title: "Local workbench error",
+      const statusCode = isValidationError(error) ? 422 : 500;
+      send(response, statusCode, renderMessagePage({
+        title: statusCode === 422 ? "Local workbench validation error" : "Local workbench error",
         message: redactString(error instanceof Error ? error.message : String(error)),
       }));
     }
@@ -278,6 +279,12 @@ function redactString(value) {
     .replace(/\b(token|secret|api[_-]?v?3?[_-]?key|private[_-]?key)\s*[:=]\s*["']?[^"',\s]+["']?/gi, "$1=[REDACTED]")
     .replace(/\b1[3-9]\d{9}\b/g, "[REDACTED]")
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[REDACTED]");
+}
+
+function isValidationError(error) {
+  const message = String(error?.message || error || "");
+  return /must be|invalid |too large|too long|>= 0|must be >= min|request body too large|sync job not found|not available/i.test(message)
+    && !/database|sqlite|internal|failed to fetch|ECONN|ENOTFOUND|EAI_AGAIN|permission denied/i.test(message);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

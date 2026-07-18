@@ -64,7 +64,7 @@ const sourceEnums: Record<string, readonly string[]> = {
   print_time_source: ["gcode_tail_stat", "missing"],
   filament_length_source: ["gcode_tail_stat", "missing"],
   filament_volume_source: ["gcode_tail_stat", "missing"],
-  filament_weight_source: ["gcode_tail_stat", "missing"],
+  filament_weight_source: ["gcode_tail_stat", "gcode_direct", "calculated_from_length_density", "unavailable", "missing"],
   layer_count_source: ["derived_layer_markers", "missing"],
   max_layer_z_source: ["derived_z_markers", "missing"],
   filament_type_source: ["gcode_config", "missing"],
@@ -101,13 +101,13 @@ export type NormalizedResultPayload = {
   parseCacheKeySha256: string;
   serverParseCacheKeySha256: string;
   parseStatus: "parsed" | "partial";
-  metricsStatus: "valid" | "warning";
+  metricsStatus: "ok" | "warning" | "error" | "valid";
   parserQuoteReady: boolean;
   serverParserQuoteReady: boolean;
   metrics: Record<(typeof METRIC_KEYS)[number], string | number | null>;
   metricSources: Record<(typeof METRIC_SOURCE_KEYS)[number], string>;
   metricValidation: {
-    metrics_status: "valid" | "warning";
+    metrics_status: "ok" | "warning" | "error" | "valid";
     quote_ready: boolean;
     invalid_fields: string[];
     warnings: string[];
@@ -258,7 +258,7 @@ export function normalizeResultPayload(value: unknown, job: SlicingJobRecord): N
   const parseCacheKeyVersion = requireEnum(top.parse_cache_key_version, ["1.0"], "parse_cache_key_version");
   const parseCacheKeySha256 = requireSha256(top.parse_cache_key_sha256, "parse_cache_key_sha256");
   const parseStatus = requireEnum(top.parse_status, ["parsed", "partial"], "parse_status");
-  const metricsStatus = requireEnum(top.metrics_status, ["valid", "warning"], "metrics_status");
+  const metricsStatus = requireEnum(top.metrics_status, ["ok", "warning", "error", "valid"], "metrics_status");
   const parserQuoteReady = requireBoolean(top.parser_quote_ready, "parser_quote_ready");
   const metrics = normalizeMetrics(top.metrics);
   const metricSources = normalizeMetricSources(top.metric_sources);
@@ -440,7 +440,7 @@ function normalizeMetricSources(value: unknown) {
 function normalizeMetricValidation(value: unknown) {
   const record = requireObject(value, METRIC_VALIDATION_KEYS, "metric_validation");
   return {
-    metrics_status: requireEnum(record.metrics_status, ["valid", "warning"], "metric_validation.metrics_status"),
+    metrics_status: requireEnum(record.metrics_status, ["ok", "warning", "error", "valid"], "metric_validation.metrics_status"),
     quote_ready: requireBoolean(record.quote_ready, "metric_validation.quote_ready"),
     invalid_fields: normalizeStringArray(record.invalid_fields, "metric_validation.invalid_fields", 50, 80),
     warnings: normalizeStringArray(record.warnings, "metric_validation.warnings", 50, 500),
@@ -451,9 +451,9 @@ function validateParserResultConsistency(input: {
   gcodeSha256: string;
   job: SlicingJobRecord;
   metrics: Record<string, string | number | null>;
-  metricsStatus: "valid" | "warning";
+  metricsStatus: "ok" | "warning" | "error" | "valid";
   metricSources: Record<string, string>;
-  metricValidation: { metrics_status: "valid" | "warning"; quote_ready: boolean; invalid_fields: string[] };
+  metricValidation: { metrics_status: "ok" | "warning" | "error" | "valid"; quote_ready: boolean; invalid_fields: string[] };
   missingFields: string[];
   parserQuoteReady: boolean;
 }) {
@@ -465,7 +465,7 @@ function validateParserResultConsistency(input: {
   if (input.parserQuoteReady !== input.metricValidation.quote_ready) fail();
   if (input.metricValidation.quote_ready && input.metricValidation.invalid_fields.length) fail();
   if (input.parserQuoteReady && input.missingFields.length) fail();
-  if (input.metricsStatus === "valid" && input.metricValidation.invalid_fields.length) fail();
+  if ((input.metricsStatus === "ok" || input.metricsStatus === "valid") && input.metricValidation.invalid_fields.length) fail();
   if (input.metrics.gcode_sha256 !== input.gcodeSha256) fail();
   if (input.job.gcodeSha256 && input.job.gcodeSha256 !== input.gcodeSha256) fail();
   if (input.job.gcodeSizeBytes != null && input.metrics.gcode_size_bytes !== input.job.gcodeSizeBytes) fail();

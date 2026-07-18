@@ -437,9 +437,14 @@ function resultPayload(parsed, lockOwner) {
     parse_status: parsed.parse.status,
     metrics_status: parsed.validation.metrics_status,
     parser_quote_ready: parsed.validation.quote_ready,
-    metrics: structuredClone(parsed.result),
-    metric_sources: structuredClone(parsed.metric_sources),
-    metric_validation: structuredClone(parsed.validation),
+    metrics: pickResultMetrics(parsed.result),
+    metric_sources: pickMetricSources(parsed.metric_sources),
+    metric_validation: {
+      metrics_status: parsed.validation.metrics_status,
+      quote_ready: parsed.validation.quote_ready,
+      invalid_fields: [...parsed.validation.invalid_fields],
+      warnings: [...parsed.validation.warnings],
+    },
     missing_fields: [...parsed.parse.missing_fields],
     warnings: [...parsed.parse.warnings],
   };
@@ -471,6 +476,43 @@ function completeGcode() {
     "; prusaslicer_config = end",
   );
   return `${lines.join("\n")}\n`;
+}
+
+const RESULT_METRIC_KEYS = [
+  "print_time_seconds",
+  "silent_print_time_seconds",
+  "filament_length_microns",
+  "filament_volume_mm3",
+  "filament_weight_mg",
+  "layer_count",
+  "max_layer_z_microns",
+  "filament_type",
+  "printer_model",
+  "nozzle_diameter_microns",
+  "layer_height_microns",
+  "gcode_size_bytes",
+  "gcode_sha256",
+];
+
+const RESULT_SOURCE_KEYS = [
+  "print_time_source",
+  "filament_length_source",
+  "filament_volume_source",
+  "filament_weight_source",
+  "layer_count_source",
+  "max_layer_z_source",
+  "filament_type_source",
+  "printer_model_source",
+  "nozzle_diameter_source",
+  "layer_height_source",
+];
+
+function pickResultMetrics(result) {
+  return Object.fromEntries(RESULT_METRIC_KEYS.map((key) => [key, result[key] ?? null]));
+}
+
+function pickMetricSources(sources) {
+  return Object.fromEntries(RESULT_SOURCE_KEYS.map((key) => [key, sources[key] || "missing"]));
 }
 
 function getJob(dbPath, jobId) {

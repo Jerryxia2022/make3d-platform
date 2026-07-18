@@ -552,7 +552,7 @@ function parsedFixture({ filamentWeightMg = 1230 } = {}) {
       print_time_source: "gcode_tail_stat",
       filament_length_source: "gcode_tail_stat",
       filament_volume_source: "gcode_tail_stat",
-      filament_weight_source: filamentWeightMg == null ? "missing" : "gcode_tail_stat",
+      filament_weight_source: filamentWeightMg == null ? "unavailable" : "gcode_direct",
       layer_count_source: "derived_layer_markers",
       max_layer_z_source: "derived_z_markers",
       filament_type_source: "gcode_config",
@@ -561,7 +561,7 @@ function parsedFixture({ filamentWeightMg = 1230 } = {}) {
       layer_height_source: "gcode_config",
     },
     validation: {
-      metrics_status: filamentWeightMg == null ? "warning" : "valid",
+      metrics_status: filamentWeightMg == null ? "error" : "ok",
       quote_ready: filamentWeightMg != null,
       invalid_fields: [],
       warnings: filamentWeightMg == null ? ["missing filament_weight_mg"] : [],
