@@ -5,13 +5,15 @@ export function createCloudClient(config, options = {}) {
   if (!serverUrl) throw new Error("serverUrl is required");
   if (!operatorToken) throw new Error("operator token is required");
 
-  async function requestJson(path) {
+  async function requestJson(path, options = {}) {
     const response = await fetchImpl(new URL(path, serverUrl), {
-      method: "GET",
+      method: options.method || "GET",
       headers: {
         Authorization: `Bearer ${operatorToken}`,
         Accept: "application/json",
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
       },
+      body: options.body ? JSON.stringify(options.body) : undefined,
     });
     const text = await response.text();
     let payload;
@@ -37,6 +39,12 @@ export function createCloudClient(config, options = {}) {
     },
     getOrder(id) {
       return requestJson(`/api/operator/workbench/orders/${encodeURIComponent(String(id))}`);
+    },
+    confirmAndReply(id, payload) {
+      return requestJson(`/api/operator/workbench/orders/${encodeURIComponent(String(id))}/confirm-and-reply`, {
+        method: "POST",
+        body: payload,
+      });
     },
   };
 }

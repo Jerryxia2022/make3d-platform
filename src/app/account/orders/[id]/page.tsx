@@ -15,6 +15,10 @@ import {
   type PaymentSettings,
 } from "@/backend/database";
 import { getCurrentCustomer } from "@/backend/nextCustomer";
+import {
+  getLatestOperatorOrderConfirmation,
+  listVisibleOrderMessagesForCustomer,
+} from "@/backend/orderWorkbenchOnlineSync";
 import { getWechatPayPublicAvailability } from "@/backend/wechatPayService";
 import { CustomerAuthBar } from "@/frontend/components/CustomerAuthBar";
 import { CustomerPaymentOptions } from "@/frontend/components/CustomerPaymentOptions";
@@ -24,6 +28,9 @@ import { formatBeijingDateTime } from "@/shared/dateTime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type ManualOrderConfirmation = NonNullable<ReturnType<typeof getLatestOperatorOrderConfirmation>>;
+type VisibleOrderMessage = ReturnType<typeof listVisibleOrderMessagesForCustomer>[number];
 
 export default async function CustomerOrderDetailPage({
   params,
@@ -45,6 +52,8 @@ export default async function CustomerOrderDetailPage({
     const paymentSettings = getPaymentSettings(db);
     const paymentRecords = listOrderPaymentsByOrderId(db, order.id);
     const serviceRequests = listCustomerServiceRequestsForCustomer(db, customer.id, order.id);
+    const visibleOrderMessages = listVisibleOrderMessagesForCustomer(db, order.id, customer.id);
+    const manualConfirmation = getLatestOperatorOrderConfirmation(db, order.id);
     const wechatPayAvailability = getWechatPayPublicAvailability(customer);
 
     return (
@@ -116,6 +125,12 @@ export default async function CustomerOrderDetailPage({
           />
 
           <CustomerServiceRecords records={serviceRequests} />
+
+          <OperatorOrderUpdates
+            manualConfirmation={manualConfirmation}
+            messages={visibleOrderMessages}
+            paid={order.paymentStatus === "paid"}
+          />
 
           <section className="surface-card mt-5 p-5">
             <h2 className="text-xl font-bold">管理员备注</h2>
@@ -351,6 +366,64 @@ function CustomerServiceRecords({ records }: { records: CustomerServiceRequestRe
   );
 }
 
+function OperatorOrderUpdates({
+  manualConfirmation,
+  messages,
+  paid,
+}: {
+  manualConfirmation: ManualOrderConfirmation | null;
+  messages: VisibleOrderMessage[];
+  paid: boolean;
+}) {
+  if (!manualConfirmation && messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="surface-card mt-5 p-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Manual order confirmation</h2>
+          <p className="mt-2 text-sm text-graphite">
+            These updates come from Make3D operator review and do not change paid transaction records.
+          </p>
+        </div>
+      </div>
+      {manualConfirmation ? (
+        <div className="notice-success mt-4 grid gap-3 p-4 text-sm sm:grid-cols-3">
+          <Detail
+            label="Manual confirmed quote"
+            value={formatCents(manualConfirmation.confirmed_quote_amount_cents)}
+          />
+          <Detail
+            label="Manual lead time"
+            value={formatManualLeadTime(manualConfirmation.lead_time_min_hours, manualConfirmation.lead_time_max_hours)}
+          />
+          <Detail label="Estimated ship at" value={formatOptionalDate(manualConfirmation.estimated_ship_at)} />
+          {paid ? (
+            <p className="sm:col-span-3">
+              This confirmation is independent from the existing paid amount and does not create a new payment.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {messages.length > 0 ? (
+        <div className="mt-4 grid gap-3">
+          {messages.map((message) => (
+            <article className="surface-soft p-4 text-sm" key={message.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="pill">{message.message_type}</span>
+                <span className="text-xs text-graphite">{formatOptionalDate(message.created_at)}</span>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap leading-6">{message.body}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric-tile p-4">
@@ -476,6 +549,11 @@ function formatPaymentMethod(value: string | null) {
 
 function formatLeadTime(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? `约 ${Math.ceil(value)} 小时` : "以人工确认为准";
+}
+
+function formatManualLeadTime(min?: number | null, max?: number | null) {
+  if (typeof min !== "number" || typeof max !== "number") return "-";
+  return min === max ? `${min} hours` : `${min}-${max} hours`;
 }
 
 function formatAddress(order: OrderDetail) {

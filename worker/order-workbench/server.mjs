@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { parse } from "node:querystring";
 
@@ -12,6 +13,7 @@ import {
 import {
   renderLocalSliceConfirmPage,
   renderMessagePage,
+  renderOnlineSyncConfirmPage,
   renderOrderDetailPage,
   renderOrderListPage,
 } from "./lib/render.mjs";
@@ -75,6 +77,40 @@ export function createWorkbenchApp(config, options = {}) {
           title: "Local draft saved",
           message: `Local state saved: ${review.state}. Nothing was synced online.`,
           backHref: `/orders/${Number(reviewMatch[1])}`,
+        }));
+        return;
+      }
+
+      const onlineSyncPrepareMatch = /^\/orders\/(\d+)\/online-sync\/prepare$/.exec(url.pathname);
+      if (request.method === "POST" && onlineSyncPrepareMatch) {
+        const body = await readBody(request);
+        if (!assertLocalPost(request, response, config, body, csrfToken)) return;
+        if (!localDb) throw new Error("local workbench database is not available");
+        const detail = await loadDetailWithLocalChecks(cloudClient, Number(onlineSyncPrepareMatch[1]), localFilesRoot, localDb);
+        const payload = buildOnlineSyncPayload(detail.review, detail.detail.order_version, randomUUID());
+        send(response, 200, renderOnlineSyncConfirmPage({ detail, payload, csrfToken }));
+        return;
+      }
+
+      const onlineSyncRunMatch = /^\/orders\/(\d+)\/online-sync\/run$/.exec(url.pathname);
+      if (request.method === "POST" && onlineSyncRunMatch) {
+        const body = await readBody(request);
+        if (!assertLocalPost(request, response, config, body, csrfToken)) return;
+        const form = parse(body);
+        const result = await cloudClient.confirmAndReply(Number(onlineSyncRunMatch[1]), {
+          client_request_id: form.client_request_id,
+          expected_order_version: form.expected_order_version,
+          confirmed_quote_amount_cents: form.confirmed_quote_amount_cents,
+          lead_time_min_hours: form.lead_time_min_hours,
+          lead_time_max_hours: form.lead_time_max_hours,
+          estimated_ship_at: form.estimated_ship_at,
+          message_type: form.message_type,
+          message_body: form.message_body,
+        });
+        send(response, 200, renderMessagePage({
+          title: "TEST order synced",
+          message: `Online TEST confirmation saved. created=${String(result.result?.created)} message_id=${result.result?.message?.id || "-"}`,
+          backHref: `/orders/${Number(onlineSyncRunMatch[1])}`,
         }));
         return;
       }
@@ -246,6 +282,37 @@ function buildReviewPatch(form) {
     if (key in form) patch[key] = form[key];
   }
   return patch;
+}
+
+function buildOnlineSyncPayload(review, expectedOrderVersion, clientRequestId) {
+  if (!review) throw new Error("local review draft is required");
+  if (!expectedOrderVersion) throw new Error("online order version is required");
+  const messageBody = String(review.reply_draft || "").trim();
+  if (!messageBody) throw new Error("reply draft is required before online sync");
+  return {
+    client_request_id: `workbench:${clientRequestId}`,
+    expected_order_version: expectedOrderVersion,
+    confirmed_quote_amount_cents: review.confirmed_price_cents,
+    lead_time_min_hours: review.lead_time_min_hours,
+    lead_time_max_hours: review.lead_time_max_hours,
+    estimated_ship_at: review.estimated_ship_at || "",
+    message_type: mapReplyTemplateToMessageType(review.reply_template),
+    message_body: messageBody,
+  };
+}
+
+function mapReplyTemplateToMessageType(value) {
+  const map = {
+    FILE_RECEIVED: "FILE_RECEIVED",
+    FILE_CONFIRMED: "FILE_CONFIRMED",
+    MODEL_PROBLEM_REUPLOAD: "REUPLOAD_REQUIRED",
+    CONFIRM_MATERIAL_COLOR_QUANTITY: "MATERIAL_CONFIRM_REQUIRED",
+    QUOTE_MANUAL_CONFIRM: "QUOTE_CONFIRMATION",
+    LEAD_TIME_UPDATED: "LEAD_TIME_CONFIRMATION",
+    CONFIRM_SUPPORT_OR_APPEARANCE: "GENERAL_REPLY",
+    PLAIN_TEXT: "TEXT",
+  };
+  return map[value] || "GENERAL_REPLY";
 }
 
 function send(response, statusCode, body, contentType = "text/html; charset=utf-8") {

@@ -2,6 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { NextResponse } from "next/server.js";
 import { classifyTestSubject } from "./testClassification.ts";
+import {
+  getLatestOperatorOrderConfirmation,
+  getOrderWorkbenchOrderVersion,
+  listVisibleOrderMessagesForCustomer,
+} from "./orderWorkbenchOnlineSync.ts";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -277,6 +282,11 @@ export function getOperatorWorkbenchOrderDetail(db: DatabaseSync, id: number) {
     order: toOrderSummary(order),
     files,
     customer_service_requests: customerServiceRequests,
+    latest_operator_confirmation: getLatestOperatorOrderConfirmation(db, id),
+    order_messages: order.customerId
+      ? listVisibleOrderMessagesForCustomer(db, id, Number(order.customerId))
+      : [],
+    order_version: getOrderWorkbenchOrderVersion(db, id),
   };
 }
 

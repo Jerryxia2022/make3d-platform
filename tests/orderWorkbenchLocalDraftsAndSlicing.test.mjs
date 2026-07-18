@@ -26,6 +26,14 @@ import {
   verifySliceInputFile,
 } from "../worker/order-workbench/lib/localSlicing.mjs";
 import { runPrusaSlicer, spawnPrusaSlicer } from "../worker/make3d-slicing-worker.mjs";
+import { createOrderWithFile, initDatabase } from "../src/backend/database.ts";
+import { applyOrderWorkbenchWriteSchema } from "../src/backend/orderWorkbenchWriteSchema.ts";
+import {
+  confirmAndReplyToTestOrder,
+  getLatestOperatorOrderConfirmation,
+  getOrderWorkbenchOrderVersion,
+  listVisibleOrderMessagesForCustomer,
+} from "../src/backend/orderWorkbenchOnlineSync.ts";
 
 test("local review drafts are stored only in the local database with audit redaction", () => {
   const db = new DatabaseSync(":memory:");
@@ -356,6 +364,238 @@ test("local workbench validation errors return 422 and keep the previous valid d
   assert.equal(review.reply_draft, "valid");
 });
 
+test("local workbench prepares and syncs TEST online confirmation through the console flow", async () => {
+  const db = new DatabaseSync(":memory:");
+  migrateWorkbenchDatabase(db);
+  const calls = [];
+  const cloudClient = createFakeCloudClient({
+    confirmAndReply: async (orderId, payload) => {
+      calls.push({ orderId, payload });
+      return { result: { created: true, message: { id: 88 } } };
+    },
+  });
+  const app = createWorkbenchApp(
+    {
+      host: "127.0.0.1",
+      port: 5177,
+      serverUrl: "https://make3d.test",
+      operatorToken: "phase06-token",
+      localFilesRoot: "/tmp/make3d-files",
+      profileName: "profile",
+      profileKey: "bambu-p1s",
+    },
+    {
+      csrfToken: "csrf-test-token",
+      localDb: db,
+      cloudClient,
+    },
+  );
+
+  await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/local-review",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: "csrf=csrf-test-token&state=READY_FOR_ONLINE_SYNC&confirmed_price_cents=1200&lead_time_min_hours=12&lead_time_max_hours=24&reply_template=QUOTE_MANUAL_CONFIRM&reply_draft=Please%20confirm%20quote",
+  });
+
+  const prepared = await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/online-sync/prepare",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: "csrf=csrf-test-token",
+  });
+  assert.equal(prepared.statusCode, 200);
+  assert.match(prepared.body, /Second confirmation/);
+  assert.match(prepared.body, /TEST_SAFE/);
+  assert.match(prepared.body, /QUOTE_CONFIRMATION/);
+  assert.match(prepared.body, /Please confirm quote/);
+  assert.doesNotMatch(prepared.body, /operatorToken|phase06-token|Authorization/i);
+
+  const clientRequestId = prepared.body.match(/name="client_request_id" value="([^"]+)"/)?.[1];
+  assert.ok(clientRequestId);
+
+  const synced = await dispatch(app, {
+    method: "POST",
+    url: "/orders/1/online-sync/run",
+    host: "127.0.0.1:5177",
+    headers: { origin: "http://127.0.0.1:5177" },
+    body: [
+      "csrf=csrf-test-token",
+      `client_request_id=${encodeURIComponent(clientRequestId)}`,
+      `expected_order_version=${"a".repeat(64)}`,
+      "confirmed_quote_amount_cents=1200",
+      "lead_time_min_hours=12",
+      "lead_time_max_hours=24",
+      "estimated_ship_at=",
+      "message_type=QUOTE_CONFIRMATION",
+      "message_body=Please%20confirm%20quote",
+      "customer_id=999",
+      "operator_id=evil",
+      "payment_status=paid",
+    ].join("&"),
+  });
+  assert.equal(synced.statusCode, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].orderId, 1);
+  assert.deepEqual(Object.keys(calls[0].payload).sort(), [
+    "client_request_id",
+    "confirmed_quote_amount_cents",
+    "estimated_ship_at",
+    "expected_order_version",
+    "lead_time_max_hours",
+    "lead_time_min_hours",
+    "message_body",
+    "message_type",
+  ]);
+  assert.equal(calls[0].payload.confirmed_quote_amount_cents, "1200");
+  assert.equal(calls[0].payload.message_body, "Please confirm quote");
+});
+
+test("local workbench completes temporary SQLite end-to-end TEST confirmation and customer-visible read", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-local-workbench-e2e-"));
+  const uploadDir = join(root, "uploads");
+  const filePath = join(uploadDir, "model.stl");
+  const onlineDbPath = join(root, "online.db");
+  const localDb = new DatabaseSync(":memory:");
+  migrateWorkbenchDatabase(localDb);
+
+  try {
+    await mkdir(uploadDir, { recursive: true });
+    await writeFile(filePath, "solid model");
+    const onlineDb = initDatabase(onlineDbPath);
+    applyOrderWorkbenchWriteSchema(onlineDb);
+    onlineDb.prepare(`
+      INSERT INTO customers (id, phone, password_hash, name, wechat, email, is_test_account)
+      VALUES (7, '13900000007', 'hash', 'Test A', 'wx', 'a@example.invalid', 1)
+    `).run();
+    createOrderWithFile(onlineDb, {
+      customerId: 7,
+      customerName: "Test A",
+      phone: "13900000007",
+      wechat: "wx",
+      email: "a@example.invalid",
+      material: "PLA",
+      color: "black",
+      quantity: 1,
+      estimatedPrice: 12,
+      file: { filename: "model.stl", filepath: filePath, filesize: 11 },
+    });
+    const orderId = Number(onlineDb.prepare("SELECT id FROM orders LIMIT 1").get().id);
+    const orderNo = String(onlineDb.prepare("SELECT order_no FROM orders WHERE id = ?").get(orderId).order_no);
+    const cloudClient = {
+      async listOrders() {
+        return { orders: [] };
+      },
+      async getOrder() {
+        return {
+          order: {
+            id: orderId,
+            order_no: orderNo,
+            created_at: "2026-07-18 10:00:00",
+            updated_at: "2026-07-18 10:00:00",
+            status: "pending",
+            payment_status: "unpaid",
+            material: "PLA",
+            color: "black",
+            quantity: 1,
+            estimated_price: 12,
+            remark: "fixture",
+            is_test_account: true,
+          },
+          files: [],
+          customer_service_requests: [],
+          latest_operator_confirmation: getLatestOperatorOrderConfirmation(onlineDb, orderId),
+          order_messages: listVisibleOrderMessagesForCustomer(onlineDb, orderId, 7),
+          order_version: getOrderWorkbenchOrderVersion(onlineDb, orderId),
+        };
+      },
+      async confirmAndReply(id, payload) {
+        return {
+          result: confirmAndReplyToTestOrder(onlineDb, id, payload, {
+            operatorId: "local-workbench-e2e",
+          }),
+        };
+      },
+    };
+    const app = createWorkbenchApp(
+      {
+        host: "127.0.0.1",
+        port: 5177,
+        serverUrl: "https://make3d.test",
+        operatorToken: "phase06-token",
+        localFilesRoot: "/tmp/make3d-files",
+        profileName: "profile",
+        profileKey: "bambu-p1s",
+      },
+      {
+        csrfToken: "csrf-test-token",
+        localDb,
+        cloudClient,
+      },
+    );
+
+    const saved = await dispatch(app, {
+      method: "POST",
+      url: `/orders/${orderId}/local-review`,
+      host: "127.0.0.1:5177",
+      headers: { origin: "http://127.0.0.1:5177" },
+      body: "csrf=csrf-test-token&state=READY_FOR_ONLINE_SYNC&confirmed_price_cents=1200&lead_time_min_hours=12&lead_time_max_hours=24&reply_template=QUOTE_MANUAL_CONFIRM&reply_draft=Customer%20visible%20reply",
+    });
+    assert.equal(saved.statusCode, 200);
+
+    const prepared = await dispatch(app, {
+      method: "POST",
+      url: `/orders/${orderId}/online-sync/prepare`,
+      host: "127.0.0.1:5177",
+      headers: { origin: "http://127.0.0.1:5177" },
+      body: "csrf=csrf-test-token",
+    });
+    assert.equal(prepared.statusCode, 200);
+    const hidden = Object.fromEntries([...prepared.body.matchAll(/name="([^"]+)" value="([^"]*)"/g)].map((match) => [match[1], match[2]]));
+
+    const synced = await dispatch(app, {
+      method: "POST",
+      url: `/orders/${orderId}/online-sync/run`,
+      host: "127.0.0.1:5177",
+      headers: { origin: "http://127.0.0.1:5177" },
+      body: Object.entries({ csrf: "csrf-test-token", ...hidden })
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join("&"),
+    });
+    assert.equal(synced.statusCode, 200);
+
+    const confirmation = getLatestOperatorOrderConfirmation(onlineDb, orderId);
+    const messages = listVisibleOrderMessagesForCustomer(onlineDb, orderId, 7);
+    assert.equal(confirmation.confirmed_quote_amount_cents, 1200);
+    assert.equal(confirmation.lead_time_min_hours, 12);
+    assert.equal(confirmation.lead_time_max_hours, 24);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].body, "Customer visible reply");
+
+    const repeat = confirmAndReplyToTestOrder(onlineDb, orderId, {
+      ...hidden,
+      confirmed_quote_amount_cents: Number(hidden.confirmed_quote_amount_cents),
+      lead_time_min_hours: Number(hidden.lead_time_min_hours),
+      lead_time_max_hours: Number(hidden.lead_time_max_hours),
+    });
+    assert.equal(repeat.created, false);
+    assert.equal(listVisibleOrderMessagesForCustomer(onlineDb, orderId, 7).length, 1);
+    assert.throws(() => confirmAndReplyToTestOrder(onlineDb, orderId, { ...hidden, message_body: "Changed" }), /client_request_id/);
+
+    onlineDb.prepare("UPDATE orders SET quantity = quantity + 1 WHERE id = ?").run(orderId);
+    assert.throws(
+      () => confirmAndReplyToTestOrder(onlineDb, orderId, { ...hidden, client_request_id: "workbench:new-stale-key" }),
+      /Order has changed/,
+    );
+    onlineDb.close();
+  } finally {
+    localDb.close();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test("local workbench displays parser metric sources, dimensions, and warning severity", async () => {
   const db = new DatabaseSync(":memory:");
   migrateWorkbenchDatabase(db);
@@ -437,7 +677,7 @@ test("local workbench displays parser metric sources, dimensions, and warning se
   assert.match(response.body, /PARSER_NOTE/);
 });
 
-function createFakeCloudClient() {
+function createFakeCloudClient(overrides = {}) {
   const detail = {
     order: {
       id: 1,
@@ -467,6 +707,9 @@ function createFakeCloudClient() {
       },
     ],
     customer_service_requests: [],
+    latest_operator_confirmation: null,
+    order_messages: [],
+    order_version: "a".repeat(64),
   };
   return {
     async listOrders() {
@@ -474,6 +717,10 @@ function createFakeCloudClient() {
     },
     async getOrder() {
       return detail;
+    },
+    async confirmAndReply(orderId, payload) {
+      if (overrides.confirmAndReply) return overrides.confirmAndReply(orderId, payload);
+      return { result: { created: true, message: { id: 1 } } };
     },
   };
 }

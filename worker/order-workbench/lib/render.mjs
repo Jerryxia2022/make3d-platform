@@ -148,6 +148,8 @@ export function renderOrderDetailPage({ detail, localChecks, review, sliceResult
       <p>Online quote ${escapeHtml(formatMoney(order.final_price ?? order.payable_price ?? order.estimated_price))}, online lead time ${escapeHtml(formatLeadTime(order))}</p>
       ${String(order.payment_status || "").toLowerCase().includes("paid") ? '<p class="warn">Paid orders cannot be repriced by local draft alone.</p>' : ""}
       <p>Customer note: ${escapeHtml(order.remark || "none")}</p>
+      <p>Online version <code>${escapeHtml(detail.order_version || "unavailable")}</code></p>
+      ${renderLatestOnlineConfirmation(detail.latest_operator_confirmation)}
     </section>
     <section class="panel">
       <h3>File check</h3>
@@ -158,6 +160,7 @@ export function renderOrderDetailPage({ detail, localChecks, review, sliceResult
     </section>
     ${renderSliceResult(sliceResult)}
     ${renderLocalDraftForm(order, review, csrfToken)}
+    ${renderOnlineSyncPreparation(order, review, detail.order_version, csrfToken)}
     <section class="panel">
       <h3>Existing customer messages / visible replies</h3>
       <ul>${messages || '<li class="muted">No records</li>'}</ul>
@@ -192,6 +195,37 @@ export function renderLocalSliceConfirmPage({ detail, file, csrfToken, profileNa
       </form>
     </section>`;
   return renderLayout({ title: `Confirm local slicing - ${order.order_no}`, body, csrfToken });
+}
+
+export function renderOnlineSyncConfirmPage({ detail, payload, csrfToken }) {
+  const order = detail.detail.order;
+  const previous = detail.detail.latest_operator_confirmation;
+  const body = `
+    <p><a href="/orders/${order.id}">Back to order</a></p>
+    <section class="panel">
+      <h2>Second confirmation before TEST online sync</h2>
+      <p class="danger">TEST only. This will append an online manual confirmation and a customer-visible order message. It will not change order status, payment, refund, uploads, quote engine, WeChat Pay, or slicing jobs.</p>
+      <div class="grid">
+        <p><strong>Order no</strong><br>${escapeHtml(order.order_no)}</p>
+        <p><strong>TEST marker</strong><br>${order.is_test_account ? '<span class="ok">TEST_SAFE</span>' : '<span class="danger">NOT TEST</span>'}</p>
+        <p><strong>Old manual quote</strong><br>${escapeHtml(previous ? formatCents(previous.confirmed_quote_amount_cents) : "none")}</p>
+        <p><strong>New manual quote</strong><br>${escapeHtml(formatCents(payload.confirmed_quote_amount_cents))}</p>
+        <p><strong>Old lead time</strong><br>${escapeHtml(previous ? formatHourRange(previous.lead_time_min_hours, previous.lead_time_max_hours) : "none")}</p>
+        <p><strong>New lead time</strong><br>${escapeHtml(formatHourRange(payload.lead_time_min_hours, payload.lead_time_max_hours))}</p>
+        <p><strong>Online version</strong><br><code>${escapeHtml(payload.expected_order_version)}</code></p>
+      </div>
+      <h3>Reply preview</h3>
+      <p><span class="pill">${escapeHtml(payload.message_type)}</span></p>
+      <pre>${escapeHtml(payload.message_body)}</pre>
+      <form method="POST" action="/orders/${order.id}/online-sync/run">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+        ${Object.entries(payload).map(([key, value]) =>
+          `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value ?? "")}">`,
+        ).join("")}
+        <button type="submit" ${order.is_test_account ? "" : "disabled"}>Confirm and sync to TEST order</button>
+      </form>
+    </section>`;
+  return renderLayout({ title: `Confirm TEST sync - ${order.order_no}`, body, csrfToken });
 }
 
 export function renderMessagePage({ title, message, backHref = "/" }) {
@@ -235,6 +269,35 @@ function renderLocalDraftForm(order, review, csrfToken) {
         <button type="submit">Save local draft only</button>
       </form>
     </section>`;
+}
+
+function renderOnlineSyncPreparation(order, review, orderVersion, csrfToken) {
+  return `
+    <section class="panel">
+      <h3>Online TEST sync preparation</h3>
+      <p class="warn">Prepare sync only after the local quote, lead time, and reply draft are reviewed. Final sync requires a second confirmation.</p>
+      <div class="grid">
+        <p><strong>Draft quote</strong><br>${escapeHtml(formatCents(review?.confirmed_price_cents))}</p>
+        <p><strong>Draft lead time</strong><br>${escapeHtml(formatHourRange(review?.lead_time_min_hours, review?.lead_time_max_hours))}</p>
+        <p><strong>Online version</strong><br><code>${escapeHtml(orderVersion || "unavailable")}</code></p>
+      </div>
+      <h4>Reply preview</h4>
+      <pre>${escapeHtml(review?.reply_draft || "")}</pre>
+      <form method="POST" action="/orders/${order.id}/online-sync/prepare">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+        <button type="submit" ${order.is_test_account ? "" : "disabled"}>Prepare sync</button>
+      </form>
+    </section>`;
+}
+
+function renderLatestOnlineConfirmation(confirmation) {
+  if (!confirmation) return '<p class="muted">No online manual confirmation yet.</p>';
+  return `
+    <div class="grid">
+      <p><strong>Latest manual quote</strong><br>${escapeHtml(formatCents(confirmation.confirmed_quote_amount_cents))}</p>
+      <p><strong>Latest manual lead time</strong><br>${escapeHtml(formatHourRange(confirmation.lead_time_min_hours, confirmation.lead_time_max_hours))}</p>
+      <p><strong>Confirmation time</strong><br>${escapeHtml(confirmation.created_at || "")}</p>
+    </div>`;
 }
 
 function renderSliceResult(slice) {
@@ -298,6 +361,20 @@ function formatMoney(value) {
   if (value == null || value === "") return "not confirmed";
   const amount = Number(value);
   return Number.isFinite(amount) ? `RMB ${amount.toFixed(2)}` : "not confirmed";
+}
+
+function formatCents(value) {
+  if (value == null || value === "") return "not confirmed";
+  const cents = Number(value);
+  return Number.isSafeInteger(cents) ? `RMB ${(cents / 100).toFixed(2)}` : "not confirmed";
+}
+
+function formatHourRange(min, max) {
+  if (min == null || max == null || min === "" || max === "") return "not confirmed";
+  const minHours = Number(min);
+  const maxHours = Number(max);
+  if (!Number.isSafeInteger(minHours) || !Number.isSafeInteger(maxHours)) return "not confirmed";
+  return minHours === maxHours ? `${minHours} hours` : `${minHours}-${maxHours} hours`;
 }
 
 function formatLeadTime(order) {
