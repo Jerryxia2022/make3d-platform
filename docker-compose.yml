@@ -49,12 +49,15 @@ services:
       PRUSASLICER_ENABLED: ${PRUSASLICER_ENABLED:-false}
       PRUSASLICER_BIN: ${PRUSASLICER_BIN:-prusa-slicer}
       PRUSASLICER_PROFILE_PATH: ${PRUSASLICER_PROFILE_PATH:-/app/profiles/bambu-p1s.ini}
+      DERIVED_MODEL_DIR: ${DERIVED_MODEL_DIR:-/app/derived-models}
+      GCODE_DIR: ${GCODE_DIR:-/app/gcode}
       SLICE_TIMEOUT_SECONDS: ${SLICE_TIMEOUT_SECONDS:-120}
       MAX_SLICE_CONCURRENCY: ${MAX_SLICE_CONCURRENCY:-1}
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
       - ./profiles:/app/profiles
+      - ./derived-models:/app/derived-models
       - ./gcode:/app/gcode
     secrets:
       - source: wechatpay_apiclient_key

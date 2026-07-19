@@ -126,6 +126,7 @@ Docker Compose 会将数据目录挂载到容器内：
 ./data:/app/data
 ./uploads:/app/uploads
 ./profiles:/app/profiles
+./derived-models:/app/derived-models
 ./gcode:/app/gcode
 ```
 
@@ -197,5 +198,5 @@ docker compose exec make3d prusa-slicer --version
 ```
 
 默认 PrusaSlicer 配置文件位于 `profiles/bambu-p1s.ini`，用于 Bambu Lab P1S / 0.4mm 喷嘴 / FDM 的基础估价配置。
-Docker 部署时，主机 `profiles/bambu-p1s.ini` 会通过 volume 挂载到容器内 `/app/profiles/bambu-p1s.ini`。切片输出目录会通过 `./gcode:/app/gcode` 挂载，便于后续保存 G-code 文件。
+Docker 部署时，主机 `profiles/bambu-p1s.ini` 会通过 volume 挂载到容器内 `/app/profiles/bambu-p1s.ini`。STEP 衍生预览模型和切片输出分别通过 `./derived-models:/app/derived-models`、`./gcode:/app/gcode` 持久化，容器重建不会覆盖原始上传文件。
 该配置仅用于后台自动切片报价的基础估算，不代表最终打印配置；实际生产时仍需根据模型结构、材料、强度、支撑、表面效果和设备状态由人工确认。

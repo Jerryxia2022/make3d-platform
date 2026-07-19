@@ -44,7 +44,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 
-RUN mkdir -p /app/data /app/uploads /app/profiles /app/gcode
+RUN mkdir -p /app/data /app/uploads /app/profiles /app/derived-models /app/gcode
 
 EXPOSE 3000
 

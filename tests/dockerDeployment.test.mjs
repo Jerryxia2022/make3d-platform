@@ -6,11 +6,14 @@ async function readSource(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("docker compose mounts slicer profile and gcode directories", async () => {
+test("docker compose mounts slicer profile, derived model, and gcode directories", async () => {
   const compose = await readSource("docker-compose.yml");
 
   assert.match(compose, /- \.\/profiles:\/app\/profiles/);
+  assert.match(compose, /- \.\/derived-models:\/app\/derived-models/);
   assert.match(compose, /- \.\/gcode:\/app\/gcode/);
+  assert.match(compose, /DERIVED_MODEL_DIR: \$\{DERIVED_MODEL_DIR:-\/app\/derived-models\}/);
+  assert.match(compose, /GCODE_DIR: \$\{GCODE_DIR:-\/app\/gcode\}/);
 });
 
 test("docker build receives public ICP filing environment", async () => {
@@ -37,10 +40,10 @@ test("docker compose passes optional wechat official account runtime environment
   assert.match(compose, /WECHAT_MP_MENU_ENABLED: \$\{WECHAT_MP_MENU_ENABLED:-false\}/);
 });
 
-test("Dockerfile creates runtime slicer profile and gcode directories", async () => {
+test("Dockerfile creates runtime slicer profile, derived model, and gcode directories", async () => {
   const dockerfile = await readSource("Dockerfile");
 
-  assert.match(dockerfile, /mkdir -p \/app\/data \/app\/uploads \/app\/profiles \/app\/gcode/);
+  assert.match(dockerfile, /mkdir -p \/app\/data \/app\/uploads \/app\/profiles \/app\/derived-models \/app\/gcode/);
 });
 
 test("README documents profile volume mount path inside the container", async () => {
