@@ -17,6 +17,8 @@ const LAYER_HEIGHT = 0.2;
 const INFILL_DENSITY = 50;
 const SLICER_BASE_MATERIAL = "PLA";
 const WEIGHT_MATERIAL = "PETG";
+const QUOTE_BED_SHAPE = "0x0,320x0,320x320,0x320";
+const QUOTE_CENTER = "160,160";
 const PARSE_FAILURE_MESSAGE = "计算失败，需人工确认";
 const MULTI_ENTITY_MANUAL_MESSAGE = "检测到该文件包含多个可拆分实体，需要人工确认报价。";
 
@@ -259,18 +261,48 @@ export async function POST(request: Request) {
 
     const gcodeFilePath = createQuoteGcodeFilePath(savedFile.filename);
     await mkdir(dirname(gcodeFilePath), { recursive: true });
-    const metadata = await enqueueSlice(() =>
-      runPrusaSlicer({
-        inputFilePath: sliceInputFilepath,
-        gcodeFilePath,
-        material: SLICER_BASE_MATERIAL,
-        metadataMaterial: WEIGHT_MATERIAL,
-        layerHeight: LAYER_HEIGHT,
-        infillDensity: INFILL_DENSITY,
-        needSupport: false,
-        config: slicerConfig,
-      }),
-    );
+    let metadata: Awaited<ReturnType<typeof runPrusaSlicer>>;
+    try {
+      metadata = await enqueueSlice(() =>
+        runPrusaSlicer({
+          inputFilePath: sliceInputFilepath,
+          gcodeFilePath,
+          material: SLICER_BASE_MATERIAL,
+          metadataMaterial: WEIGHT_MATERIAL,
+          layerHeight: LAYER_HEIGHT,
+          infillDensity: INFILL_DENSITY,
+          needSupport: false,
+          bedShape: QUOTE_BED_SHAPE,
+          center: QUOTE_CENTER,
+          config: slicerConfig,
+        }),
+      );
+    } catch {
+      const message = "自动切片失败，需人工确认。";
+      const draftFileId = saveQuoteDraftFile({
+        customerId: customer.customerId,
+        originalFilename: file.name,
+        savedFile,
+        material,
+        color,
+        quantity,
+        sliceStatus: "manual",
+        errorMessage: message,
+        dimensions,
+        manualQuoteReasonCode: "SLICER_EXECUTION_FAILED",
+        derivedArtifact,
+      });
+
+      return jsonResponse({
+        success: true,
+        message,
+        saved_upload: savedFile,
+        draft_file_id: draftFileId,
+        error: "SLICER_EXECUTION_FAILED",
+        preview_available: Boolean(derivedArtifact),
+        preview_filename: derivedArtifact?.filename,
+      });
+    }
 
     if (metadata.filamentWeightG == null || metadata.printTimeSeconds == null) {
       const draftFileId = saveQuoteDraftFile({

@@ -5946,6 +5946,9 @@ export function getBeijingTimestamp(now = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`;
 }
 
+let orderNumberSecond = "";
+let orderNumberSequence = 0;
+
 function createOrderNo(now = new Date()) {
   const parts = getBeijingDateParts(now);
   const timestamp = [
@@ -5956,7 +5959,13 @@ function createOrderNo(now = new Date()) {
     parts.minute,
     parts.second,
   ].join("");
-  const suffix = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+  if (timestamp !== orderNumberSecond) {
+    orderNumberSecond = timestamp;
+    orderNumberSequence = randomBytes(2).readUInt16BE(0) % 1000;
+  } else {
+    orderNumberSequence = (orderNumberSequence + 1) % 1000;
+  }
+  const suffix = String(orderNumberSequence).padStart(3, "0");
 
   return `M3D${timestamp}${suffix}`;
 }

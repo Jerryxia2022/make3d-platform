@@ -20,6 +20,8 @@ export type PrusaSlicerJobInput = {
   infillDensity?: number;
   needSupport?: boolean;
   profilePath?: string;
+  bedShape?: string;
+  center?: string;
 };
 
 export type RunPrusaSlicerInput = PrusaSlicerJobInput & {
@@ -76,6 +78,14 @@ export function buildPrusaSlicerArgs(input: PrusaSlicerJobInput) {
 
   if (input.needSupport) {
     args.push("--support-material");
+  }
+
+  if (input.bedShape) {
+    args.push("--bed-shape", input.bedShape);
+  }
+
+  if (input.center) {
+    args.push("--center", input.center);
   }
 
   args.push(input.inputFilePath);

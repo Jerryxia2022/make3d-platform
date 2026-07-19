@@ -14,6 +14,15 @@ test("quote slice API rejects logged out customers with a clear 401 message", as
   assert.match(source, /401/);
 });
 
+test("quote slicing covers the inclusive 300mm envelope and persists execution failures", async () => {
+  const source = await readSource("src/app/api/quote/slice/route.ts");
+
+  assert.match(source, /QUOTE_BED_SHAPE = "0x0,320x0,320x320,0x320"/);
+  assert.match(source, /QUOTE_CENTER = "160,160"/);
+  assert.match(source, /manualQuoteReasonCode: "SLICER_EXECUTION_FAILED"/);
+  assert.match(source, /sliceStatus: "manual"/);
+});
+
 test("customer account me API reports logged out state without admin session", async () => {
   const source = await readSource("src/app/api/account/me/route.ts");
 

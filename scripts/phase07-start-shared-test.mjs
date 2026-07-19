@@ -2,6 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, copyFileSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 
 import {
@@ -12,6 +13,11 @@ import {
 import { createCustomerSessionToken } from "../src/backend/customerSessionCore.js";
 import { applyOrderWorkbenchWriteSchema } from "../src/backend/orderWorkbenchWriteSchema.ts";
 
+const isMain = !process.env.NODE_TEST_CONTEXT
+  && Boolean(process.argv[1])
+  && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+
+if (isMain) {
 const args = parseArgs(process.argv.slice(2));
 const root = resolve(args.root);
 const repoRoot = resolve(new URL("..", import.meta.url).pathname.replace(/^\/(?:([A-Za-z]):)/, "$1:"));
@@ -112,6 +118,7 @@ const metadata = {
 };
 writeFileSync(resolve(root, "deployment.json"), `${JSON.stringify(metadata, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify(metadata, null, 2)}\n`);
+}
 
 function parseArgs(argv) {
   const result = { root: "", host: "192.168.0.111", port: 3108 };

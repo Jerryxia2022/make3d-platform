@@ -181,6 +181,25 @@ test("builds PrusaSlicer command as argument array without shell concatenation",
   ]);
 });
 
+test("supports an isolated quote-only virtual bed without changing the profile", () => {
+  const args = buildPrusaSlicerArgs({
+    inputFilePath: "/uploads/300mm-model.stl",
+    gcodeFilePath: "/tmp/300mm-model.gcode",
+    material: "PLA",
+    profilePath: "/app/profiles/bambu-p1s.ini",
+    bedShape: "0x0,320x0,320x320,0x320",
+    center: "160,160",
+  });
+
+  assert.deepEqual(args.slice(-5), [
+    "--bed-shape",
+    "0x0,320x0,320x320,0x320",
+    "--center",
+    "160,160",
+    "/uploads/300mm-model.stl",
+  ]);
+});
+
 test("PrusaSlicer is disabled by default and refuses execution", async () => {
   const originalEnabled = process.env.PRUSASLICER_ENABLED;
 
