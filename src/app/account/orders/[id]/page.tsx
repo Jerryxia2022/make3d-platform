@@ -383,26 +383,26 @@ function OperatorOrderUpdates({
     <section className="surface-card mt-5 p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold">Manual order confirmation</h2>
+          <h2 className="text-xl font-bold">人工确认信息</h2>
           <p className="mt-2 text-sm text-graphite">
-            These updates come from Make3D operator review and do not change paid transaction records.
+            以下信息来自 Make3D 人工审核，不会改变已付款交易记录。
           </p>
         </div>
       </div>
       {manualConfirmation ? (
         <div className="notice-success mt-4 grid gap-3 p-4 text-sm sm:grid-cols-3">
           <Detail
-            label="Manual confirmed quote"
+            label="人工确认价格"
             value={formatCents(manualConfirmation.confirmed_quote_amount_cents)}
           />
           <Detail
-            label="Manual lead time"
-            value={formatManualLeadTime(manualConfirmation.lead_time_min_hours, manualConfirmation.lead_time_max_hours)}
+            label="预计发货时间"
+            value={manualConfirmation.expected_ship_date || formatOptionalDate(manualConfirmation.estimated_ship_at)}
           />
-          <Detail label="Estimated ship at" value={formatOptionalDate(manualConfirmation.estimated_ship_at)} />
+          <Detail label="人工核价说明" value={manualConfirmation.price_adjustment_reason || "无"} />
           {paid ? (
             <p className="sm:col-span-3">
-              This confirmation is independent from the existing paid amount and does not create a new payment.
+              本次人工确认独立于既有支付金额，不会创建新的付款。
             </p>
           ) : null}
         </div>
@@ -549,11 +549,6 @@ function formatPaymentMethod(value: string | null) {
 
 function formatLeadTime(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? `约 ${Math.ceil(value)} 小时` : "以人工确认为准";
-}
-
-function formatManualLeadTime(min?: number | null, max?: number | null) {
-  if (typeof min !== "number" || typeof max !== "number") return "-";
-  return min === max ? `${min} hours` : `${min}-${max} hours`;
 }
 
 function formatAddress(order: OrderDetail) {

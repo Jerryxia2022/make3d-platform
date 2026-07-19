@@ -14,6 +14,7 @@ import {
   listVisibleOrderMessagesForCustomer,
 } from "../src/backend/orderWorkbenchOnlineSync.ts";
 import { POST as confirmPOST } from "../src/app/api/operator/workbench/orders/[id]/confirm-and-reply/route.ts";
+import { POST as businessChangesPOST } from "../src/app/api/operator/workbench/orders/[id]/business-changes/route.ts";
 
 const TOKEN = "phase06-local-workbench-token";
 const WORKER_TOKEN = "phase06-worker-token";
@@ -34,6 +35,9 @@ test("online confirmation writes only TEST order confirmation, message and audit
     const body = await response.json();
     assert.equal(body.result.created, true);
     assert.equal(body.result.confirmation.confirmed_quote_amount_cents, 1234);
+    assert.equal(body.result.confirmation.expected_ship_date, "2026-07-23");
+    assert.equal(body.result.confirmation.price_adjustment_reason, "Manual geometry review");
+    assert.equal(body.result.confirmation.production_note, "Use reviewed orientation");
     assert.equal(body.result.message.message_type, "QUOTE_CONFIRMATION");
     assert.equal(body.result.confirmation.operator_id, "operator");
     assert.equal(body.result.request_fingerprint, buildOrderWorkbenchRequestFingerprint(orderId, payload));
@@ -59,6 +63,22 @@ test("online confirmation writes only TEST order confirmation, message and audit
     assert.equal(confirmation.schema_version, 1);
     db.close();
   }, { customerId: 7, isTest: 1 });
+});
+
+test("business changes route uses the same TEST-only transactional contract", async () => {
+  await withFixture(async ({ orderId, url, payload }) => {
+    const businessUrl = url.replace(/confirm-and-reply$/, "business-changes");
+    const response = await businessChangesPOST(jsonRequest(businessUrl, {
+      ...payload,
+      payment_status: "paid",
+      refund_amount: 1,
+      arbitrary_sql: "DELETE FROM orders",
+    }), params(orderId));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.result.created, true);
+    assert.equal(body.result.confirmation.expected_ship_date, "2026-07-23");
+  });
 });
 
 test("online confirmation is idempotent by client_request_id", async () => {
@@ -229,6 +249,14 @@ test("online confirmation rejects invalid input and rolls back atomically", asyn
       /message_body/,
     );
     assert.throws(
+      () => confirmAndReplyToTestOrder(db, orderId, { ...payload, expected_ship_date: "2026-02-31" }),
+      /valid calendar date/,
+    );
+    assert.throws(
+      () => confirmAndReplyToTestOrder(db, orderId, { ...payload, price_adjustment_reason: "x".repeat(1001) }),
+      /price_adjustment_reason is too long/,
+    );
+    assert.throws(
       () => confirmAndReplyToTestOrder(db, orderId, payload, { failAfterConfirmationForTest: true }),
       /Injected transaction failure/,
     );
@@ -383,6 +411,9 @@ async function withFixture(run, options = {}) {
       lead_time_min_hours: 12,
       lead_time_max_hours: 24,
       estimated_ship_at: "2026-07-20T10:00:00.000Z",
+      expected_ship_date: "2026-07-23",
+      price_adjustment_reason: "Manual geometry review",
+      production_note: "Use reviewed orientation",
       message_type: "QUOTE_CONFIRMATION",
       message_body: "Please confirm the TEST quote.",
     };

@@ -13,7 +13,10 @@ import {
   createLocalSliceResult,
   getLocalReviewByOrderId,
   listAuditEventsForOrder,
+  markLocalReviewSyncFailure,
+  markLocalReviewSyncSuccess,
   migrateWorkbenchDatabase,
+  openWorkbenchDatabase,
   updateLocalSliceResult,
   updateLocalReview,
 } from "../worker/order-workbench/lib/localDb.mjs";
@@ -60,6 +63,68 @@ test("local review drafts are stored only in the local database with audit redac
   assert.doesNotMatch(auditText, /secret-token|13900000000|test@example.com/);
   assert.throws(() => updateLocalReview(db, order, { lead_time_min_hours: "30", lead_time_max_hours: "20" }), /max/);
   assert.throws(() => updateLocalReview(db, order, { confirmed_price_cents: "12.5" }), /integer/);
+});
+
+test("single ship date, manual price and reply persist across local database reopen", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-phase07-local-draft-"));
+  const dbPath = join(root, "workbench.db");
+  const order = { id: 42, order_no: "M3DTEST42", updated_at: "2026-07-19 12:00:00", estimated_price: 86.88, order_version: "a".repeat(64) };
+  try {
+    let db = await openWorkbenchDatabase(dbPath);
+    const initial = updateLocalReview(db, order, {
+      confirmed_price_cents: 9500,
+      expected_ship_date: "2026-07-23",
+      price_adjustment_reason: "人工核对支撑和方向",
+      reply_draft: "已人工编辑的客户回复",
+      production_note: "按确认方向生产",
+    });
+    assert.equal(initial.online_reference_price_cents, 8688);
+    assert.equal(initial.expected_ship_date, "2026-07-23");
+    assert.equal(initial.sync_status, "LOCAL_CHANGES");
+    db.close();
+
+    db = await openWorkbenchDatabase(dbPath);
+    const restored = getLocalReviewByOrderId(db, 42);
+    assert.equal(restored.confirmed_price_cents, 9500);
+    assert.equal(restored.expected_ship_date, "2026-07-23");
+    assert.equal(restored.reply_draft, "已人工编辑的客户回复");
+    assert.throws(() => updateLocalReview(db, order, { expected_ship_date: "2026-02-31" }), /invalid/);
+    db.close();
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("failed and conflicting online sync keep local changes available for a safe retry", () => {
+  const db = new DatabaseSync(":memory:");
+  migrateWorkbenchDatabase(db);
+  const order = { id: 42, order_no: "M3DTEST42", updated_at: "2026-07-19 12:00:00", estimated_price: 86.88, order_version: "a".repeat(64) };
+  updateLocalReview(db, order, {
+    confirmed_price_cents: 9500,
+    expected_ship_date: "2026-07-23",
+    reply_draft: "Customer reply remains local until verified online",
+  });
+
+  const failed = markLocalReviewSyncFailure(db, order.id, new Error("network unavailable"), false);
+  assert.equal(failed.sync_status, "SYNC_FAILED");
+  assert.equal(failed.confirmed_price_cents, 9500);
+  assert.equal(failed.reply_draft, "Customer reply remains local until verified online");
+  assert.notEqual(failed.dirty_fields_json, "[]");
+
+  const conflicted = markLocalReviewSyncFailure(db, order.id, new Error("ORDER_VERSION_CONFLICT"), true);
+  assert.equal(conflicted.sync_status, "CONFLICT");
+  assert.equal(conflicted.expected_ship_date, "2026-07-23");
+
+  const synced = markLocalReviewSyncSuccess(db, order, {
+    created: true,
+    current_order_version: "b".repeat(64),
+    confirmation: { id: 11, confirmed_quote_amount_cents: 9500, expected_ship_date: "2026-07-23" },
+    message: { id: 12 },
+  }, "phase07:retry-request");
+  assert.equal(synced.sync_status, "SYNCED");
+  assert.equal(synced.dirty_fields_json, "[]");
+  assert.equal(synced.last_sync_error, null);
+  assert.match(synced.last_sync_request_id_prefix, /^[a-f0-9]{12}$/);
 });
 
 test("slice input verification rejects unsafe or unverified files before PrusaSlicer", async () => {
@@ -467,11 +532,18 @@ test("local workbench prepares and syncs TEST online confirmation through the co
   const db = new DatabaseSync(":memory:");
   migrateWorkbenchDatabase(db);
   const calls = [];
+  let latestConfirmation = null;
   const cloudClient = createFakeCloudClient({
     confirmAndReply: async (orderId, payload) => {
       calls.push({ orderId, payload });
-      return { result: { created: true, message: { id: 88 } } };
+      latestConfirmation = {
+        id: 77,
+        confirmed_quote_amount_cents: Number(payload.confirmed_quote_amount_cents),
+        expected_ship_date: payload.expected_ship_date || null,
+      };
+      return { result: { created: true, current_order_version: "b".repeat(64), confirmation: latestConfirmation, message: { id: 88 } } };
     },
+    getOrder: async () => ({ ...createFakeOrderDetail(), latest_operator_confirmation: latestConfirmation }),
   });
   const app = createWorkbenchApp(
     {
@@ -540,13 +612,16 @@ test("local workbench prepares and syncs TEST online confirmation through the co
   assert.equal(calls[0].orderId, 1);
   assert.deepEqual(Object.keys(calls[0].payload).sort(), [
     "client_request_id",
-    "confirmed_quote_amount_cents",
-    "estimated_ship_at",
-    "expected_order_version",
-    "lead_time_max_hours",
-    "lead_time_min_hours",
-    "message_body",
-    "message_type",
+      "confirmed_quote_amount_cents",
+      "estimated_ship_at",
+      "expected_order_version",
+      "expected_ship_date",
+      "lead_time_max_hours",
+      "lead_time_min_hours",
+      "message_body",
+      "message_type",
+      "price_adjustment_reason",
+      "production_note",
   ]);
   assert.equal(calls[0].payload.confirmed_quote_amount_cents, "1200");
   assert.equal(calls[0].payload.message_body, "Please confirm quote");
@@ -560,10 +635,11 @@ test("local workbench completes temporary SQLite end-to-end TEST confirmation an
   const localDb = new DatabaseSync(":memory:");
   migrateWorkbenchDatabase(localDb);
 
+  let onlineDb;
   try {
     await mkdir(uploadDir, { recursive: true });
     await writeFile(filePath, "solid model");
-    const onlineDb = initDatabase(onlineDbPath);
+    onlineDb = initDatabase(onlineDbPath);
     applyOrderWorkbenchWriteSchema(onlineDb);
     onlineDb.prepare(`
       INSERT INTO customers (id, phone, password_hash, name, wechat, email, is_test_account)
@@ -689,7 +765,9 @@ test("local workbench completes temporary SQLite end-to-end TEST confirmation an
       /Order has changed/,
     );
     onlineDb.close();
+    onlineDb = null;
   } finally {
+    onlineDb?.close();
     localDb.close();
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
@@ -774,6 +852,12 @@ test("local workbench displays parser metric sources, dimensions, and warning se
   assert.match(response.body, /解析器提示（级别 \/ 代码 \/ 内容）/);
   assert.match(response.body, /NON_BLOCKING/);
   assert.match(response.body, /PARSER_NOTE/);
+  assert.match(response.body, /name="expected_ship_date"/);
+  assert.match(response.body, /data-generate-reply/);
+  assert.match(response.body, /data-price-difference/);
+  assert.match(response.body, /同步状态/);
+  assert.doesNotMatch(response.body, /name="lead_time_min_hours"/);
+  assert.doesNotMatch(response.body, /name="lead_time_max_hours"/);
 });
 
 function createFakeCloudClient(overrides = {}) {
@@ -815,12 +899,37 @@ function createFakeCloudClient(overrides = {}) {
       return { orders: [{ ...detail.order, file_count: 1, file_sync_summary: { status: "verified", verified_count: 1, file_count: 1 } }] };
     },
     async getOrder() {
+      if (overrides.getOrder) return overrides.getOrder();
       return detail;
     },
     async confirmAndReply(orderId, payload) {
       if (overrides.confirmAndReply) return overrides.confirmAndReply(orderId, payload);
       return { result: { created: true, message: { id: 1 } } };
     },
+  };
+}
+
+function createFakeOrderDetail() {
+  return {
+    order: {
+      id: 1,
+      order_no: "M3DLOCAL001",
+      created_at: "2026-07-17 10:00:00",
+      updated_at: "2026-07-17 10:00:00",
+      status: "pending",
+      payment_status: "unpaid",
+      material: "PLA",
+      color: "black",
+      quantity: 1,
+      estimated_price: 12.5,
+      remark: "safe note",
+      is_test_account: true,
+    },
+    files: [],
+    customer_service_requests: [],
+    latest_operator_confirmation: null,
+    order_messages: [],
+    order_version: "a".repeat(64),
   };
 }
 

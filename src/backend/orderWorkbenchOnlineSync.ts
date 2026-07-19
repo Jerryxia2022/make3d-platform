@@ -28,6 +28,9 @@ export type ConfirmAndReplyInput = {
   readonly lead_time_min_hours?: unknown;
   readonly lead_time_max_hours?: unknown;
   readonly estimated_ship_at?: unknown;
+  readonly expected_ship_date?: unknown;
+  readonly price_adjustment_reason?: unknown;
+  readonly production_note?: unknown;
   readonly message_type?: unknown;
   readonly message_body?: unknown;
 };
@@ -118,6 +121,9 @@ export function buildOrderWorkbenchRequestFingerprint(orderId: number, input: Co
     lead_time_min_hours: normalized.lead_time_min_hours,
     lead_time_max_hours: normalized.lead_time_max_hours,
     estimated_ship_at: normalized.estimated_ship_at,
+    expected_ship_date: normalized.expected_ship_date,
+    price_adjustment_reason: normalized.price_adjustment_reason,
+    production_note: normalized.production_note,
     message_type: normalized.message_type,
     message_body: normalized.message_body,
   });
@@ -125,6 +131,9 @@ export function buildOrderWorkbenchRequestFingerprint(orderId: number, input: Co
 
 export function getLatestOperatorOrderConfirmation(db: DatabaseSync, orderId: number) {
   if (!tableExists(db, "operator_order_confirmations")) return null;
+  const expectedShipDate = optionalColumnSelect(db, "operator_order_confirmations", "expected_ship_date", "expectedShipDate");
+  const priceAdjustmentReason = optionalColumnSelect(db, "operator_order_confirmations", "price_adjustment_reason", "priceAdjustmentReason");
+  const productionNote = optionalColumnSelect(db, "operator_order_confirmations", "production_note", "productionNote");
   const row = db
     .prepare(
       `
@@ -136,6 +145,9 @@ export function getLatestOperatorOrderConfirmation(db: DatabaseSync, orderId: nu
         lead_time_min_hours AS leadTimeMinHours,
         lead_time_max_hours AS leadTimeMaxHours,
         estimated_ship_at AS estimatedShipAt,
+        ${expectedShipDate},
+        ${priceAdjustmentReason},
+        ${productionNote},
         operator_note AS operatorNote,
         operator_id AS operatorId,
         order_version_snapshot AS orderVersionSnapshot,
@@ -228,6 +240,9 @@ export function confirmAndReplyToTestOrder(
         lead_time_min_hours,
         lead_time_max_hours,
         estimated_ship_at,
+        expected_ship_date,
+        price_adjustment_reason,
+        production_note,
         operator_note,
         operator_id,
         client_request_id,
@@ -235,7 +250,7 @@ export function confirmAndReplyToTestOrder(
         order_version_snapshot,
         schema_version,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     ).run(
       context.orderId,
       context.customerId,
@@ -243,6 +258,9 @@ export function confirmAndReplyToTestOrder(
       normalized.lead_time_min_hours,
       normalized.lead_time_max_hours,
       normalized.estimated_ship_at,
+      normalized.expected_ship_date,
+      normalized.price_adjustment_reason,
+      normalized.production_note,
       null,
       operatorId,
       normalized.client_request_id,
@@ -295,6 +313,9 @@ export function confirmAndReplyToTestOrder(
       confirmed_quote_amount_cents: normalized.confirmed_quote_amount_cents,
       lead_time_min_hours: normalized.lead_time_min_hours,
       lead_time_max_hours: normalized.lead_time_max_hours,
+      expected_ship_date: normalized.expected_ship_date,
+      price_adjustment_reason: normalized.price_adjustment_reason,
+      production_note: normalized.production_note,
     });
 
     db.prepare(
@@ -391,9 +412,16 @@ function normalizeConfirmAndReplyInput(input: ConfirmAndReplyInput) {
       input.confirmed_quote_amount_cents,
       "confirmed_quote_amount_cents",
     ),
-    lead_time_min_hours: requireLeadTime(input.lead_time_min_hours, "lead_time_min_hours"),
-    lead_time_max_hours: requireLeadTime(input.lead_time_max_hours, "lead_time_max_hours"),
+    lead_time_min_hours: input.lead_time_min_hours == null || input.lead_time_min_hours === ""
+      ? 0
+      : requireLeadTime(input.lead_time_min_hours, "lead_time_min_hours"),
+    lead_time_max_hours: input.lead_time_max_hours == null || input.lead_time_max_hours === ""
+      ? 0
+      : requireLeadTime(input.lead_time_max_hours, "lead_time_max_hours"),
     estimated_ship_at: normalizeOptionalIso(input.estimated_ship_at, "estimated_ship_at"),
+    expected_ship_date: normalizeOptionalDate(input.expected_ship_date, "expected_ship_date"),
+    price_adjustment_reason: normalizeOptionalText(input.price_adjustment_reason, "price_adjustment_reason", 1000),
+    production_note: normalizeOptionalText(input.production_note, "production_note", 2000),
     message_type: requireMessageType(input.message_type),
     message_body: requireBody(input.message_body),
   };
@@ -478,6 +506,31 @@ function normalizeOptionalIso(value: unknown, name: string) {
   return text;
 }
 
+function normalizeOptionalDate(value: unknown, name: string) {
+  if (value == null || value === "") return null;
+  const text = String(value).trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) throw new OrderWorkbenchWriteError(422, "INVALID_DATE", `${name} must use YYYY-MM-DD`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new OrderWorkbenchWriteError(422, "INVALID_DATE", `${name} is not a valid calendar date`);
+  }
+  return text;
+}
+
+function normalizeOptionalText(value: unknown, name: string, maxLength: number) {
+  if (value == null || value === "") return null;
+  const text = String(value).replace(/\0/g, "").trim();
+  if (!text) return null;
+  if (text.length > maxLength) {
+    throw new OrderWorkbenchWriteError(422, "TEXT_TOO_LONG", `${name} is too long`);
+  }
+  return text;
+}
+
 function normalizeOperatorId(value: string | null | undefined) {
   const text = String(value || "local-workbench-01").trim();
   if (!/^[A-Za-z0-9._:-]{3,80}$/.test(text)) {
@@ -506,6 +559,9 @@ function getExistingSyncResult(db: DatabaseSync, clientRequestId: string, reques
 }
 
 function getConfirmationByClientRequestId(db: DatabaseSync, clientRequestId: string) {
+  const expectedShipDate = optionalColumnSelect(db, "operator_order_confirmations", "expected_ship_date", "expectedShipDate");
+  const priceAdjustmentReason = optionalColumnSelect(db, "operator_order_confirmations", "price_adjustment_reason", "priceAdjustmentReason");
+  const productionNote = optionalColumnSelect(db, "operator_order_confirmations", "production_note", "productionNote");
   const row = db
     .prepare(
       `
@@ -517,6 +573,9 @@ function getConfirmationByClientRequestId(db: DatabaseSync, clientRequestId: str
         lead_time_min_hours AS leadTimeMinHours,
         lead_time_max_hours AS leadTimeMaxHours,
         estimated_ship_at AS estimatedShipAt,
+        ${expectedShipDate},
+        ${priceAdjustmentReason},
+        ${productionNote},
         operator_id AS operatorId,
         client_request_id AS clientRequestId,
         request_fingerprint AS requestFingerprint,
@@ -564,6 +623,9 @@ function toConfirmation(row: Record<string, unknown>) {
     lead_time_min_hours: Number(row.leadTimeMinHours),
     lead_time_max_hours: Number(row.leadTimeMaxHours),
     estimated_ship_at: row.estimatedShipAt ? String(row.estimatedShipAt) : null,
+    expected_ship_date: row.expectedShipDate ? String(row.expectedShipDate) : null,
+    price_adjustment_reason: row.priceAdjustmentReason ? String(row.priceAdjustmentReason) : null,
+    production_note: row.productionNote ? String(row.productionNote) : null,
     operator_id: row.operatorId ? "operator" : null,
     client_request_id: String(row.clientRequestId || ""),
     request_fingerprint: String(row.requestFingerprint || ""),
@@ -614,6 +676,10 @@ function getCustomerServiceRequestVersionSummary(db: DatabaseSync, orderId: numb
 function columnExists(db: DatabaseSync, table: string, column: string) {
   return (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[])
     .some((row) => row.name === column);
+}
+
+function optionalColumnSelect(db: DatabaseSync, table: string, column: string, alias: string) {
+  return columnExists(db, table, column) ? `${column} AS ${alias}` : `NULL AS ${alias}`;
 }
 
 function tableExists(db: DatabaseSync, name: string) {

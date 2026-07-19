@@ -22,6 +22,7 @@ import {
 import { requireAdminSession } from "@/backend/nextAdmin";
 import { maskOpenid } from "@/backend/wechat";
 import { getPrusaSlicerConfig } from "@/backend/slicer";
+import { getLatestOperatorOrderConfirmation } from "@/backend/orderWorkbenchOnlineSync";
 import { AdminFinalQuoteForm } from "@/frontend/components/AdminFinalQuoteForm";
 import { AdminPaymentConfirmForm } from "@/frontend/components/AdminPaymentConfirmForm";
 import { AdminSlicerTestButton } from "@/frontend/components/AdminSlicerTestButton";
@@ -63,6 +64,7 @@ export default async function AdminOrderDetailPage({
     const riskAcceptance = getOrderRiskAcceptanceByOrderId(db, order.id);
     const evidenceSnapshot = getOrderEvidenceSnapshotByOrderId(db, order.id);
     const evidenceSnapshotJson = parseJsonRecord(evidenceSnapshot?.snapshotJson || null);
+    const operatorConfirmation = getLatestOperatorOrderConfirmation(db, order.id);
 
     return (
       <div className="bg-[#f6f7f9] px-4 py-5 text-ink sm:px-6 lg:px-8">
@@ -120,6 +122,19 @@ export default async function AdminOrderDetailPage({
                 <Detail label="运费" value={formatMoney(order.shippingFee)} />
                 <Detail label="状态" value={order.status} />
               </dl>
+            </section>
+
+            <section className="surface-card p-4">
+              <h2 className="text-xl font-bold">本地工作台人工确认</h2>
+              {operatorConfirmation ? (
+                <dl className="mt-4 grid gap-3 text-sm">
+                  <Detail label="人工确认价格" value={formatMoney(operatorConfirmation.confirmed_quote_amount_cents / 100)} />
+                  <Detail label="预计发货时间" value={operatorConfirmation.expected_ship_date || formatOptionalDate(operatorConfirmation.estimated_ship_at)} />
+                  <Detail label="调价 / 人工核价原因" value={operatorConfirmation.price_adjustment_reason || "-"} />
+                  <Detail label="生产说明" value={operatorConfirmation.production_note || "-"} />
+                  <Detail label="同步时间" value={formatOptionalDate(operatorConfirmation.created_at)} />
+                </dl>
+              ) : <p className="mt-3 text-sm text-graphite">尚无本地工作台人工确认记录。</p>}
             </section>
 
             <section className="surface-card p-4">

@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -125,18 +126,41 @@ export function migrateWorkbenchDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_local_order_workbench_audit_order_created
       ON local_order_workbench_audit_events(order_id, created_at);
   `);
+
+  for (const [column, definition] of [
+    ["online_reference_price_cents", "INTEGER"],
+    ["online_reference_updated_at", "TEXT"],
+    ["expected_ship_date", "TEXT"],
+    ["price_adjustment_reason", "TEXT"],
+    ["production_note", "TEXT"],
+    ["reply_stale", "INTEGER NOT NULL DEFAULT 0"],
+    ["sync_status", "TEXT NOT NULL DEFAULT 'LOCAL_CHANGES'"],
+    ["last_sync_at", "TEXT"],
+    ["last_sync_request_id_prefix", "TEXT"],
+    ["last_sync_error", "TEXT"],
+    ["online_order_version", "TEXT"],
+    ["local_version", "INTEGER NOT NULL DEFAULT 1"],
+    ["dirty_fields_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["last_synced_confirmation_id", "INTEGER"],
+    ["last_synced_message_id", "INTEGER"],
+  ]) {
+    ensureLocalColumn(db, "local_order_reviews", column, definition);
+  }
 }
 
 export function getOrCreateLocalReview(db, order, patch = {}) {
   const orderId = requirePositiveInteger(order?.id, "order_id");
   const orderNo = requireText(order?.order_no, "order_no", 64);
   const existing = getLocalReviewByOrderId(db, orderId);
+  const onlineReferencePriceCents = getOnlineReferencePriceCents(order);
   if (!existing) {
     db.prepare(`
       INSERT INTO local_order_reviews (
         order_id, order_no, cloud_order_updated_at, state, selected_file_id,
-        selected_sync_job_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        selected_sync_job_id, suggested_price_cents, confirmed_price_cents,
+        online_reference_price_cents, online_reference_updated_at, online_order_version,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       orderId,
       orderNo,
@@ -144,6 +168,11 @@ export function getOrCreateLocalReview(db, order, patch = {}) {
       patch.state || "UNREVIEWED",
       patch.selected_file_id ?? null,
       patch.selected_sync_job_id ?? null,
+      onlineReferencePriceCents,
+      onlineReferencePriceCents,
+      onlineReferencePriceCents,
+      normalizeNullableText(order.updated_at || order.created_at, 128),
+      normalizeNullableText(order.order_version, 128),
     );
     insertAuditEvent(db, {
       order_id: orderId,
@@ -153,6 +182,7 @@ export function getOrCreateLocalReview(db, order, patch = {}) {
       result: "ok",
     });
   }
+  refreshOnlineReference(db, orderId, order);
   const review = updateLocalReview(db, order, patch, { createIfMissing: false });
   return review || getLocalReviewByOrderId(db, orderId);
 }
@@ -170,16 +200,33 @@ export function updateLocalReview(db, order, patch = {}, options = {}) {
   const next = normalizeReviewPatch(patch);
   if (!Object.keys(next).length) return existing;
   const before = summarizeReview(existing);
+  const changedFields = Object.keys(next).filter((key) => existing[key] !== next[key]);
+  if (!changedFields.length) return existing;
+  const dirtyFields = [...new Set([
+    ...parseStringArray(existing.dirty_fields_json),
+    ...changedFields.filter((key) => !["state", "operator_note"].includes(key)),
+  ])];
+  const replyBecameStale = Boolean(existing.reply_draft)
+    && changedFields.some((key) => ["confirmed_price_cents", "expected_ship_date", "price_adjustment_reason"].includes(key));
   const assignments = Object.keys(next).map((key) => `${key} = @${key}`).join(", ");
   db.prepare(`
     UPDATE local_order_reviews
-    SET ${assignments}, order_no = @order_no, cloud_order_updated_at = @cloud_order_updated_at, updated_at = datetime('now')
+    SET ${assignments},
+        order_no = @order_no,
+        cloud_order_updated_at = @cloud_order_updated_at,
+        sync_status = 'LOCAL_CHANGES',
+        dirty_fields_json = @dirty_fields_json,
+        reply_stale = CASE WHEN @reply_became_stale = 1 THEN 1 ELSE reply_stale END,
+        local_version = local_version + 1,
+        updated_at = datetime('now')
     WHERE order_id = @order_id
   `).run({
     ...next,
     order_id: orderId,
     order_no: requireText(order.order_no, "order_no", 64),
     cloud_order_updated_at: normalizeNullableText(order.updated_at || order.created_at, 128),
+    dirty_fields_json: JSON.stringify(dirtyFields),
+    reply_became_stale: replyBecameStale ? 1 : 0,
   });
   const updated = getLocalReviewByOrderId(db, orderId);
   insertAuditEvent(db, {
@@ -190,6 +237,63 @@ export function updateLocalReview(db, order, patch = {}, options = {}) {
     result: "ok",
   });
   return updated;
+}
+
+export function markLocalReviewSyncSuccess(db, order, result, clientRequestId) {
+  const orderId = requirePositiveInteger(order?.id, "order_id");
+  const confirmation = result?.confirmation || null;
+  const message = result?.message || null;
+  const requestPrefix = createHash("sha256").update(String(clientRequestId || "")).digest("hex").slice(0, 12);
+  db.prepare(`
+    UPDATE local_order_reviews
+    SET sync_status = 'SYNCED',
+        last_sync_at = datetime('now'),
+        last_sync_request_id_prefix = ?,
+        last_sync_error = NULL,
+        online_order_version = ?,
+        online_reference_price_cents = COALESCE(?, online_reference_price_cents),
+        online_reference_updated_at = datetime('now'),
+        expected_ship_date = COALESCE(?, expected_ship_date),
+        dirty_fields_json = '[]',
+        reply_stale = 0,
+        last_synced_confirmation_id = ?,
+        last_synced_message_id = ?,
+        updated_at = datetime('now')
+    WHERE order_id = ?
+  `).run(
+    requestPrefix,
+    normalizeNullableText(result?.current_order_version, 128),
+    normalizeNullableInteger(confirmation?.confirmed_quote_amount_cents, "confirmed_quote_amount_cents"),
+    normalizeNullableText(confirmation?.expected_ship_date, 10),
+    normalizeNullableInteger(confirmation?.id, "confirmation_id"),
+    normalizeNullableInteger(message?.id, "message_id"),
+    orderId,
+  );
+  insertAuditEvent(db, {
+    order_id: orderId,
+    action: "online_sync.success",
+    before_summary: null,
+    after_summary: JSON.stringify({ request_id_prefix: requestPrefix, created: Boolean(result?.created) }),
+    result: "ok",
+  });
+  return getLocalReviewByOrderId(db, orderId);
+}
+
+export function markLocalReviewSyncFailure(db, orderId, error, conflict = false) {
+  const safeError = sanitizeAuditText(error instanceof Error ? error.message : String(error || "sync failed"));
+  db.prepare(`
+    UPDATE local_order_reviews
+    SET sync_status = ?, last_sync_error = ?, updated_at = datetime('now')
+    WHERE order_id = ?
+  `).run(conflict ? "CONFLICT" : "SYNC_FAILED", safeError, requirePositiveInteger(orderId, "order_id"));
+  insertAuditEvent(db, {
+    order_id: orderId,
+    action: conflict ? "online_sync.conflict" : "online_sync.failed",
+    before_summary: null,
+    after_summary: null,
+    result: safeError || "failed",
+  });
+  return getLocalReviewByOrderId(db, orderId);
 }
 
 export function createLocalSliceResult(db, input) {
@@ -309,12 +413,18 @@ function normalizeReviewPatch(patch) {
   if (next.suggested_price_cents != null && next.suggested_price_cents < 0) throw new Error("suggested_price_cents must be >= 0");
   if (next.confirmed_price_cents != null && next.confirmed_price_cents < 0) throw new Error("confirmed_price_cents must be >= 0");
   if ("estimated_ship_at" in patch) next.estimated_ship_at = normalizeNullableText(patch.estimated_ship_at, 80);
+  if ("expected_ship_date" in patch) next.expected_ship_date = normalizeOptionalDate(patch.expected_ship_date);
+  if ("price_adjustment_reason" in patch) next.price_adjustment_reason = normalizeNullableText(patch.price_adjustment_reason, 1000);
+  if ("production_note" in patch) next.production_note = normalizeNullableText(patch.production_note, 2000);
   if ("reply_template" in patch) {
     const value = normalizeNullableText(patch.reply_template, 80);
     if (value && !REPLY_TEMPLATES.has(value)) throw new Error("invalid reply template");
     next.reply_template = value;
   }
-  if ("reply_draft" in patch) next.reply_draft = normalizeNullableText(patch.reply_draft, 4000);
+  if ("reply_draft" in patch) {
+    next.reply_draft = normalizeNullableText(patch.reply_draft, 4000);
+    next.reply_stale = 0;
+  }
   if ("operator_note" in patch) next.operator_note = normalizeNullableText(patch.operator_note, 2000);
   return next;
 }
@@ -370,6 +480,9 @@ function summarizeReview(row) {
     confirmed_price_cents: row.confirmed_price_cents,
     lead_time_min_hours: row.lead_time_min_hours,
     lead_time_max_hours: row.lead_time_max_hours,
+    expected_ship_date: row.expected_ship_date,
+    price_adjustment_reason: row.price_adjustment_reason,
+    production_note: row.production_note,
     reply_template: row.reply_template,
   } : null;
 }
@@ -406,6 +519,73 @@ function normalizeNullableText(value, maxLength) {
   if (!text) return null;
   if (text.length > maxLength) throw new Error("text is too long");
   return text;
+}
+
+function normalizeOptionalDate(value) {
+  if (value == null || value === "") return null;
+  const text = String(value).trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) throw new Error("expected_ship_date must use YYYY-MM-DD");
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error("expected_ship_date is invalid");
+  }
+  return text;
+}
+
+function parseStringArray(value) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function getOnlineReferencePriceCents(order) {
+  for (const value of [order?.final_price, order?.payable_price, order?.estimated_price]) {
+    if (value == null || value === "") continue;
+    const amount = Number(value);
+    if (Number.isFinite(amount) && amount >= 0) return Math.round(amount * 100);
+  }
+  return null;
+}
+
+function refreshOnlineReference(db, orderId, order) {
+  const reference = getOnlineReferencePriceCents(order);
+  const current = getLocalReviewByOrderId(db, orderId);
+  if (!current) return;
+  const confirmed = current.confirmed_price_cents == null ? reference : current.confirmed_price_cents;
+  db.prepare(`
+    UPDATE local_order_reviews
+    SET online_reference_price_cents = ?,
+        online_reference_updated_at = ?,
+        suggested_price_cents = ?,
+        confirmed_price_cents = ?,
+        online_order_version = COALESCE(?, online_order_version),
+        cloud_order_updated_at = ?,
+        order_no = ?
+    WHERE order_id = ?
+  `).run(
+    reference,
+    normalizeNullableText(order.updated_at || order.created_at, 128),
+    reference,
+    confirmed,
+    normalizeNullableText(order.order_version, 128),
+    normalizeNullableText(order.updated_at || order.created_at, 128),
+    requireText(order.order_no, "order_no", 64),
+    orderId,
+  );
+}
+
+function ensureLocalColumn(db, table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((item) => item.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 function requireText(value, name, maxLength) {

@@ -100,6 +100,10 @@ export function applyOrderWorkbenchWriteSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_order_audit_events_client_request
       ON operator_order_audit_events(client_request_id);
   `);
+
+  ensureColumn(db, "operator_order_confirmations", "expected_ship_date", "TEXT");
+  ensureColumn(db, "operator_order_confirmations", "price_adjustment_reason", "TEXT");
+  ensureColumn(db, "operator_order_confirmations", "production_note", "TEXT");
 }
 
 export function verifyOrderWorkbenchWriteSchema(db: DatabaseSync) {
@@ -127,6 +131,9 @@ export function verifyOrderWorkbenchWriteSchema(db: DatabaseSync) {
       "lead_time_min_hours",
       "lead_time_max_hours",
       "estimated_ship_at",
+      "expected_ship_date",
+      "price_adjustment_reason",
+      "production_note",
       "operator_note",
       "operator_id",
       "client_request_id",
@@ -187,6 +194,13 @@ export function verifyOrderWorkbenchWriteSchema(db: DatabaseSync) {
     version: ORDER_WORKBENCH_WRITE_SCHEMA_VERSION,
     reasons,
   };
+}
+
+function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((item) => item.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 function getCreateSql(db: DatabaseSync, type: "table" | "index", name: string) {

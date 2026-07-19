@@ -82,11 +82,49 @@
         const payload = await readJsonResponse(response);
         if (!response.ok) throw new Error(payload.message || `保存失败（HTTP ${response.status}）`);
         showFormMessage(form, payload.message, "status-success");
+        setTimeout(() => location.reload(), 350);
       } catch (error) {
         showFormMessage(form, error.message || "保存失败", "status-failed");
       } finally {
         setFormBusy(form, null, button);
       }
+    });
+  }
+
+  const generateReplyButton = document.querySelector("[data-generate-reply]");
+  if (generateReplyButton) {
+    const form = generateReplyButton.closest("form");
+    const price = form?.querySelector("[data-confirmed-price]");
+    const shipDate = form?.querySelector("[data-expected-ship-date]");
+    const reason = form?.querySelector("[data-price-reason]");
+    const reply = form?.querySelector("[data-reply-draft]");
+    const stale = form?.querySelector("[data-reply-stale]");
+    const markStale = () => {
+      if (!reply?.value.trim()) return;
+      stale.textContent = "价格或日期已经变化，当前回复可能过期。";
+      stale.className = "warn";
+    };
+    price?.addEventListener("input", markStale);
+    shipDate?.addEventListener("input", markStale);
+    reason?.addEventListener("input", markStale);
+    generateReplyButton.addEventListener("click", () => {
+      const amount = price?.value.trim() ? `¥${Number(price.value).toFixed(2)}` : "待人工确认";
+      const date = shipDate?.value || "待确认";
+      const material = generateReplyButton.dataset.material || "待确认";
+      const color = generateReplyButton.dataset.color || "待确认";
+      const quantity = generateReplyButton.dataset.quantity || "1";
+      const reasonText = reason?.value.trim();
+      reply.value = [
+        "您好，您的 Make3D 订单已完成人工核对。",
+        `人工确认价格：${amount}`,
+        `预计发货时间：${date}`,
+        `材料 / 颜色 / 数量：${material} / ${color} / ${quantity}`,
+        reasonText ? `人工核价说明：${reasonText}` : "",
+        "请登录订单详情查看并确认，如需调整请回复订单消息。",
+      ].filter(Boolean).join("\n");
+      stale.textContent = "已根据当前信息重新生成，可继续人工编辑。";
+      stale.className = "ok";
+      reply.focus();
     });
   }
 

@@ -11,6 +11,10 @@ import {
   PHASE06_A4_SCHEMA_CONFIRM_MARKER,
   runMigration,
 } from "../scripts/phase06-a4-apply-order-workbench-write-schema.mjs";
+import {
+  PHASE07_BUSINESS_SCHEMA_CONFIRM_MARKER,
+  runPhase07BusinessSchemaMigration,
+} from "../scripts/phase07-apply-business-sync-schema.mjs";
 
 test("guarded workbench write migration rejects default, missing marker, and wrong paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "make3d-a4-migration-reject-"));
@@ -24,7 +28,50 @@ test("guarded workbench write migration rejects default, missing marker, and wro
     assert.throws(() => runMigration(["--db", dbPath]), /Missing confirmation marker/);
     assert.throws(() => runMigration(["--db", `file:${dbPath}`, "--confirm", PHASE06_A4_SCHEMA_CONFIRM_MARKER]), /filesystem path/);
   } finally {
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
+  }
+});
+
+test("Phase07 business sync migration is additive, guarded and idempotent with existing rows", async () => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-phase07-migration-"));
+  const dbPath = join(root, "make3d.db");
+  try {
+    const db = initDatabase(dbPath);
+    db.prepare(`
+      INSERT INTO customers (id, phone, password_hash, name, wechat, email, is_test_account)
+      VALUES (7, '13900000007', 'hash', 'Test', 'wx', 'phase07@example.invalid', 1)
+    `).run();
+    db.prepare(`
+      INSERT INTO orders (order_no, customer_id, customer_name, phone, wechat, material, quantity)
+      VALUES ('M3D-PHASE07', 7, 'Test', '13900000007', 'wx', 'PLA', 1)
+    `).run();
+    db.close();
+    runMigration(["--db", dbPath, "--confirm", PHASE06_A4_SCHEMA_CONFIRM_MARKER]);
+
+    const seeded = new DatabaseSync(dbPath);
+    seeded.prepare(`
+      INSERT INTO operator_order_confirmations (
+        order_id, customer_id, confirmed_quote_amount_cents, lead_time_min_hours,
+        lead_time_max_hours, operator_id, client_request_id, request_fingerprint,
+        order_version_snapshot, schema_version
+      ) VALUES (1, 7, 100, 12, 24, 'operator', 'phase07-existing-row', ?, ?, 1)
+    `).run("a".repeat(64), "b".repeat(64));
+    seeded.close();
+
+    assert.throws(() => runPhase07BusinessSchemaMigration(["--db", dbPath]), /confirmation marker/);
+    const first = runPhase07BusinessSchemaMigration(["--db", dbPath, "--confirm", PHASE07_BUSINESS_SCHEMA_CONFIRM_MARKER]);
+    const second = runPhase07BusinessSchemaMigration(["--db", dbPath, "--confirm", PHASE07_BUSINESS_SCHEMA_CONFIRM_MARKER]);
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    assert.equal(first.after.integrity_check, "ok");
+    assert.equal(first.after.foreign_key_check_count, 0);
+    assert.equal(first.protected_counts_unchanged, true);
+    for (const column of ["expected_ship_date", "price_adjustment_reason", "production_note"]) {
+      assert.ok(first.after.confirmation_columns.includes(column));
+    }
+    assert.deepEqual(second.after.counts, first.after.counts);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   }
 });
 

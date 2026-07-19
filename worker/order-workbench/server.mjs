@@ -31,6 +31,8 @@ import {
   getLatestSliceResultForReview,
   getOrCreateLocalReview,
   listAuditEventsForOrder,
+  markLocalReviewSyncFailure,
+  markLocalReviewSyncSuccess,
   listLocalOrderOverviews,
   openWorkbenchDatabase,
   updateLocalReview,
@@ -179,16 +181,42 @@ export function createWorkbenchApp(config, options = {}) {
           send(response, 403, "真实订单在本地工作台中保持只读，禁止同步线上", "text/plain; charset=utf-8");
           return;
         }
-        const result = await cloudClient.confirmAndReply(orderId, {
-          client_request_id: form.client_request_id,
-          expected_order_version: form.expected_order_version,
-          confirmed_quote_amount_cents: form.confirmed_quote_amount_cents,
-          lead_time_min_hours: form.lead_time_min_hours,
-          lead_time_max_hours: form.lead_time_max_hours,
-          estimated_ship_at: form.estimated_ship_at,
-          message_type: form.message_type,
-          message_body: form.message_body,
-        });
+        let result;
+        try {
+          result = await cloudClient.confirmAndReply(orderId, {
+            client_request_id: form.client_request_id,
+            expected_order_version: form.expected_order_version,
+            confirmed_quote_amount_cents: form.confirmed_quote_amount_cents,
+            lead_time_min_hours: form.lead_time_min_hours,
+            lead_time_max_hours: form.lead_time_max_hours,
+            estimated_ship_at: form.estimated_ship_at,
+            expected_ship_date: form.expected_ship_date,
+            price_adjustment_reason: form.price_adjustment_reason,
+            production_note: form.production_note,
+            message_type: form.message_type,
+            message_body: form.message_body,
+          });
+          const refreshed = await cloudClient.getOrder(orderId);
+          const onlineConfirmation = refreshed.latest_operator_confirmation;
+          if (
+            Number(onlineConfirmation?.confirmed_quote_amount_cents) !== Number(form.confirmed_quote_amount_cents)
+            || String(onlineConfirmation?.expected_ship_date || "") !== String(form.expected_ship_date || "")
+          ) {
+            throw new Error("online readback did not match the submitted business values");
+          }
+          markLocalReviewSyncSuccess(localDb, latest.order, result.result, form.client_request_id);
+        } catch (error) {
+          const conflict = Number(error?.status) === 409 || /ORDER_VERSION_CONFLICT|IDEMPOTENCY_KEY_REUSED/.test(String(error?.code || error?.message || ""));
+          markLocalReviewSyncFailure(localDb, orderId, error, conflict);
+          send(response, conflict ? 409 : 502, renderMessagePage({
+            title: conflict ? "线上数据存在冲突" : "同步线上失败",
+            message: conflict
+              ? "线上订单已发生变化，本地修改未被覆盖。请返回订单详情查看线上最新值并人工合并。"
+              : localizeWorkbenchError(error),
+            backHref: `/orders/${orderId}`,
+          }));
+          return;
+        }
         send(response, 200, renderMessagePage({
           title: "TEST 订单已同步",
           message: result.result?.created
@@ -468,7 +496,7 @@ async function loadDetailWithLocalChecks(cloudClient, orderId, localFilesRoot, l
         : await verifyLocalFileMetadata(file, { rootDir: localFilesRoot }),
     );
   }
-  const review = localDb ? getOrCreateLocalReview(localDb, detail.order) : null;
+  const review = localDb ? getOrCreateLocalReview(localDb, { ...detail.order, order_version: detail.order_version }) : null;
   const sliceResult = localDb && review ? getLatestSliceResultForReview(localDb, review) : null;
   const auditEvents = localDb ? listAuditEventsForOrder(localDb, detail.order.id) : [];
   return { detail, localChecks, localFilesRoot, review, sliceResult, auditEvents };
@@ -671,6 +699,9 @@ function buildReviewPatch(form) {
     "lead_time_min_hours",
     "lead_time_max_hours",
     "estimated_ship_at",
+    "expected_ship_date",
+    "price_adjustment_reason",
+    "production_note",
     "reply_template",
     "reply_draft",
     "operator_note",
@@ -712,6 +743,9 @@ function buildOnlineSyncPayload(review, expectedOrderVersion, clientRequestId) {
     lead_time_min_hours: review.lead_time_min_hours,
     lead_time_max_hours: review.lead_time_max_hours,
     estimated_ship_at: review.estimated_ship_at || "",
+    expected_ship_date: review.expected_ship_date || "",
+    price_adjustment_reason: review.price_adjustment_reason || "",
+    production_note: review.production_note || "",
     message_type: mapReplyTemplateToMessageType(review.reply_template),
     message_body: messageBody,
   };
@@ -782,6 +816,7 @@ function localizeWorkbenchError(error) {
   if (/lead_time_.*must be|lead_time_.*too large/.test(message)) {
     return "货期必须使用大于或等于 0 的整数小时，且不能超过 90 天。";
   }
+  if (/expected_ship_date/.test(message)) return "预计发货日期必须是有效的 YYYY-MM-DD 日期。";
   if (/reply draft is required/.test(message)) return "请先填写给客户的回复草稿。";
   if (/online order version is required/.test(message)) return "暂时无法读取线上订单版本，请刷新页面后重试。";
   if (/local workbench database is not available/.test(message)) return "本地工作台数据库暂不可用。";

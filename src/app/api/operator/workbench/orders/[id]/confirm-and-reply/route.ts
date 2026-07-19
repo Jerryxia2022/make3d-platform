@@ -49,6 +49,9 @@ function allowlistedInput(body: unknown) {
     lead_time_min_hours: input.lead_time_min_hours,
     lead_time_max_hours: input.lead_time_max_hours,
     estimated_ship_at: input.estimated_ship_at,
+    expected_ship_date: input.expected_ship_date,
+    price_adjustment_reason: input.price_adjustment_reason,
+    production_note: input.production_note,
     message_type: input.message_type,
     message_body: input.message_body,
   };

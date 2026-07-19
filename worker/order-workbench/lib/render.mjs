@@ -385,18 +385,22 @@ function renderSliceSettings({ order, file, sliceResult, localChecks, csrfToken 
 }
 
 function renderQuoteAndReplyPanel(order, review, csrfToken) {
-  return `<section class="panel" id="quote-draft"><div class="section-head"><h3>修改价格和货期、准备客户回复</h3><span class="pill">仅本地</span></div><p class="section-note">本地草稿与线上正式数据分离，保存不会通知客户。</p>
+  const onlinePriceCents = review?.online_reference_price_cents ?? getOnlinePriceCents(order);
+  const difference = formatPriceDifference(review?.confirmed_price_cents, onlinePriceCents);
+  return `<section class="panel" id="quote-draft"><div class="section-head"><h3>人工确认价格、发货日期与客户回复</h3><span class="pill">本地草稿</span></div><p class="section-note">保存草稿不会通知客户。只有经过差异预览和二次确认后，才会同步到 TEST 订单。</p>
     <form method="POST" action="/orders/${order.id}/local-review" data-local-save-form>
       <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
       <div class="info-grid">
-        <label>参考价格（元）<input name="suggested_price_yuan" inputmode="decimal" value="${escapeHtml(formatCentsInput(review?.suggested_price_cents))}"></label>
-        <label>确认价格（元）<input name="confirmed_price_yuan" inputmode="decimal" value="${escapeHtml(formatCentsInput(review?.confirmed_price_cents))}"></label>
-        <label>最短货期（小时）<input name="lead_time_min_hours" inputmode="numeric" value="${escapeHtml(review?.lead_time_min_hours ?? "")}"></label>
-        <label>最长货期（小时）<input name="lead_time_max_hours" inputmode="numeric" value="${escapeHtml(review?.lead_time_max_hours ?? "")}"></label>
-        <label>预计发货时间<input name="estimated_ship_at" value="${escapeHtml(review?.estimated_ship_at ?? "")}" placeholder="YYYY-MM-DD HH:mm"></label>
+        <div class="info-item"><dt>参考价格（线上报价合计）</dt><dd>${escapeHtml(onlinePriceCents == null ? "尚无线上报价" : formatCents(onlinePriceCents))}</dd><small>${escapeHtml(review?.online_reference_updated_at || order.updated_at || "更新时间暂不可用")}</small></div>
+        <label>人工确认价格（元）<input name="confirmed_price_yuan" inputmode="decimal" data-confirmed-price value="${escapeHtml(formatCentsInput(review?.confirmed_price_cents))}" placeholder="0.00"></label>
+        <div class="info-item"><dt>与线上报价差额</dt><dd data-price-difference>${escapeHtml(difference)}</dd></div>
+        <label>预计发货时间<input name="expected_ship_date" data-expected-ship-date type="date" value="${escapeHtml(review?.expected_ship_date ?? "")}"></label>
         <label>客户回复模板<select name="reply_template">${["","FILE_RECEIVED","FILE_CONFIRMED","MODEL_PROBLEM_REUPLOAD","CONFIRM_MATERIAL_COLOR_QUANTITY","QUOTE_MANUAL_CONFIRM","LEAD_TIME_UPDATED","CONFIRM_SUPPORT_OR_APPEARANCE","PLAIN_TEXT"].map((value) => `<option value="${value}" ${review?.reply_template === value ? "selected" : ""}>${escapeHtml(formatReplyTemplate(value))}</option>`).join("")}</select></label>
       </div>
-      <label>给客户的回复草稿<textarea name="reply_draft" maxlength="4000">${escapeHtml(review?.reply_draft || "")}</textarea></label>
+      <label>人工核价 / 调价原因<textarea name="price_adjustment_reason" maxlength="1000" data-price-reason>${escapeHtml(review?.price_adjustment_reason || "")}</textarea></label>
+      <label>生产说明<textarea name="production_note" maxlength="2000">${escapeHtml(review?.production_note || "")}</textarea></label>
+      <div class="action-row"><button type="button" data-generate-reply data-material="${escapeHtml(order.material || "")}" data-color="${escapeHtml(order.color || "")}" data-quantity="${escapeHtml(order.quantity || 1)}">根据最新信息生成回复</button>${review?.reply_stale ? '<span class="warn" data-reply-stale>价格或日期已经变化，当前回复可能过期。</span>' : '<span class="inline-note" data-reply-stale></span>'}</div>
+      <label>给客户的回复草稿<textarea name="reply_draft" maxlength="4000" data-reply-draft>${escapeHtml(review?.reply_draft || "")}</textarea></label>
       <button type="submit">保存报价与回复草稿</button>
     </form>
   </section>`;
@@ -482,8 +486,10 @@ export function renderOnlineSyncConfirmPage({ detail, payload, csrfToken }) {
         <p><strong>TEST 标识</strong><br>${order.is_test_account ? '<span class="ok">TEST 安全订单</span>' : '<span class="danger">不是 TEST 订单</span>'}</p>
         <p><strong>原人工报价</strong><br>${escapeHtml(previous ? formatCents(previous.confirmed_quote_amount_cents) : "无")}</p>
         <p><strong>新人工报价</strong><br>${escapeHtml(formatCents(payload.confirmed_quote_amount_cents))}</p>
-        <p><strong>原预计货期</strong><br>${escapeHtml(previous ? formatHourRange(previous.lead_time_min_hours, previous.lead_time_max_hours) : "无")}</p>
-        <p><strong>新预计货期</strong><br>${escapeHtml(formatHourRange(payload.lead_time_min_hours, payload.lead_time_max_hours))}</p>
+        <p><strong>原预计发货时间</strong><br>${escapeHtml(previous?.expected_ship_date || "空")}</p>
+        <p><strong>新预计发货时间</strong><br>${escapeHtml(payload.expected_ship_date || "空")}</p>
+        <p><strong>价格调整原因</strong><br>${escapeHtml(payload.price_adjustment_reason || "未填写")}</p>
+        <p><strong>生产说明</strong><br>${escapeHtml(payload.production_note || "未填写")}</p>
         <p><strong>线上数据版本</strong><br><code>${escapeHtml(payload.expected_order_version)}</code></p>
       </div>
       <h3>客户回复预览</h3>
@@ -524,13 +530,18 @@ function renderOnlineSyncPreparation(order, review, orderVersion, csrfToken) {
   return `
     <section class="panel">
       <h3>同步到线上 TEST 订单</h3>
-      <p class="warn">请先核对人工报价、预计货期和客户回复。线上同步前还会显示一次完整预览并要求二次确认。</p>
+      <p class="warn">请先核对人工确认价格、预计发货时间和客户回复。线上同步前还会显示完整差异并要求二次确认。</p>
       ${canSync ? "" : '<p class="danger">\u771f\u5b9e\u8ba2\u5355\u4ec5\u5141\u8bb8\u672c\u5730\u67e5\u770b\u548c\u8349\u7a3f\uff0c\u201c\u540c\u6b65\u7ebf\u4e0a\u201d\u5df2\u7981\u7528\u3002</p>'}
       <div class="grid">
         <p><strong>草稿报价</strong><br>${escapeHtml(formatCents(review?.confirmed_price_cents))}</p>
-        <p><strong>草稿货期</strong><br>${escapeHtml(formatHourRange(review?.lead_time_min_hours, review?.lead_time_max_hours))}</p>
+        <p><strong>预计发货时间</strong><br>${escapeHtml(review?.expected_ship_date || "空")}</p>
+        <p><strong>同步状态</strong><br>${escapeHtml(formatBusinessSyncStatus(review?.sync_status))}</p>
+        <p><strong>最后同步时间</strong><br>${escapeHtml(review?.last_sync_at || "尚未同步")}</p>
+        <p><strong>请求摘要</strong><br><code>${escapeHtml(review?.last_sync_request_id_prefix || "无")}</code></p>
+        <p><strong>本地版本</strong><br>${escapeHtml(review?.local_version || 1)}</p>
         <p><strong>线上数据版本</strong><br><code>${escapeHtml(orderVersion || "暂不可用")}</code></p>
       </div>
+      ${review?.last_sync_error ? `<p class="danger">最后同步错误：${escapeHtml(review.last_sync_error)}</p>` : ""}
       <h4>客户回复预览</h4>
       <pre>${escapeHtml(review?.reply_draft || "")}</pre>
       <form method="POST" action="/orders/${order.id}/online-sync/prepare">
@@ -623,12 +634,30 @@ function formatCentsInput(value) {
   return Number.isSafeInteger(cents) ? (cents / 100).toFixed(2) : "";
 }
 
-function formatHourRange(min, max) {
-  if (min == null || max == null || min === "" || max === "") return "未确认";
-  const minHours = Number(min);
-  const maxHours = Number(max);
-  if (!Number.isSafeInteger(minHours) || !Number.isSafeInteger(maxHours)) return "未确认";
-  return minHours === maxHours ? `${minHours} 小时` : `${minHours}-${maxHours} 小时`;
+function getOnlinePriceCents(order) {
+  for (const value of [order?.final_price, order?.payable_price, order?.estimated_price]) {
+    if (value == null || value === "") continue;
+    const amount = Number(value);
+    if (Number.isFinite(amount) && amount >= 0) return Math.round(amount * 100);
+  }
+  return null;
+}
+
+function formatPriceDifference(confirmedCents, onlineCents) {
+  if (confirmedCents == null || onlineCents == null) return "暂不可计算";
+  const difference = Number(confirmedCents) - Number(onlineCents);
+  const sign = difference > 0 ? "+" : "";
+  return `${sign}${(difference / 100).toFixed(2)} 元`;
+}
+
+function formatBusinessSyncStatus(value) {
+  return ({
+    SYNCED: "已同步",
+    LOCAL_CHANGES: "本地有修改",
+    SYNCING: "同步中",
+    SYNC_FAILED: "同步失败",
+    CONFLICT: "存在冲突",
+  })[String(value || "LOCAL_CHANGES")] || "本地有修改";
 }
 
 function formatLeadTime(order) {

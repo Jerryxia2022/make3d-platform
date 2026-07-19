@@ -149,7 +149,8 @@ test("local workbench open-directory requires CSRF and same-origin POST", async 
     assert.match(detail.body, /本地 STL \/ 模型文件/);
     assert.match(detail.body, /打开 STL 所在文件夹/);
     assert.match(detail.body, /进入切片确认/);
-    assert.match(detail.body, /修改价格和货期/);
+    assert.match(detail.body, /name="expected_ship_date"/);
+    assert.match(detail.body, /data-generate-reply/);
     assert.ok(detail.body.includes(join(root, "M3DTEST", "1-model.stl")));
 
     const verified = await dispatch(app, {

@@ -22,9 +22,7 @@ export function createCloudClient(config, options = {}) {
     } catch {
       throw new Error(`cloud API returned non-JSON status ${response.status}`);
     }
-    if (!response.ok) {
-      throw new Error(redactString(`cloud API failed: ${response.status} ${JSON.stringify(payload)}`));
-    }
+    if (!response.ok) throw new CloudClientError(response.status, payload);
     return payload;
   }
 
@@ -41,11 +39,28 @@ export function createCloudClient(config, options = {}) {
       return requestJson(`/api/operator/workbench/orders/${encodeURIComponent(String(id))}`);
     },
     confirmAndReply(id, payload) {
-      return requestJson(`/api/operator/workbench/orders/${encodeURIComponent(String(id))}/confirm-and-reply`, {
+      return requestJson(`/api/operator/workbench/orders/${encodeURIComponent(String(id))}/business-changes`, {
         method: "POST",
         body: payload,
       });
     },
+  };
+}
+
+export class CloudClientError extends Error {
+  constructor(status, payload) {
+    super(redactString(`cloud API failed: ${status} ${JSON.stringify(payload)}`));
+    this.name = "CloudClientError";
+    this.status = Number(status);
+    this.code = String(payload?.code || "CLOUD_API_ERROR");
+    this.payload = sanitizePayload(payload);
+  }
+}
+
+function sanitizePayload(payload) {
+  return {
+    code: String(payload?.code || "CLOUD_API_ERROR"),
+    error: redactString(payload?.error || "Cloud API request failed"),
   };
 }
 
