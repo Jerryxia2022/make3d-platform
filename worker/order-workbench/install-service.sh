@@ -9,6 +9,8 @@ SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 UNIT_TEMPLATE="${SCRIPT_DIR}/systemd/${SERVICE_NAME}.in"
+WSL_INTEROP_TEMPLATE="${SCRIPT_DIR}/systemd/WSLInterop.conf"
+WSL_INTEROP_CONFIG="/usr/lib/binfmt.d/WSLInterop.conf"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run with sudo: sudo bash worker/order-workbench/install-service.sh" >&2
@@ -30,9 +32,32 @@ if [[ ! -f "${UNIT_TEMPLATE}" ]]; then
   exit 1
 fi
 
+if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+  if [[ ! -f "${WSL_INTEROP_TEMPLATE}" ]]; then
+    echo "WSL interop binfmt template is missing." >&2
+    exit 1
+  fi
+  install -o root -g root -m 0644 "${WSL_INTEROP_TEMPLATE}" "${WSL_INTEROP_CONFIG}"
+  if [[ ! -e /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    printf ':WSLInterop:M::MZ::/init:PF' > /proc/sys/fs/binfmt_misc/register
+  fi
+fi
+
 install -d -o "${WORKBENCH_USER}" -g "${WORKBENCH_USER}" -m 0750 \
   /srv/make3d-worker/order-workbench \
   /srv/make3d-worker/order-workbench/backups
+
+operator_user="${MAKE3D_WORKBENCH_OPERATOR_USER:-${SUDO_USER:-}}"
+if [[ -n "${operator_user}" && "${operator_user}" != "root" ]] && id -u "${operator_user}" >/dev/null 2>&1; then
+  usermod -a -G "${WORKBENCH_USER}" "${operator_user}"
+fi
+
+# Windows Explorer reaches WSL files as the default WSL user. Keep customer
+# files private to the Worker group while allowing the explicitly enrolled
+# local operator to traverse order directories and read the selected file.
+chgrp -R "${WORKBENCH_USER}" /srv/make3d-worker/files
+find /srv/make3d-worker/files -type d -exec chmod 0750 {} +
+find /srv/make3d-worker/files -type f -exec chmod 0640 {} +
 
 chown root:"${WORKBENCH_USER}" "${WORKBENCH_ENV}"
 chmod 0640 "${WORKBENCH_ENV}"

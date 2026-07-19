@@ -1,17 +1,30 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import {
+  ensureLocalFilesRoot,
   openVerifiedFileDirectory,
   resolveInsideRoot,
   validateSafeRelativePath,
   verifyLocalFileMetadata,
   verifyLocalFileSha256,
 } from "../worker/order-workbench/lib/localFiles.mjs";
+
+test("local workbench creates the configured files root", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "make3d-order-workbench-root-"));
+  const root = join(parent, "orders");
+  try {
+    assert.equal(await ensureLocalFilesRoot(root), root);
+    const metadata = await verifyLocalFileMetadata({ relative_path: "missing/file.stl" }, { rootDir: root });
+    assert.equal(metadata.error, "not-found");
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
 
 test("local workbench rejects unsafe relative paths", () => {
   for (const value of [
@@ -71,6 +84,31 @@ test("local workbench verifies existence, size, and SHA", async () => {
   }
 });
 
+test("local workbench rejects a symlink that escapes the configured root", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "make3d-order-workbench-symlink-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "make3d-order-workbench-symlink-outside-"));
+  try {
+    await mkdir(join(root, "M3DTEST"), { recursive: true });
+    const outsideFile = join(outside, "outside.stl");
+    await writeFile(outsideFile, "solid outside");
+    try {
+      await symlink(outsideFile, join(root, "M3DTEST", "escape.stl"));
+    } catch {
+      t.skip("symlink creation is unavailable on this filesystem");
+      return;
+    }
+    const result = await verifyLocalFileMetadata({
+      relative_path: "M3DTEST/escape.stl",
+      expected_size_bytes: 13,
+    }, { rootDir: root });
+    assert.equal(result.exists, false);
+    assert.equal(result.error, "root-escape");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
 test("open directory requires verified sync, matching size, and matching SHA", async () => {
   const root = await mkdtemp(join(tmpdir(), "make3d-order-workbench-open-"));
   const content = "solid cube";
@@ -101,6 +139,21 @@ test("open directory requires verified sync, matching size, and matching SHA", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("Windows Explorer opener matches canonical location and verifies foreground HWND", async () => {
+  const source = await readFile(new URL("../worker/order-workbench/open-directory.ps1", import.meta.url), "utf8");
+  for (const symbol of ["LocationURL", "Document.Folder.Self.Path", "IsIconic", "ShowWindowAsync", "BringWindowToTop", "SetForegroundWindow", "GetForegroundWindow", "SetWindowPos"]) {
+    assert.match(source, new RegExp(symbol.replaceAll(".", "\\.")));
+  }
+  assert.match(source, /\[IntPtr\]\(-1\)/, "must briefly set HWND_TOPMOST");
+  assert.match(source, /\[IntPtr\]\(-2\)/, "must immediately restore HWND_NOTOPMOST");
+  assert.match(source, /topmostResult/);
+  assert.match(source, /notTopmostResult/);
+  assert.match(source, /foregroundHwndBefore/);
+  assert.match(source, /directory-focused/);
+  assert.match(source, /directory-opened-not-focused/);
+  assert.doesNotMatch(source, /LocationName|window\.Name/i);
 });
 
 function sha256(value) {

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import {
   access,
+  chmod,
   mkdir,
   readFile,
   rename,
@@ -183,6 +184,7 @@ export async function prepareFinalPath(rootDir, job) {
   const finalPath = assertInsideRoot(rootDir, join(finalDir, fileName));
 
   await mkdir(finalDir, { recursive: true });
+  await chmod(finalDir, 0o750);
   return finalPath;
 }
 
@@ -196,6 +198,7 @@ export async function moveVerifiedFile(rootDir, tempPath, finalPath, expectedSha
 
     if (existingSha256 === expectedSha256) {
       await rm(tempPath, { force: true });
+      await chmod(finalPath, 0o640);
       return { finalPath, reused: true };
     }
 
@@ -208,6 +211,7 @@ export async function moveVerifiedFile(rootDir, tempPath, finalPath, expectedSha
 
   await mkdir(dirname(finalPath), { recursive: true });
   await rename(tempPath, finalPath);
+  await chmod(finalPath, 0o640);
   return { finalPath, reused: false };
 }
 

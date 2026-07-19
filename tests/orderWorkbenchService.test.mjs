@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const unitUrl = new URL("../worker/order-workbench/systemd/make3d-order-workbench.service.in", import.meta.url);
 const installerUrl = new URL("../worker/order-workbench/install-service.sh", import.meta.url);
+const interopUrl = new URL("../worker/order-workbench/systemd/WSLInterop.conf", import.meta.url);
 const readmeUrl = new URL("../worker/order-workbench/README.md", import.meta.url);
 
 test("workbench systemd service is persistent, recoverable, and loopback-only", async () => {
@@ -24,7 +25,12 @@ test("workbench installer preserves protected configuration and enables the serv
   assert.match(source, /chmod 0640/);
   assert.match(source, /systemctl daemon-reload/);
   assert.match(source, /systemctl enable/);
+  assert.match(source, /\/usr\/lib\/binfmt\.d\/WSLInterop\.conf/);
+  assert.match(source, /\/proc\/sys\/fs\/binfmt_misc\/register/);
   assert.doesNotMatch(source, /WORKER_TOKEN=|MAKE3D_LOCAL_WORKBENCH_TOKEN=/);
+
+  const interop = await readFile(interopUrl, "utf8");
+  assert.equal(interop.trim(), ":WSLInterop:M::MZ::/init:PF");
 });
 
 test("workbench README documents service operations and local address", async () => {

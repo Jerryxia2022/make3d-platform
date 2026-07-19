@@ -414,6 +414,12 @@ export async function runPrusaSlicer(config, context, input, profile, actualSlic
       : `PrusaSlicer exited with code ${result.exitCode}`;
     const error = new Error(message);
     error.workerErrorCode = "SLICER_NON_ZERO_EXIT";
+    error.exitCode = result.exitCode;
+    error.startedAt = startedAt;
+    error.finishedAt = finishedAt;
+    error.durationMs = Math.max(0, finished - started);
+    error.args = args;
+    error.artifactPaths = paths;
     throw error;
   }
 
@@ -519,7 +525,7 @@ export async function verifyExistingGcodeArtifact(config, job, lock, actualSlice
 
 export function buildPrusaSlicerArgs(sliceParams, profilePath, outputPath, inputPath) {
   const params = validateSliceParams(sliceParams);
-  return [
+  const args = [
     "--export-gcode",
     "--load",
     profilePath,
@@ -527,17 +533,30 @@ export function buildPrusaSlicerArgs(sliceParams, profilePath, outputPath, input
     outputPath,
     "--filament-type",
     params.material,
+    "--filament-density",
+    filamentDensityForMaterial(params.material),
     "--layer-height",
     String(params.layer_height_microns / 1000),
     "--fill-density",
     `${params.fill_density_percent}%`,
-    inputPath,
+    "--brim-width",
+    String(params.brim_width_microns / 1000),
   ];
+  if (params.support_mode !== "none") {
+    args.push("--support-material", "--support-material-auto");
+    if (params.support_mode === "build_plate") args.push("--support-material-buildplate-only");
+  }
+  args.push(inputPath);
+  return args;
+}
+
+function filamentDensityForMaterial(material) {
+  return ({ PLA: "1.24", PETG: "1.27", ABS: "1.04" })[material];
 }
 
 export function validateSliceParams(sliceParams) {
   const params = sliceParams && typeof sliceParams === "object" ? sliceParams : {};
-  const material = requireOneOf(params.material, ["PLA"], "material");
+  const material = requireOneOf(params.material, ["PLA", "PETG", "ABS"], "material");
   return {
     material,
     printer_model: requireOneOf(params.printer_model, ["Bambu Lab P1S"], "printer_model"),
@@ -691,7 +710,7 @@ export async function spawnPrusaSlicer(config, args, stdoutPath, stderrPath, lea
   await mkdir(dirname(stderrPath), { recursive: true });
   const stdout = createWriteStream(stdoutPath, { flags: "w", mode: 0o600 });
   const stderr = createWriteStream(stderrPath, { flags: "w", mode: 0o600 });
-  return new Promise((resolvePromise, reject) => {
+  const processResult = new Promise((resolvePromise, reject) => {
     const child = config.spawnImpl(config.prusaSlicerBin || DEFAULT_PRUSASLICER_BIN, args, {
       shell: false,
       detached: true,
@@ -710,16 +729,25 @@ export async function spawnPrusaSlicer(config, args, stdoutPath, stderrPath, lea
     const ownershipTimer = leaseControllerWatch(child, reject, leaseController);
     child.on("error", (error) => {
       ACTIVE_CHILDREN.delete(child);
+      if (ownershipTimer) clearInterval(ownershipTimer);
       reject(error);
     });
-    pipeline(child.stdout, stdout).catch(reject);
-    pipeline(child.stderr, stderr).catch(reject);
+    const stdoutPipeline = pipeline(child.stdout, stdout);
+    const stderrPipeline = pipeline(child.stderr, stderr);
     child.on("close", (code, signal) => {
       ACTIVE_CHILDREN.delete(child);
       if (ownershipTimer) clearInterval(ownershipTimer);
-      resolvePromise({ exitCode: code ?? (signal ? 1 : 0), signal });
+      Promise.allSettled([stdoutPipeline, stderrPipeline]).then((streamResults) => {
+        const streamFailure = streamResults.find((result) => result.status === "rejected");
+        if (streamFailure) {
+          reject(streamFailure.reason);
+          return;
+        }
+        resolvePromise({ exitCode: code ?? (signal ? 1 : 0), signal });
+      });
     });
   });
+  return processResult;
 }
 
 export function createLeaseController(config, context, monotonic = performance) {

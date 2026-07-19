@@ -1,0 +1,511 @@
+{
+  "startedAt": "2026-07-19T00:02:59.437Z",
+  "browser": {
+    "headless": false,
+    "isolatedProfile": "C:\\Users\\21899\\AppData\\Local\\Temp\\make3d-workbench-acceptance-D1o5FH",
+    "debuggingPort": 9223,
+    "chromePid": 54832
+  },
+  "list": {
+    "default": {
+      "url": "http://127.0.0.1:5177/orders",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 23 条订单\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "viewport1920": {
+      "width": 1920,
+      "height": 1080,
+      "dpr": 1,
+      "url": "http://127.0.0.1:5177/orders"
+    },
+    "viewport1024": {
+      "width": 1024,
+      "height": 768,
+      "dpr": 1,
+      "url": "http://127.0.0.1:5177/orders"
+    },
+    "search": {
+      "url": "http://127.0.0.1:5177/orders?q=42&sort=priority&page_size=20&local_state=&file_status=&slice_status=&payment_status=&customer_type=&date=&exception=&customer_reply=",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-1，共 1 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 1,
+      "firstOrder": "M3D20260718175603009",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "searchCleared": {
+      "url": "http://127.0.0.1:5177/orders",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 23 条订单\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "filters": {
+      "url": "http://127.0.0.1:5177/orders?q=&sort=created_desc&page_size=20&local_state=UNREVIEWED&file_status=&slice_status=&payment_status=&customer_type=test&date=&exception=&customer_reply=",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 20 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260716204818347",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "fileFilter": {
+      "url": "http://127.0.0.1:5177/orders?file_status=verified",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-14，共 14 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 14,
+      "firstOrder": "M3D20260716202853187",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "sliceFailureFilter": {
+      "url": "http://127.0.0.1:5177/orders?slice_status=failed",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 0-0，共 0 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 0,
+      "firstOrder": null,
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "testFilter": {
+      "url": "http://127.0.0.1:5177/orders?customer_type=test",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 23 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "dateFilter": {
+      "url": "http://127.0.0.1:5177/orders?date=30d",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 23 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "refreshPreserved": {
+      "url": "http://127.0.0.1:5177/orders?date=30d",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 23 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "exceptions": {
+      "url": "http://127.0.0.1:5177/orders?exception=file",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-9，共 9 条筛选结果\n默认按阻塞项和人工下一步排序",
+      "rows": 9,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "empty": {
+      "text": "Make3D 本地订单工作台\n仅限本机访问 | TEST订单可人工同步 | 真实订单只读 | 价格和货期先保存为本地草稿 | 尚未同步给客户\n订单工作台\n\n按阻塞项和下一步优先处理，线上订单数据保持只读。\n\n刷新数据\n23\n全部订单\n23\n待处理\n9\n文件异常\n0\n切片失败\n0\n等待客户\n0\n今日新增\n搜索\n排序\n处理优先级\n最近更新\n下单时间：新到旧\n下单时间：旧到新\n金额：高到低\n每页\n20 条\n50 条\n应用筛选\n清除筛选\n本地处理\n全部\n未处理\n处理中\n文件存在问题\n可以切片\n切片中\n切片结果已查看\n切片结果已确认\n切片需要调整\n报价草稿已填写\n可以同步 TEST 订单\n已关闭\n文件状态\n全部\n已同步并验证\n同步中\n同步失败\n未生成同步任务\n无文件\n未知\n切片状态\n全部\n未开始\n切片中\n解析完成\n部分完成\n失败\n支付状态\n全部\n未支付\n支付处理中\n已支付\n部分退款\n已退款\n支付失败\n已关闭\n订单类型\n全部\nTEST\n真实订单\n身份未确认\n下单日期\n不限\n今天\n最近 7 天\n最近 30 天\n异常\n全部\n全部异常\n文件异常\n客户回复\n全部\n等待客户\n客户已回复\n显示 0-0，共 0 条筛选结果\n默认按阻塞项和人工下一步排序\n订单\t客户\t创建时间\t文件\t切片\t本地状态\t支付\t报价\t货期\t最近更新\t下一步\t操作\n没有符合条件的订单\n\n调整搜索或筛选条件后重试。\n\n清除筛选",
+      "rows": 0
+    },
+    "page2": {
+      "url": "http://127.0.0.1:5177/orders?page=2&page_size=20&sort=priority",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 21-23，共 23 条订单\n默认按阻塞项和人工下一步排序",
+      "rows": 3,
+      "firstOrder": "M3D20260716212109683",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "page1": {
+      "url": "http://127.0.0.1:5177/orders?page=1&page_size=20&sort=priority",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-20，共 23 条订单\n默认按阻塞项和人工下一步排序",
+      "rows": 20,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "pageSize50": {
+      "url": "http://127.0.0.1:5177/orders?page_size=50&sort=priority",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "totalText": "显示 1-23，共 23 条订单\n默认按阻塞项和人工下一步排序",
+      "rows": 23,
+      "firstOrder": "M3D20260708163819813",
+      "stats": [
+        "23\n全部订单",
+        "23\n待处理",
+        "9\n文件异常",
+        "0\n切片失败",
+        "0\n等待客户",
+        "0\n今日新增"
+      ],
+      "horizontalOverflow": false
+    },
+    "order42Detail": {
+      "url": "http://127.0.0.1:5177/orders/42",
+      "text": "Make3D 本地订单工作台\n仅限本机访问 | TEST订单可人工同步 | 真实订单只读 | 价格和货期先保存为本地草稿 | 尚未同步给客户\n\n← 返回订单列表\n\nM3D20260718175603009 TEST订单\n订单 ID 42 · TEST 操作边界\n保存本地审核\n查看切片结果\n更多信息\n处理状态\n切片结果已查看\n付款状态\n未支付\n文件状态\n已同步并验证\n切片状态\n成功\n订单创建\n2026-07-18T17:56:03+08:00\n最后更新\n2026-07-18T17:56:03+08:00\n线上数据版本 d57a0d776c82\n客户与订单信息\n客户隐私保护\n客户资料\n本地接口已脱敏，不显示电话、微信和邮箱\n下单时间\n2026-07-18T17:56:03+08:00\n配送方式\n以线上订单为准\n材料 / 颜色 / 数量\nPLA / 白 / 1\n线上报价 / 货期\n¥86.88 / 39-39 小时\n客户备注\n无\n文件信息\n\n本地 STL / 模型文件 · 根目录：/srv/make3d-worker/files\n\n已同步并验证\n17***--.stl\n文件 ID 46 · STL · 原名已脱敏\n已同步并验证\n线上 / 本地大小\n141.1 KB / 141.1 KB\nSHA-256\n92bd7880b5dc · 通过\n文件存在\n是\n最近同步\n2026-07-18T09:56:11.992Z\n本地目录\n/srv/make3d-worker/files/M3D20260718175603009\n复制\n完整路径\n/srv/make3d-worker/files/M3D20260718175603009/46-1784368538566-ea5c29a6-519c-4af6-9593-a3ba30097e77----.stl\n复制\n重新检查\n校验 SHA\n打开 STL 所在文件夹\n切片设置\n\n当前配置用于本地人工验证，不会自动修改报价或订单。\n\nBambu P1S\n材料\nPLA\n颜色\n数量\n喷嘴直径\n层高\n0.12 mm\n0.16 mm\n0.20 mm\n0.28 mm\n填充率\n支撑\n不启用\n仅从热床生成\n所有位置\n裙边宽度\n壁数\n高级参数\n\n文件已验证，可以开始切片。\n\n进入重新切片确认\n切片结果\n\n仅供人工审核，不会自动修改线上价格。\n\n成功\n预计打印时间\n14小时 27分 21秒\n预计材料重量\n202.78 g\nG-code 大小\n11.05 MB\n进程退出码\n0\n切片器版本\n2.7.2+dfsg-1build2\n切片配置\nBambu P1S 0.4mm / 0.2mm / 50%\n开始时间\n2026-07-18T14:46:53.381Z\n完成时间\n2026-07-18T14:46:54.708Z\n上传模型尺寸\n116mm / 83.08mm / 230mm\n切片输出范围\n115.231mm / 88.049mm / 230mm（G-code 运动范围）\n重量数据来源\ngcode_direct\n可用于人工报价\n是\nG-code 路径\n/srv/make3d-worker/results/orders/M3D20260718175603009/slice-12/output.gcode\n复制\nG-code SHA\n29e155337a31bd2aa52d37204655cf7b385244515b3f679e9e516a33c50e26e4\n技术详情\n修改价格和货期、准备客户回复\n仅本地\n\n本地草稿与线上正式数据分离，保存不会通知客户。\n\n参考价格（元）\n确认价格（元）\n最短货期（小时）\n最长货期（小时）\n预计发货时间\n客户回复模板\n不使用模板\n已收到文件\n文件已确认\n模型有问题，需要重新上传\n确认材料、颜色和数量\n人工报价确认\n预计货期更新\n确认支撑或外观要求\n普通文本回复\n给客户的回复草稿\n保存报价与回复草稿\n客户消息和可见回复\n暂无记录\n本地操作记录\n当前处理\n切片结果已查看\n\n下一步建议\n切片结果完整，可以审核打印时间、耗材重量和报价草稿。\n\n本地处理状态\n未处理\n处理中\n文件存在问题\n可以切片\n切片中\n切片结果已查看\n切片结果已确认\n切片需要调整\n报价草稿已填写\n可以同步 TEST 订单\n已关闭\n内部处理备注\n保存本地审核\n同步到线上 TEST 订单\n\n请先核对人工报价、预计货期和客户回复。线上同步前还会显示一次完整预览并要求二次确认。\n\n草稿报价\n¥86.88\n\n草稿货期\n39 小时\n\n线上数据版本\nd57a0d776c82a909965b99b6146551627ac45823de07f7154da4b132d83dd42c\n\n客户回复预览\n预览并准备同步"
+    },
+    "backPreserved": {
+      "url": "http://127.0.0.1:5177/orders?q=42&customer_type=test&page_size=20&sort=priority",
+      "customerType": "test"
+    }
+  },
+  "explorer": {
+    "scenario1": {
+      "browserHwndBefore": 14486124,
+      "before": [
+        {
+          "hwnd": 1117054,
+          "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827",
+          "path": "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\make3d-worker\\files\\M3D20260714062902874827"
+        },
+        {
+          "hwnd": 32704978,
+          "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827",
+          "path": "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\make3d-worker\\files\\M3D20260714062902874827"
+        }
+      ],
+      "button": {
+        "status": "directory-focused",
+        "targetHwnd": "25889580",
+        "foregroundHwnd": "25889580",
+        "foregroundHwndBefore": "14486124",
+        "restored": "false",
+        "text": "已打开并切换到前台"
+      },
+      "after": {
+        "targetCount": 1,
+        "targetHwnd": 25889580,
+        "targetLocationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+        "foregroundHwnd": 25889580,
+        "windows": [
+          {
+            "hwnd": 1117054,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 32704978,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 25889580,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009"
+          }
+        ]
+      }
+    },
+    "scenario2": {
+      "browserHwndBefore": 14486124,
+      "before": {
+        "targetCount": 1,
+        "targetHwnd": 25889580,
+        "targetLocationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+        "foregroundHwnd": 14486124,
+        "windows": [
+          {
+            "hwnd": 1117054,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 32704978,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 25889580,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009"
+          }
+        ]
+      },
+      "button": {
+        "status": "directory-focused",
+        "targetHwnd": "25889580",
+        "foregroundHwnd": "25889580",
+        "foregroundHwndBefore": "14486124",
+        "restored": "false",
+        "text": "已打开并切换到前台"
+      },
+      "after": {
+        "targetCount": 1,
+        "targetHwnd": 25889580,
+        "targetLocationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+        "foregroundHwnd": 25889580,
+        "windows": [
+          {
+            "hwnd": 1117054,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 32704978,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 25889580,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009"
+          }
+        ]
+      }
+    },
+    "scenario3": {
+      "browserHwndBefore": 14486124,
+      "button": {
+        "status": "directory-focused",
+        "targetHwnd": "25889580",
+        "foregroundHwnd": "25889580",
+        "foregroundHwndBefore": "14486124",
+        "restored": "true",
+        "text": "已打开并切换到前台"
+      },
+      "after": {
+        "targetCount": 1,
+        "targetHwnd": 25889580,
+        "targetLocationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+        "foregroundHwnd": 25889580,
+        "windows": [
+          {
+            "hwnd": 1117054,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 32704978,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 25889580,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009"
+          }
+        ]
+      }
+    },
+    "scenario4": {
+      "browserHwndBefore": 14486124,
+      "before": [
+        {
+          "hwnd": 1117054,
+          "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827",
+          "path": "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\make3d-worker\\files\\M3D20260714062902874827"
+        },
+        {
+          "hwnd": 32704978,
+          "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827",
+          "path": "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\make3d-worker\\files\\M3D20260714062902874827"
+        },
+        {
+          "hwnd": 25889580,
+          "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+          "path": "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\make3d-worker\\files\\M3D20260718175603009"
+        },
+        {
+          "hwnd": 10225952,
+          "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827",
+          "path": "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\make3d-worker\\files\\M3D20260714062902874827"
+        }
+      ],
+      "button": {
+        "status": "directory-focused",
+        "targetHwnd": "25889580",
+        "foregroundHwnd": "25889580",
+        "foregroundHwndBefore": "14486124",
+        "restored": "false",
+        "text": "已打开并切换到前台"
+      },
+      "after": {
+        "targetCount": 1,
+        "targetHwnd": 25889580,
+        "targetLocationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+        "foregroundHwnd": 25889580,
+        "windows": [
+          {
+            "hwnd": 1117054,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 32704978,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 25889580,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009"
+          },
+          {
+            "hwnd": 10225952,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          }
+        ]
+      }
+    },
+    "scenario5": {
+      "browserHwndBeforeA": 14486124,
+      "browserHwndBeforeB": 14486124,
+      "first": {
+        "status": "directory-focused",
+        "targetHwnd": "25889580",
+        "foregroundHwnd": "25889580",
+        "foregroundHwndBefore": "14486124",
+        "restored": "false",
+        "text": "已打开并切换到前台"
+      },
+      "second": {
+        "status": "directory-focused",
+        "targetHwnd": "25889580",
+        "foregroundHwnd": "25889580",
+        "foregroundHwndBefore": "14486124",
+        "restored": "false",
+        "text": "已打开并切换到前台"
+      },
+      "after": {
+        "targetCount": 1,
+        "targetHwnd": 25889580,
+        "targetLocationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009",
+        "foregroundHwnd": 25889580,
+        "windows": [
+          {
+            "hwnd": 1117054,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 32704978,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          },
+          {
+            "hwnd": 25889580,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260718175603009"
+          },
+          {
+            "hwnd": 10225952,
+            "locationUrl": "file://wsl.localhost/Ubuntu-24.04/srv/make3d-worker/files/M3D20260714062902874827"
+          }
+        ]
+      }
+    }
+  },
+  "finishedAt": "2026-07-19T00:03:53.682Z"
+}

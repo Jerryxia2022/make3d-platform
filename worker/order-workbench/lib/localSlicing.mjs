@@ -1,5 +1,5 @@
 import { execFile, spawn as defaultSpawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { promisify } from "node:util";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -33,11 +33,21 @@ export const FLOCK_LOCK_CONFLICT_EXIT_CODE = 75;
 
 const execFileAsync = promisify(execFile);
 let activeLocalSlice = false;
+const localSliceRuntimeStates = new Map();
+
+export function getLocalSliceRuntimeStatus(orderId) {
+  return localSliceRuntimeStates.get(Number(orderId)) || null;
+}
+
+export function isLocalSliceRunning() {
+  return activeLocalSlice;
+}
 
 export async function runLocalOneShotSlice({ db, order, file, config, options = {} }) {
   if (activeLocalSlice) throw new Error("another local slicing process is already active");
   activeLocalSlice = true;
   let sliceRow = null;
+  setRuntimeStage(order?.id, "VALIDATING", { message: "正在验证 STL 文件、大小和 SHA-256" });
   try {
     const input = await verifySliceInputFile(file, {
       filesRoot: config.localFilesRoot,
@@ -77,6 +87,7 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
     });
 
     const workerRoot = resolve(config.workerRoot || DEFAULT_WORKER_ROOT);
+    const sliceParams = buildSliceParams(order, options.sliceParams);
     const job = buildLocalSlicingJob({
       order,
       file,
@@ -84,7 +95,7 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       sliceResultId: sliceRow.id,
       profileKey,
       profileSha256,
-      sliceParams: buildSliceParams(order),
+      sliceParams,
     });
     const workerConfig = {
       rootDir: workerRoot,
@@ -104,6 +115,10 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
     };
     const profile = await verifyProfile(job, workerConfig.profileWhitelist);
     const slicerVersion = await getPrusaSlicerPackageVersion(workerConfig);
+    setRuntimeStage(order.id, "SLICING", {
+      sliceResultId: sliceRow.id,
+      message: "正在启动 PrusaSlicer 并生成 G-code",
+    });
     const sliceResult = await runPrusaSlicer(
       workerConfig,
       {
@@ -123,7 +138,18 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       null,
     );
 
-    const parsed = await parsePrusaSlicerGcode(sliceResult.gcodePath, {
+    const published = await publishOrderSliceArtifacts({
+      workerRoot,
+      orderNo: order.order_no,
+      sliceResultId: sliceRow.id,
+      sliceResult,
+    });
+    setRuntimeStage(order.id, "PARSING", {
+      sliceResultId: sliceRow.id,
+      message: "G-code 已生成，正在解析打印时间和耗材重量",
+    });
+
+    const parsed = await parsePrusaSlicerGcode(published.gcodePath, {
       allowedRoots: [resolve(workerRoot, "results")],
       parserVersion: PARSER_VERSION,
       sliceParams: job.slice_params,
@@ -154,7 +180,11 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       },
     });
 
-    const finalStatus = parsed.validation.metrics_status === "error" ? "partial" : "parsed";
+    const hasRequiredMetrics = parsed.result.print_time_seconds > 0
+      && parsed.result.filament_weight_mg > 0
+      && published.gcodeSizeBytes > 0
+      && parsed.validation.quote_ready === true;
+    const finalStatus = hasRequiredMetrics ? "parsed" : "partial";
     const dimensions = parsed.result.dimensions || {};
     const updatedSlice = updateLocalSliceResult(db, sliceRow.id, {
       status: finalStatus,
@@ -163,23 +193,32 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       metrics_status: parsed.validation.metrics_status,
       parser_quote_ready: parsed.validation.quote_ready,
       completed_at: sliceResult.finishedAt,
-      duration_seconds: Math.round(sliceResult.durationMs / 1000),
+      duration_seconds: Math.max(1, Math.ceil(sliceResult.durationMs / 1000)),
       print_time_seconds: parsed.result.print_time_seconds,
       material_weight_grams: parsed.result.filament_weight_mg == null ? null : parsed.result.filament_weight_mg / 1000,
       dimensions_x: dimensions.x_mm ?? null,
       dimensions_y: dimensions.y_mm ?? null,
       dimensions_z: dimensions.z_mm ?? null,
-      gcode_relative_path: toWorkerRelative(workerRoot, sliceResult.gcodePath),
-      gcode_size_bytes: sliceResult.gcodeSizeBytes,
-      gcode_sha256: sliceResult.gcodeSha256,
-      stdout_relative_path: toWorkerRelative(workerRoot, sliceResult.stdoutPath),
-      stderr_relative_path: toWorkerRelative(workerRoot, sliceResult.stderrPath),
+      gcode_relative_path: toWorkerRelative(workerRoot, published.gcodePath),
+      gcode_size_bytes: published.gcodeSizeBytes,
+      gcode_sha256: published.gcodeSha256,
+      stdout_relative_path: toWorkerRelative(workerRoot, published.stdoutPath),
+      stderr_relative_path: toWorkerRelative(workerRoot, published.stderrPath),
       warnings_json: JSON.stringify(parsed.parse.warnings || []),
       metrics_json: JSON.stringify({
         result: parsed.result,
         metric_sources: parsed.metric_sources,
         validation: parsed.validation,
         slice_params: parsed.slice_params,
+        execution: {
+          binary_path: config.prusaSlicerBin || DEFAULT_PRUSASLICER_BIN,
+          profile_path: profile.path,
+          command: [config.prusaSlicerBin || DEFAULT_PRUSASLICER_BIN, ...sliceResult.args],
+          exit_code: sliceResult.exitCode,
+          gcode_absolute_path: published.gcodePath,
+          stdout_absolute_path: published.stdoutPath,
+          stderr_absolute_path: published.stderrPath,
+        },
         dimension_sources: {
           upload_model_dimensions: {
             x_mm: file.bounding_box_x ?? file.boundingBoxX ?? null,
@@ -194,17 +233,44 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
     });
 
     updateLocalReview(db, order, {
-      state: "SLICE_REVIEWED",
+      state: finalStatus === "parsed" ? "SLICE_REVIEWED" : "SLICE_NEEDS_FIX",
       selected_file_id: file.file_id,
       selected_sync_job_id: file.local_file_sync_job_id,
       slice_result_id: updatedSlice.id,
     });
 
-    return { ok: true, slice: updatedSlice, parsed };
+    const stage = finalStatus === "parsed" ? "SUCCESS" : "PARTIAL";
+    setRuntimeStage(order.id, stage, {
+      sliceResultId: updatedSlice.id,
+      message: finalStatus === "parsed"
+        ? "切片完成，G-code、打印时间和耗材重量均已验证"
+        : "G-code 已生成，但打印时间或耗材重量未完整解析",
+    });
+    return { ok: finalStatus === "parsed", partial: finalStatus === "partial", slice: updatedSlice, parsed };
   } catch (error) {
-    const summary = sanitizeFailure(error);
+    const workerRoot = resolve(config.workerRoot || DEFAULT_WORKER_ROOT);
+    const slicerDetails = sliceRow?.id
+      ? await readLocalSlicerFailureDetails(workerRoot, sliceRow.id)
+      : "";
+    const summary = sanitizeFailure(slicerDetails ? `${error?.message || error}；${slicerDetails}` : error);
     if (sliceRow?.id) {
-      updateLocalSliceResult(db, sliceRow.id, { status: "failed", failure_summary: summary, completed_at: new Date().toISOString() });
+      updateLocalSliceResult(db, sliceRow.id, {
+        status: "failed",
+        failure_summary: summary,
+        completed_at: error?.finishedAt || new Date().toISOString(),
+        duration_seconds: error?.durationMs == null ? null : Math.max(1, Math.ceil(error.durationMs / 1000)),
+        metrics_json: JSON.stringify({
+          execution: {
+            binary_path: config.prusaSlicerBin || DEFAULT_PRUSASLICER_BIN,
+            profile_path: config.profilePath || DEFAULT_PROFILE_PATH,
+            command: Array.isArray(error?.args)
+              ? [config.prusaSlicerBin || DEFAULT_PRUSASLICER_BIN, ...error.args]
+              : [],
+            exit_code: error?.exitCode ?? null,
+          },
+          failed_stage: runtimeStageFor(order?.id),
+        }),
+      });
     }
     const fileProblem = /sync-not-verified|file-not-verified|extension-not-supported|size|SHA|path|missing|not-found|root/i.test(summary);
     updateLocalReview(db, order, {
@@ -213,10 +279,37 @@ export async function runLocalOneShotSlice({ db, order, file, config, options = 
       selected_sync_job_id: file?.local_file_sync_job_id,
       slice_result_id: sliceRow?.id || null,
     });
+    setRuntimeStage(order?.id, "FAILED", {
+      sliceResultId: sliceRow?.id || null,
+      message: summary,
+    });
     return { ok: false, error: summary, slice: sliceRow?.id ? updateLocalSliceResult(db, sliceRow.id, { status: "failed", failure_summary: summary }) : null };
   } finally {
     activeLocalSlice = false;
   }
+}
+
+export async function readLocalSlicerFailureDetails(workerRoot, sliceResultId) {
+  const id = Number(sliceResultId);
+  if (!Number.isSafeInteger(id) || id <= 0) return "";
+  const stderrPath = join(
+    resolve(workerRoot || DEFAULT_WORKER_ROOT),
+    "processing",
+    "prusaslicer",
+    String(id),
+    "attempt-1",
+    "stderr.part",
+  );
+  const stderr = await readFile(stderrPath, "utf8").catch(() => "");
+  const message = String(stderr || "").trim().slice(0, 2_000);
+  if (!message) return "";
+  if (/exceeds the maximum build volume height/i.test(message)) {
+    return "模型高度超过当前打印机配置允许的最大成型高度";
+  }
+  if (/exceeds the maximum build volume|outside (?:of )?the (?:print|build) volume/i.test(message)) {
+    return "模型尺寸超出当前打印机配置允许的成型范围";
+  }
+  return message.replace(/\b[^\s/\\]+\.(?:stl|3mf)\b/gi, "模型文件");
 }
 
 export async function verifySliceInputFile(file, options = {}) {
@@ -278,16 +371,48 @@ export async function assertNoExistingPrusaSlicerProcess(options = {}) {
   return { ok: true };
 }
 
-export function buildSliceParams(order) {
+export function buildSliceParams(order, overrides = {}) {
+  const layerHeightMicrons = normalizeIntegerOption(overrides.layer_height_microns, 200);
+  const fillDensityPercent = normalizeIntegerOption(overrides.fill_density_percent, 50);
+  const supportMode = String(overrides.support_mode || "none");
+  const brimWidthMicrons = normalizeIntegerOption(overrides.brim_width_microns, 0);
+  if (layerHeightMicrons < 50 || layerHeightMicrons > 400) throw new Error("layer height must be between 0.05 and 0.4 mm");
+  if (fillDensityPercent < 0 || fillDensityPercent > 100) throw new Error("fill density must be between 0 and 100 percent");
+  if (!new Set(["none", "build_plate", "everywhere"]).has(supportMode)) throw new Error("invalid support mode");
+  if (brimWidthMicrons < 0 || brimWidthMicrons > 20_000) throw new Error("brim width must be between 0 and 20 mm");
   return {
     material: String(order?.material || "PLA").toUpperCase(),
     printer_model: "Bambu Lab P1S",
     nozzle_diameter_microns: 400,
-    layer_height_microns: 200,
-    fill_density_percent: 50,
-    support_mode: "none",
-    brim_width_microns: 0,
+    layer_height_microns: layerHeightMicrons,
+    fill_density_percent: fillDensityPercent,
+    support_mode: supportMode,
+    brim_width_microns: brimWidthMicrons,
   };
+}
+
+export async function publishOrderSliceArtifacts({ workerRoot, orderNo, sliceResultId, sliceResult }) {
+  const safeOrderNo = String(orderNo || "").replace(/[^A-Za-z0-9_-]/g, "");
+  if (!safeOrderNo) throw new Error("invalid order number for local result path");
+  const resultRoot = resolve(workerRoot, "results");
+  const safeRelativeDirectory = `orders/${safeOrderNo}/slice-${Number(sliceResultId)}`;
+  const resultDir = resolve(resultRoot, safeRelativeDirectory);
+  const inside = resolveInsideRoot(resultRoot, safeRelativeDirectory);
+  if (!inside.ok || inside.path !== resultDir) throw new Error("order result path escapes worker results root");
+  await mkdir(resultDir, { recursive: true, mode: 0o750 });
+  const gcodePath = join(resultDir, "output.gcode");
+  const stdoutPath = join(resultDir, "stdout.log");
+  const stderrPath = join(resultDir, "stderr.log");
+  await atomicCopy(sliceResult.gcodePath, gcodePath);
+  await atomicCopy(sliceResult.stdoutPath, stdoutPath);
+  await atomicCopy(sliceResult.stderrPath, stderrPath);
+  const info = await stat(gcodePath);
+  const gcodeSha256 = await sha256File(gcodePath);
+  if (!info.isFile() || info.size <= 0) throw new Error("published order G-code is missing or empty");
+  if (info.size !== sliceResult.gcodeSizeBytes || gcodeSha256 !== sliceResult.gcodeSha256) {
+    throw new Error("published order G-code verification failed");
+  }
+  return { gcodePath, stdoutPath, stderrPath, gcodeSizeBytes: info.size, gcodeSha256 };
 }
 
 export function buildLocalSlicingJob({ order, file, input, sliceResultId, profileKey, profileSha256, sliceParams }) {
@@ -355,6 +480,37 @@ function toWorkerRelative(workerRoot, absolutePath) {
   const rel = relative(resolve(workerRoot), resolve(absolutePath)).replace(/\\/g, "/");
   if (!rel || rel.startsWith("../") || rel === "..") throw new Error("path escapes worker root");
   return rel;
+}
+
+async function atomicCopy(sourcePath, finalPath) {
+  const partPath = `${finalPath}.part`;
+  await rm(partPath, { force: true });
+  await copyFile(sourcePath, partPath);
+  await chmod(partPath, 0o640);
+  await rename(partPath, finalPath);
+}
+
+function setRuntimeStage(orderId, stage, values = {}) {
+  const id = Number(orderId);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  localSliceRuntimeStates.set(id, {
+    orderId: id,
+    stage,
+    terminal: new Set(["SUCCESS", "PARTIAL", "FAILED"]).has(stage),
+    updatedAt: new Date().toISOString(),
+    ...values,
+  });
+}
+
+function runtimeStageFor(orderId) {
+  return getLocalSliceRuntimeStatus(orderId)?.stage || "VALIDATING";
+}
+
+function normalizeIntegerOption(value, fallback) {
+  if (value == null || value === "") return fallback;
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) throw new Error("slice parameter must be an integer");
+  return number;
 }
 
 function execFileText(execFileImpl, command, args) {

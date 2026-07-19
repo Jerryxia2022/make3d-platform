@@ -46,6 +46,9 @@ test("operator workbench API returns allowlisted order and detail payloads", asy
     assert.equal(detailBody.order.is_test_account, true);
     assert.deepEqual(detailBody.order.test_classification.reasons, ["customer_is_test_account"]);
     assert.equal(detailBody.files.length, 1);
+    assert.equal(detailBody.files[0].original_filename, "model.stl");
+    assert.equal(detailBody.files[0].source_type, "order_file");
+    assert.equal(detailBody.files[0].source_version, "upload_v1");
     assert.equal(detailBody.files[0].relative_path, "M3DTEST/1-model.stl");
     assert.equal(detailBody.files[0].expected_sha256, sha256("solid model"));
     assert.equal(detailBody.customer_service_requests.length, 1);

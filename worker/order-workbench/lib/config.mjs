@@ -16,7 +16,10 @@ export function loadWorkbenchConfig(env = process.env, overrides = {}) {
     overrides.operatorToken || env.MAKE3D_LOCAL_WORKBENCH_TOKEN || "",
   ).trim();
   const localFilesRoot = String(
-    overrides.localFilesRoot || env.MAKE3D_LOCAL_FILES_ROOT || DEFAULT_LOCAL_FILES_ROOT,
+    overrides.localFilesRoot
+      || env.LOCAL_ORDER_FILES_ROOT
+      || env.MAKE3D_LOCAL_FILES_ROOT
+      || DEFAULT_LOCAL_FILES_ROOT,
   ).trim();
   const workbenchDbPath = String(
     overrides.workbenchDbPath || env.MAKE3D_ORDER_WORKBENCH_DB || DEFAULT_WORKBENCH_DB_PATH,

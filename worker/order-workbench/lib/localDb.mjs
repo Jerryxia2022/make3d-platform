@@ -244,6 +244,28 @@ export function getLatestSliceResultForReview(db, review) {
   return getLocalSliceResultById(db, id);
 }
 
+export function listLocalOrderOverviews(db, orderIds = []) {
+  const ids = [...new Set(orderIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return new Map();
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = db.prepare(`
+    SELECT
+      reviews.*,
+      slices.status AS slice_status,
+      slices.parse_status,
+      slices.parser_quote_ready,
+      slices.print_time_seconds,
+      slices.material_weight_grams,
+      slices.failure_summary,
+      slices.gcode_size_bytes,
+      slices.updated_at AS slice_updated_at
+    FROM local_order_reviews AS reviews
+    LEFT JOIN local_slice_results AS slices ON slices.id = reviews.slice_result_id
+    WHERE reviews.order_id IN (${placeholders})
+  `).all(...ids);
+  return new Map(rows.map((row) => [Number(row.order_id), row]));
+}
+
 export function listAuditEventsForOrder(db, orderId, limit = 20) {
   return db.prepare(`
     SELECT id, order_id, action, before_summary, after_summary, result, created_at
@@ -421,4 +443,3 @@ function sanitizeAuditText(value) {
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[REDACTED]")
     .slice(0, 4000);
 }
-

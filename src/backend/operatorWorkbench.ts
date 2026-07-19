@@ -64,6 +64,9 @@ type FileDetailRow = {
   riskNotice: string | null;
   requiresManualConfirmation: 0 | 1 | boolean;
   localFileSyncJobId: number | null;
+  originalFilename: string | null;
+  sourceType: string | null;
+  sourceVersion: string | null;
   syncStatus: string | null;
   relativePath: string | null;
   localPath: string | null;
@@ -240,6 +243,9 @@ export function getOperatorWorkbenchOrderDetail(db: DatabaseSync, id: number) {
         files.risk_notice AS riskNotice,
         files.requires_manual_confirmation AS requiresManualConfirmation,
         local_file_sync_jobs.id AS localFileSyncJobId,
+        local_file_sync_jobs.original_filename AS originalFilename,
+        local_file_sync_jobs.source_type AS sourceType,
+        local_file_sync_jobs.source_version AS sourceVersion,
         local_file_sync_jobs.sync_status AS syncStatus,
         local_file_sync_jobs.relative_path AS relativePath,
         local_file_sync_jobs.local_path AS localPath,
@@ -344,6 +350,9 @@ function toSafeFileSummary(value: unknown) {
     risk_notice: summarizeText(row.riskNotice, 500),
     requires_manual_confirmation: Boolean(row.requiresManualConfirmation),
     local_file_sync_job_id: row.localFileSyncJobId,
+    original_filename: summarizeText(row.originalFilename, 240),
+    source_type: summarizeText(row.sourceType, 80),
+    source_version: summarizeText(row.sourceVersion, 80),
     sync_status: row.syncStatus,
     relative_path: path.ok ? path.path : null,
     relative_path_status: path.ok ? "ok" : path.reason,

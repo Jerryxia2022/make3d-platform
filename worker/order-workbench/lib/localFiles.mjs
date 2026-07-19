@@ -1,10 +1,23 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, stat } from "node:fs/promises";
+import { access, mkdir, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+
+const execFileAsync = promisify(execFile);
+const openDirectoryScript = fileURLToPath(new URL("../open-directory.ps1", import.meta.url));
 
 export const DEFAULT_LOCAL_FILES_ROOT = "/srv/make3d-worker/files";
+
+export async function ensureLocalFilesRoot(rootDir = DEFAULT_LOCAL_FILES_ROOT) {
+  const root = resolve(rootDir);
+  await mkdir(root, { recursive: true, mode: 0o750 });
+  const rootStat = await stat(root);
+  if (!rootStat.isDirectory()) throw new Error("local files root is not a directory");
+  return root;
+}
 
 export function validateSafeRelativePath(value) {
   const text = String(value || "").trim();
@@ -49,12 +62,17 @@ export async function verifyLocalFileMetadata(file, options = {}) {
     if (!fileStat.isFile()) {
       return { exists: false, size_matches: false, sha_matches: null, error: "not-file" };
     }
+    const canonical = await verifyCanonicalPathInsideRoot(rootDir, resolved.path);
+    if (!canonical.ok) {
+      return { exists: false, size_matches: false, sha_matches: null, error: canonical.reason };
+    }
     const expectedSize = Number(file?.expected_size_bytes ?? file?.filesize ?? 0);
     return {
       exists: true,
-      path: resolved.path,
-      directory: dirname(resolved.path),
+      path: canonical.path,
+      directory: dirname(canonical.path),
       size: fileStat.size,
+      modified_at: fileStat.mtime.toISOString(),
       expected_size: expectedSize,
       size_matches: expectedSize > 0 ? fileStat.size === expectedSize : null,
       sha_matches: null,
@@ -65,6 +83,20 @@ export async function verifyLocalFileMetadata(file, options = {}) {
       return { exists: false, size_matches: false, sha_matches: null, error: "not-found" };
     }
     return { exists: false, size_matches: false, sha_matches: null, error: "stat-failed" };
+  }
+}
+
+async function verifyCanonicalPathInsideRoot(rootDir, targetPath) {
+  try {
+    const root = await realpath(resolve(rootDir || DEFAULT_LOCAL_FILES_ROOT));
+    const target = await realpath(targetPath);
+    const diff = relative(root, target);
+    if (diff && !diff.startsWith("..") && !isAbsolute(diff)) {
+      return { ok: true, path: target };
+    }
+    return { ok: false, reason: "root-escape" };
+  } catch (error) {
+    return { ok: false, reason: error?.code === "ENOENT" ? "not-found" : "realpath-failed" };
   }
 }
 
@@ -96,9 +128,30 @@ export async function openVerifiedFileDirectory(file, options = {}) {
     return { ok: false, reason: verified.error || "file-not-verified", verification: verified };
   }
 
+  const windowsPath = await toWindowsDirectoryPath(verified.directory).catch(() => null);
   const openImpl = options.openImpl || openDirectoryWithSystem;
-  await openImpl(verified.directory);
-  return { ok: true, directory: verified.directory, verification: verified };
+  try {
+    const openerResult = await openImpl(verified.directory, { windowsPath });
+    const normalized = normalizeOpenDirectoryResult(openerResult);
+    return {
+      ok: normalized.status === "directory-focused",
+      opened: ["directory-focused", "directory-opened-not-focused"].includes(normalized.status),
+      ...normalized,
+      directory: verified.directory,
+      windowsPath,
+      verification: verified,
+    };
+  } catch {
+    return {
+      ok: false,
+      reason: "opener-unavailable",
+      status: "directory-open-failed",
+      message: "Windows 文件资源管理器调用失败",
+      directory: verified.directory,
+      windowsPath,
+      verification: verified,
+    };
+  }
 }
 
 export async function sha256File(filePath) {
@@ -112,21 +165,46 @@ export async function sha256File(filePath) {
   return hash.digest("hex");
 }
 
-export async function openDirectoryWithSystem(directory) {
+export async function openDirectoryWithSystem(directory, options = {}) {
   await access(directory);
+  const windowsPath = options.windowsPath || await toWindowsDirectoryPath(directory).catch(() => null);
+  const windowsScriptPath = process.platform === "win32"
+    ? openDirectoryScript
+    : await toWindowsPath(openDirectoryScript).catch(() => null);
+  const wslInteropEnv = await getWslInteropChildEnv();
   const candidates = process.platform === "win32"
-    ? [{ command: "explorer.exe", args: [directory] }]
-    : [
-        { command: "explorer.exe", args: [directory] },
-        { command: "wslview", args: [directory] },
-        { command: "xdg-open", args: [directory] },
+    ? [{ command: "explorer.exe", args: [directory], env: process.env, allowedExitCodes: [0], generic: true }]
+    : windowsPath && windowsScriptPath
+      ? [{
+          command: "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+          args: [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            windowsScriptPath,
+            "-Target",
+            windowsPath,
+          ],
+          env: wslInteropEnv,
+          allowedExitCodes: [0],
+          structured: true,
+        }]
+      : [
+        { command: "wslview", args: [directory], env: process.env },
+        { command: "xdg-open", args: [directory], env: process.env },
       ];
 
   let lastError;
   for (const candidate of candidates) {
     try {
-      await spawnAndWait(candidate.command, candidate.args);
-      return;
+      if (candidate.structured) {
+        return await runStructuredDirectoryOpener(candidate.command, candidate.args, candidate.env);
+      }
+      await spawnAndWait(candidate.command, candidate.args, {
+        env: candidate.env,
+        allowedExitCodes: candidate.allowedExitCodes,
+      });
+      return candidate.generic ? { status: "directory-opened-not-focused", windowFound: null, restored: null, foregroundVerified: false } : undefined;
     } catch (error) {
       lastError = error;
     }
@@ -134,17 +212,122 @@ export async function openDirectoryWithSystem(directory) {
   throw lastError || new Error("no opener available");
 }
 
-function spawnAndWait(command, args) {
+async function runStructuredDirectoryOpener(command, args, env) {
+  let stdout = "";
+  try {
+    const result = await execFileAsync(command, args, {
+      env: env || process.env,
+      timeout: 15_000,
+      windowsHide: true,
+      maxBuffer: 256 * 1024,
+    });
+    stdout = String(result.stdout || "");
+  } catch (error) {
+    stdout = String(error?.stdout || "");
+    const parsed = parseStructuredDirectoryOutput(stdout);
+    if (parsed) return parsed;
+    throw error;
+  }
+  const parsed = parseStructuredDirectoryOutput(stdout);
+  if (!parsed) throw new Error("Windows directory opener returned invalid output");
+  return parsed;
+}
+
+function parseStructuredDirectoryOutput(stdout) {
+  const lines = String(stdout || "").trim().split(/\r?\n/).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const value = JSON.parse(lines[index]);
+      if (value && typeof value.status === "string") return value;
+    } catch {
+      // Ignore PowerShell host noise and inspect the previous line.
+    }
+  }
+  return null;
+}
+
+function normalizeOpenDirectoryResult(result) {
+  if (!result || typeof result !== "object") {
+    return { status: "directory-focused", windowFound: true, restored: false, foregroundVerified: true };
+  }
+  return {
+    status: String(result.status || "directory-opened-not-focused"),
+    message: result.message ? String(result.message) : null,
+    windowFound: result.windowFound === true,
+    openedNewWindow: result.openedNewWindow === true,
+    restored: result.restored === true,
+    foregroundVerified: result.foregroundVerified === true,
+    targetHwnd: Number.isSafeInteger(Number(result.targetHwnd)) ? Number(result.targetHwnd) : null,
+    foregroundHwnd: Number.isSafeInteger(Number(result.foregroundHwnd)) ? Number(result.foregroundHwnd) : null,
+    locationUrl: result.locationUrl ? String(result.locationUrl) : null,
+    diagnostics: normalizeOpenDirectoryDiagnostics(result.diagnostics),
+  };
+}
+
+function normalizeOpenDirectoryDiagnostics(value) {
+  if (!value || typeof value !== "object") return null;
+  const safe = {};
+  for (const key of [
+    "windowsUser", "powershellProcessId", "powershellSessionId", "interactiveExplorerSessionId",
+    "nonInteractiveServiceSession", "targetProcessId", "targetThreadId", "foregroundHwndBefore", "foregroundProcessIdBefore",
+    "foregroundThreadIdBefore", "powershellThreadId", "setForegroundResult", "bringWindowToTopResult",
+    "showWindowAsyncResult", "topmostResult", "notTopmostResult", "attachedForeground", "attachedTarget",
+    "attachedTargetToForeground",
+  ]) {
+    if (key in value) safe[key] = value[key];
+  }
+  return safe;
+}
+
+async function getWslInteropChildEnv() {
+  const candidates = [process.env.WSL_INTEROP, "/run/WSL/2_interop"].filter(Boolean);
+  for (const socketPath of candidates) {
+    try {
+      await access(socketPath);
+      return { ...process.env, WSL_INTEROP: socketPath };
+    } catch {
+      // Try the next known interop socket.
+    }
+  }
+  return process.env;
+}
+
+export async function toWindowsDirectoryPath(directory) {
+  if (process.platform === "win32") return directory;
+  return toWindowsPath(directory);
+}
+
+async function toWindowsPath(value) {
+  const result = await execFileAsync("/usr/bin/wslpath", ["-w", value], {
+    timeout: 5_000,
+    windowsHide: true,
+  });
+  const windowsPath = String(result.stdout || "").trim();
+  if (!windowsPath) throw new Error("wslpath returned an empty path");
+  return windowsPath;
+}
+
+function spawnAndWait(command, args, options = {}) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
       shell: false,
       stdio: "ignore",
-      detached: true,
+      detached: false,
+      env: options.env || process.env,
     });
-    child.on("error", reject);
-    child.on("spawn", () => {
-      child.unref();
-      resolvePromise();
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`${command} did not exit after opening the directory`));
+    }, 10_000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      const allowedExitCodes = options.allowedExitCodes || [0];
+      if (allowedExitCodes.includes(code)) resolvePromise();
+      else reject(new Error(`${command} exited with code ${code}`));
     });
   });
 }

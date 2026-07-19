@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile, mkdir, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -102,7 +102,9 @@ test("profile whitelist verifies SHA and rejects non-whitelisted keys", async ()
 test("slice params are validated before constructing PrusaSlicer argument arrays", () => {
   const params = baseSliceParams();
   assert.deepEqual(validateSliceParams(params), params);
-  assert.throws(() => validateSliceParams({ ...params, material: "ABS" }), /material/);
+  assert.deepEqual(validateSliceParams({ ...params, material: "PETG" }).material, "PETG");
+  assert.deepEqual(validateSliceParams({ ...params, material: "ABS" }).material, "ABS");
+  assert.throws(() => validateSliceParams({ ...params, material: "TPU" }), /material/);
   assert.throws(() => validateSliceParams({ ...params, fill_density_percent: 101 }), /fill_density/);
   const args = buildPrusaSlicerArgs(params, "/safe/profile.ini", "/safe/output.gcode", "/safe/input.stl");
   assert.deepEqual(args, [
@@ -113,12 +115,27 @@ test("slice params are validated before constructing PrusaSlicer argument arrays
     "/safe/output.gcode",
     "--filament-type",
     "PLA",
+    "--filament-density",
+    "1.24",
     "--layer-height",
     "0.2",
     "--fill-density",
     "50%",
+    "--brim-width",
+    "0",
     "/safe/input.stl",
   ]);
+
+  const petgArgs = buildPrusaSlicerArgs({ ...params, material: "PETG" }, "/safe/profile.ini", "/safe/petg.gcode", "/safe/input.stl");
+  assert.deepEqual(petgArgs.slice(petgArgs.indexOf("--filament-density"), petgArgs.indexOf("--filament-density") + 2), ["--filament-density", "1.27"]);
+  const absArgs = buildPrusaSlicerArgs({ ...params, material: "ABS" }, "/safe/profile.ini", "/safe/abs.gcode", "/safe/input.stl");
+  assert.deepEqual(absArgs.slice(absArgs.indexOf("--filament-density"), absArgs.indexOf("--filament-density") + 2), ["--filament-density", "1.04"]);
+});
+
+test("Bambu P1S profile declares the full 256 mm height and PLA density", async () => {
+  const profile = await readFile(new URL("../profiles/bambu-p1s.ini", import.meta.url), "utf8");
+  assert.match(profile, /^max_print_height\s*=\s*256$/m);
+  assert.match(profile, /^filament_density\s*=\s*1\.24$/m);
 });
 
 test("spawn wrapper uses argument arrays and forbids shell mode", async () => {

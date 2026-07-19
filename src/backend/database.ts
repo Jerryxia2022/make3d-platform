@@ -3600,11 +3600,12 @@ export function markLocalFileSyncJobVerified(
      SET sync_status = 'verified',
          local_path = ?,
          local_sha256 = ?,
+         local_synced_at = ?,
          updated_at = ?
      WHERE id = ?
        AND worker_id = ?
        AND sync_status IN ('locked', 'downloaded')`,
-  ).run(input.localPath, input.localSha256, timestamp, input.id, input.workerId);
+  ).run(input.localPath, input.localSha256, timestamp, timestamp, input.id, input.workerId);
 
   return result.changes === 1;
 }
