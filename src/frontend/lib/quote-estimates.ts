@@ -1,4 +1,8 @@
 import { applyMinimumPrintUnitPrice } from "../../shared/pricing.ts";
+import {
+  AUTO_QUOTE_MAX_DIMENSION_MM,
+  AUTO_QUOTE_MIN_DIMENSION_MM,
+} from "../../shared/modelGeometry.ts";
 
 export const MB = 1024 * 1024;
 export const DEVICE_COUNT = 6;
@@ -219,7 +223,7 @@ function getDimensionRisk(dimensions: QuoteDimensions | null | undefined) {
     };
   }
 
-  if (values.some((value) => value > 256)) {
+  if (values.some((value) => value > AUTO_QUOTE_MAX_DIMENSION_MM)) {
     return {
       notice: "模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。",
       level: "danger",
@@ -235,7 +239,7 @@ function getDimensionRisk(dimensions: QuoteDimensions | null | undefined) {
     };
   }
 
-  if (values.some((value) => value < 10)) {
+  if (values.some((value) => value < AUTO_QUOTE_MIN_DIMENSION_MM)) {
     return {
       notice: "模型尺寸较小，可能无法稳定打印，需要人工确认。",
       level: "warning",

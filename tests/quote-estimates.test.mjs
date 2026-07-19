@@ -99,12 +99,28 @@ test("still returns risk hints when dimensions are available", () => {
   assert.equal(
     estimateFiles([{ id: "huge", file: hugeStep, material: "PLA", color: "黑" }])[0].estimate
       .riskNotice,
-    "模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。",
+    "模型接近设备成型极限，可能需要调整摆放或拆件。",
   );
   assert.equal(
     estimateFiles([{ id: "small", file: smallStep, material: "PLA", color: "黑" }])[0].estimate
       .riskNotice,
     "模型尺寸较小，可能无法稳定打印，需要人工确认。",
+  );
+
+  const oversizedItem = {
+    id: "oversized",
+    file: largeStep,
+    material: "PLA",
+    color: "黑",
+  };
+  const [oversized] = estimateFiles([oversizedItem], {
+    [oversizedItem.id]: { x: 300.01, y: 120, z: 80 },
+  });
+
+  assert.equal(oversized.estimate.riskLevel, "danger");
+  assert.equal(
+    oversized.estimate.riskNotice,
+    "模型超出单台设备成型尺寸，通常需要分件打印，最终报价需人工确认。",
   );
 });
 
