@@ -1,0 +1,79 @@
+{
+  "captured_at": "2026-07-19T21:55:00+08:00",
+  "production_url": "https://www.make3d.com.cn",
+  "production_commit": "2d7e225ac3ea65afd62dac5bc8484e8eb9946820",
+  "public_pages": {
+    "/": 200,
+    "/quote": 200,
+    "/account/login": 200,
+    "/account/register": 200,
+    "/legal": 200
+  },
+  "responsive_home": {
+    "viewports": ["1920x1080", "1366x768", "1024x768", "390px mobile"],
+    "result": "passed",
+    "screenshots": [
+      "home-1920.png",
+      "home-1366.png",
+      "home-1024.png",
+      "home-390.png"
+    ]
+  },
+  "step_acceptance": {
+    "test_customer": true,
+    "source_filename": "04NF12.STEP",
+    "source_size_bytes": 511475,
+    "source_sha256": "d4046dd7170f465095d31b8032fd4b294ba6df3e5e8ac4236ba2bedac46a79b5",
+    "draft_file_id": 28,
+    "conversion_status": "success",
+    "geometry_status": "valid",
+    "quote_mode": "AUTO",
+    "dimensions_mm": [30.95, 140.006, 173.512],
+    "filament_weight_g": 98.5774,
+    "print_time_seconds": 26470,
+    "derived_stl_size_bytes": 307384,
+    "derived_stl_sha256": "31bfc0a7fe98036805dc4764f5cd91baf285a17001c01b12f3dcdcbf1b6e5a7e",
+    "gcode_size_bytes": 7021225,
+    "gcode_sha256": "094a6add4042e937b6fe99f31114c74342aaa512d0d7aa8080c7233217adffb8",
+    "refresh_restored_file_cards": 5,
+    "refresh_restored_preview_canvases": 5,
+    "http_gcode_preview_requests": 0,
+    "result": "passed"
+  },
+  "geometry_boundaries": {
+    "9.99x50x50": "MANUAL, no automatic price",
+    "10x10x10": "AUTO, 5.95 CNY",
+    "300x10x10": "AUTO, 11.02 CNY, near-limit warning",
+    "300.01x50x50": "MANUAL, no automatic price",
+    "remaining_required_vectors": "covered by tests/modelGeometry.test.mjs",
+    "result": "passed"
+  },
+  "test_order_sync": {
+    "order_id": 24,
+    "test_account": true,
+    "first_request": "HTTP 200, created=true",
+    "idempotent_replay": "HTTP 200, created=false",
+    "reused_key_changed_payload": "HTTP 409 IDEMPOTENCY_KEY_REUSED",
+    "stale_version": "HTTP 409 ORDER_VERSION_CONFLICT",
+    "confirmed_quote_amount_cents": 9500,
+    "expected_ship_date": "2026-07-23",
+    "customer_page": "HTTP 200; price, date, and customer-visible message present",
+    "admin_page": "HTTP 200; price and date present",
+    "protected_order_and_payment_fields_changed": false,
+    "result": "passed"
+  },
+  "safety": {
+    "database_integrity_check": "ok",
+    "foreign_key_check_count": 0,
+    "payment_settings_wechat_enabled": 0,
+    "wechat_pay_enabled": true,
+    "wechat_pay_test_only": true,
+    "wechat_pay_test_customer_ids": "5",
+    "resident_prusaslicer_processes": 0,
+    "resident_slicing_worker_processes": 0,
+    "slicing_worker_units": 0,
+    "production_http_500_log_matches": 0,
+    "sqlite_busy_log_matches": 0,
+    "secret_marker_log_matches": 0
+  }
+}
