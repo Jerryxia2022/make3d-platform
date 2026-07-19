@@ -1,3 +1,5 @@
+import { evaluateAutoQuoteDimensions } from "@/shared/modelGeometry";
+
 export const MAX_AUTO_STL_PREVIEW_BYTES = 50 * 1024 * 1024;
 
 export type StlDimensions = {
@@ -89,17 +91,8 @@ export function getStlDimensionNotice(dimensions: StlDimensions | null | undefin
     return "";
   }
 
-  const values = [dimensions.x, dimensions.y, dimensions.z];
-
-  if (values.some((value) => value > 260)) {
-    return "该模型尺寸超过单台设备推荐成型范围，可能需要拆件或人工确认。";
-  }
-
-  if (values.some((value) => value > 0 && value < 10)) {
-    return "该模型存在较小尺寸，建议人工确认打印可行性。";
-  }
-
-  return "";
+  const eligibility = evaluateAutoQuoteDimensions(dimensions);
+  return eligibility.eligible ? "" : eligibility.message;
 }
 
 export async function renderStlThumbnail(canvas: HTMLCanvasElement, geometry: BufferGeometry) {
@@ -120,7 +113,7 @@ export async function renderStlThumbnail(canvas: HTMLCanvasElement, geometry: Bu
 
   return () => {
     disposeScene(scene);
-    disposeRenderer(renderer);
+    disposeRenderer(renderer, false);
   };
 }
 
@@ -320,9 +313,11 @@ function disposeMaterial(material: Material | Material[]) {
   material.dispose();
 }
 
-function disposeRenderer(renderer: WebGLRenderer) {
+function disposeRenderer(renderer: WebGLRenderer, forceContextLoss = true) {
   renderer.dispose();
-  renderer.forceContextLoss();
+  if (forceContextLoss) {
+    renderer.forceContextLoss();
+  }
 }
 
 function hasCompleteDimensions(

@@ -24,11 +24,13 @@ test("home page contains Make3D service entry, quote CTA, and contact section", 
 test("home page exposes compact request intake sections", async () => {
   const source = await readSource("src/app/page.tsx");
 
-  assert.match(source, /从模型上传到样机交付/);
-  assert.match(source, /标准3D打印/);
+  assert.match(source, /Make3D 在线 FDM 3D 打印报价/);
+  assert.match(source, /STL \/ STEP \/ STP/);
+  assert.match(source, /各方向 10–300 mm/);
+  assert.match(source, /自动与人工分流/);
   assert.match(source, /模型修改与打印/);
-  assert.match(source, /工装夹具\/研发咨询/);
-  assert.match(source, /立即上传报价/);
+  assert.match(source, /工装夹具 \/ 研发咨询/);
+  assert.match(source, /上传模型报价/);
   assert.match(source, /提交修改需求/);
   assert.match(source, /提交研发需求/);
   assert.match(source, /服务流程/);
@@ -651,14 +653,14 @@ test("quote form restores active drafts without re-slicing saved results", async
   assert.match(formSource, /restoreQuoteDraft\(data\.draft\.files\)/);
   assert.match(formSource, /createDraftModelFile/);
   assert.match(formSource, /createDraftQuoteState/);
-  assert.match(formSource, /fileUrl: `\/api\/quote\/draft\/files\/\$\{draftFile\.id\}\/download`/);
+  assert.match(formSource, /modelFileUrl: `\/api\/quote\/draft\/files\/\$\{draftFile\.id\}\/download/);
   assert.match(formSource, /if \(!\(item\.file instanceof File\)\) \{/);
-  assert.match(formSource, /rememberDraftFile\(item\.id, draftFileId\)/);
+  assert.match(formSource, /rememberDraftFile\(item\.id, draftFileId,/);
   assert.match(formSource, /draft_file_id/);
   assert.match(formSource, /updateQuoteDraftFile\(currentFile\.draftFileId/);
   assert.match(formSource, /deleteQuoteDraftFile\(currentFile\.draftFileId\)/);
   assert.match(formSource, /updatePreviewDimensions/);
-  assert.match(formSource, /fileUrl={item\.fileUrl}/);
+  assert.match(formSource, /modelFileUrl={item\.modelFileUrl}/);
 
   assert.match(sliceSource, /addQuoteDraftFile/);
   assert.match(sliceSource, /material = getString\(formData, "material"\) \|\| WEIGHT_MATERIAL/);
@@ -707,6 +709,7 @@ test("browser STL preview renders dimensions without server thumbnail work", asy
   const formSource = await readSource("src/frontend/components/QuoteForm.tsx");
   const previewSource = await readSource("src/frontend/components/StlModelPreview.tsx");
   const previewLibSource = await readSource("src/frontend/lib/stl-preview.ts");
+  const geometrySource = await readSource("src/shared/modelGeometry.ts");
   const customerDetailSource = await readSource("src/app/account/orders/[id]/page.tsx");
   const adminDetailSource = await readSource("src/app/admin/orders/[id]/page.tsx");
   const customerDownloadSource = await readSource("src/app/api/account/files/[id]/download/route.ts");
@@ -717,10 +720,9 @@ test("browser STL preview renders dimensions without server thumbnail work", asy
   assert.match(previewLibSource, /new STLLoader\(\)\.parse\(buffer\)/);
   assert.match(previewLibSource, /MAX_AUTO_STL_PREVIEW_BYTES = 50 \* 1024 \* 1024/);
   assert.match(previewLibSource, /shouldAutoLoadStlPreview/);
-  assert.match(previewLibSource, /value > 260/);
-  assert.match(previewLibSource, /value > 0 && value < 10/);
-  assert.match(previewLibSource, /该模型尺寸超过单台设备推荐成型范围/);
-  assert.match(previewLibSource, /该模型存在较小尺寸/);
+  assert.match(previewLibSource, /evaluateAutoQuoteDimensions/);
+  assert.match(geometrySource, /AUTO_QUOTE_MIN_DIMENSION_MM = 10/);
+  assert.match(geometrySource, /AUTO_QUOTE_MAX_DIMENSION_MM = 300/);
   assert.match(previewLibSource, /disposeRenderer/);
   assert.doesNotMatch(previewLibSource, /headless|OpenGL|Blender|VTK/i);
 
@@ -737,7 +739,7 @@ test("browser STL preview renders dimensions without server thumbnail work", asy
   assert.match(formSource, /StlModelPreview/);
   assert.match(formSource, /stlDimensions/);
   assert.match(formSource, /updatePreviewDimensions/);
-  assert.match(formSource, /file={item\.file instanceof File \? item\.file : undefined}/);
+  assert.match(formSource, /item\.file\.name\.toLowerCase\(\)\.endsWith\("\.stl"\)/);
   assert.match(formSource, /formatDimensionFormValue\(displayDimensions\?\.x\)/);
 
   assert.match(customerDetailSource, /StlModelPreview/);
@@ -907,7 +909,8 @@ test("orders API accepts V2 estimates, dimensions, shipping, address, and upload
   assert.match(apiSource, /createOrderWithFiles/);
   assert.match(apiSource, /getSliceQuoteList/);
   assert.match(apiSource, /getManualReviewReason/);
-  assert.match(apiSource, /STEP\/STP 文件暂不自动切片/);
+  assert.match(apiSource, /evaluateAutoQuoteDimensions/);
+  assert.doesNotMatch(apiSource, /STEP\/STP 文件暂不自动切片/);
   assert.match(apiSource, /自动切片失败/);
   assert.match(apiSource, /createSliceJob/);
   assert.match(apiSource, /updateSliceJobSuccess/);

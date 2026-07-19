@@ -15,10 +15,12 @@ import {
   type StlDimensions,
   type StlViewerHandle,
 } from "@/frontend/lib/stl-preview";
+import { buildModelPreviewSource } from "@/frontend/lib/model-preview-source";
 
 type StlModelPreviewProps = {
   file?: File;
-  fileUrl?: string;
+  modelFileUrl?: string;
+  previewFilename?: string;
   filename: string;
   filesize: number;
   dimensions?: QuoteDimensions | null;
@@ -34,7 +36,8 @@ type LoadStatus = "idle" | "uploading" | "parsing" | "generating" | "ready" | "f
 
 export function StlModelPreview({
   file,
-  fileUrl,
+  modelFileUrl,
+  previewFilename,
   filename,
   filesize,
   dimensions,
@@ -52,11 +55,12 @@ export function StlModelPreview({
   );
   const [detectedDimensions, setDetectedDimensions] = useState<StlDimensions | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const isStl = isStlFilename(filename);
-  const autoLoad = shouldAutoLoadStlPreview(filename, filesize);
-  const previewUrl = useMemo(
-    () => buildPreviewUrl(fileUrl, filename, filesize),
-    [fileUrl, filename, filesize],
+  const modelFilename = previewFilename || filename;
+  const isStl = isStlFilename(modelFilename);
+  const autoLoad = shouldAutoLoadStlPreview(modelFilename, filesize);
+  const resolvedModelFileUrl = useMemo(
+    () => (file ? undefined : buildPreviewUrl(modelFileUrl, modelFilename, filesize)),
+    [file, modelFileUrl, modelFilename, filesize],
   );
   const normalizedDimensions = useMemo(
     () => normalizeDimensions(dimensions) || detectedDimensions,
@@ -101,7 +105,7 @@ export function StlModelPreview({
     }
 
     loadStlGeometryWithRetry(
-      { file, url: previewUrl, signal: controller.signal },
+      buildModelPreviewSource({ file, modelFileUrl: resolvedModelFileUrl, signal: controller.signal }),
       (phase) => {
         if (!disposed) {
           setStatus(phase);
@@ -139,7 +143,7 @@ export function StlModelPreview({
       controller.abort();
       disposeThumbnail?.();
     };
-  }, [autoLoad, file, isStl, previewUrl, reportDimensions]);
+  }, [autoLoad, file, isStl, resolvedModelFileUrl, reportDimensions]);
 
   const openPreview = () => {
     if (!isStl) {
@@ -198,7 +202,8 @@ export function StlModelPreview({
           color={color}
           dimensions={normalizedDimensions}
           file={file}
-          fileUrl={previewUrl}
+          modelFileUrl={resolvedModelFileUrl}
+          previewFilename={previewFilename}
           filename={filename}
           filesize={filesize}
           material={material}
@@ -214,7 +219,7 @@ export function StlModelPreview({
 
 function StlPreviewModal({
   file,
-  fileUrl,
+  modelFileUrl,
   filename,
   filesize,
   dimensions,
@@ -225,7 +230,7 @@ function StlPreviewModal({
   onClose,
   onDimensions,
 }: Required<Pick<StlModelPreviewProps, "filename" | "filesize">> &
-  Pick<StlModelPreviewProps, "file" | "fileUrl" | "material" | "color" | "quantity" | "quoteStatus"> & {
+  Pick<StlModelPreviewProps, "file" | "modelFileUrl" | "previewFilename" | "material" | "color" | "quantity" | "quoteStatus"> & {
     dimensions: StlDimensions | null;
     onClose: () => void;
     onDimensions: (dimensions: StlDimensions | null) => void;
@@ -242,7 +247,7 @@ function StlPreviewModal({
     setStatus("uploading");
 
     loadStlGeometryWithRetry(
-      { file, url: fileUrl, signal: controller.signal },
+      buildModelPreviewSource({ file, modelFileUrl, signal: controller.signal }),
       (phase) => {
         if (!disposed) {
           setStatus(phase);
@@ -290,7 +295,7 @@ function StlPreviewModal({
       handleRef.current?.dispose();
       handleRef.current = null;
     };
-  }, [file, fileUrl, onDimensions]);
+  }, [file, modelFileUrl, onDimensions]);
 
   return (
     <div

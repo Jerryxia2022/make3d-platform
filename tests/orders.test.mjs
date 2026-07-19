@@ -1035,6 +1035,15 @@ test("keeps quote drafts for 24 hours and restores saved slice results", () => {
       materialFee: 10.63,
       timeFee: 12,
       basePrintPrice: 22.63,
+      sourceFormat: "STEP",
+      sourceSha256: "a".repeat(64),
+      geometryStatus: "valid",
+      geometryUnits: "mm",
+      quoteMode: "AUTO",
+      derivedStlFilepath: "/derived/fixture.preview.stl",
+      derivedStlSha256: "b".repeat(64),
+      derivedStlFilesize: 1024,
+      conversionStatus: "success",
     },
     now,
   );
@@ -1048,6 +1057,9 @@ test("keeps quote drafts for 24 hours and restores saved slice results", () => {
   assert.equal(draft?.files[0].filamentWeightG, 42.5);
   assert.equal(draft?.files[0].printTimeSeconds, 7200);
   assert.equal(draft?.files[0].boundingBoxX, 120.35);
+  assert.equal(draft?.files[0].sourceFormat, "STEP");
+  assert.equal(draft?.files[0].derivedStlSha256, "b".repeat(64));
+  assert.equal(draft?.files[0].conversionStatus, "success");
 
   updateQuoteDraftFile(
     db,
@@ -1471,19 +1483,22 @@ test("validates upload extensions and size, then saves accepted file", async () 
     assert.equal(isAllowedUploadFilename("part.3mf"), false);
     assert.equal(isAllowedUploadFilename("part.obj"), false);
 
+    const fixture = new TextEncoder().encode("solid fixture\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid fixture\n");
     const saved = await saveUploadFile(
       {
         name: "fixture.stl",
-        size: 5,
-        arrayBuffer: async () => new TextEncoder().encode("solid").buffer,
+        size: fixture.byteLength,
+        arrayBuffer: async () => fixture.buffer,
       },
       dir,
     );
 
-    assert.equal(saved.filesize, 5);
+    assert.equal(saved.filesize, fixture.byteLength);
     assert.match(saved.filename, /\.stl$/);
-    assert.equal(await readFile(saved.filepath, "utf8"), "solid");
-    assert.equal((await stat(saved.filepath)).size, 5);
+    assert.match(await readFile(saved.filepath, "utf8"), /facet normal/);
+    assert.equal((await stat(saved.filepath)).size, fixture.byteLength);
+    assert.equal(saved.sourceFormat, "STL");
+    assert.match(saved.sourceSha256, /^[a-f0-9]{64}$/);
   } finally {
     await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
@@ -1493,11 +1508,12 @@ test("validates saved upload references stay inside upload directory", async () 
   const dir = await mkdtemp(join(tmpdir(), "make3d-upload-ref-"));
 
   try {
+    const fixture = new TextEncoder().encode("solid quoted\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid quoted\n");
     const saved = await saveUploadFile(
       {
         name: "quoted.stl",
-        size: 7,
-        arrayBuffer: async () => new TextEncoder().encode("solid q").buffer,
+        size: fixture.byteLength,
+        arrayBuffer: async () => fixture.buffer,
       },
       dir,
     );

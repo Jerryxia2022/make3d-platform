@@ -339,7 +339,7 @@ export default async function AdminOrderDetailPage({
                     color={file.color}
                     compact
                     dimensions={getFileDimensions(file)}
-                    fileUrl={`/api/admin/files/${file.id}/download`}
+                    modelFileUrl={`/api/admin/files/${file.id}/download`}
                     filename={file.filename}
                     filesize={file.filesize}
                     material={file.material}

@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import { NextResponse } from "next/server";
 import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
 import { getQuoteDraftFileForCustomer, openDatabase } from "@/backend/database";
+import { validateDerivedStlArtifact } from "@/backend/modelConversion";
 
 export const runtime = "nodejs";
 
@@ -21,12 +22,23 @@ export async function GET(
 
   try {
     const file = getQuoteDraftFileForCustomer(db, session.customerId, Number(id));
-    const content = await readFile(file.filepath);
+    const wantsPreview = new URL(request.url).searchParams.get("artifact") === "preview";
+    const artifact = wantsPreview && file.derivedStlFilepath
+      ? await validateDerivedStlArtifact({
+          filepath: file.derivedStlFilepath,
+          filesize: file.derivedStlFilesize,
+          sha256: file.derivedStlSha256,
+        })
+      : null;
+    const filepath = artifact?.filepath || file.filepath;
+    const downloadName = artifact?.filename || file.originalFilename || file.filename;
+    const content = await readFile(filepath);
 
     return new NextResponse(content, {
       headers: {
-        "Content-Disposition": `inline; filename="${basename(file.originalFilename || file.filename)}"`,
-        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `inline; filename="${basename(downloadName)}"`,
+        "Content-Type": artifact ? "model/stl" : "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch {

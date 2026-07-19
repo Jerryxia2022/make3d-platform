@@ -3,11 +3,13 @@ import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { NextResponse } from "next/server";
 import { calculateAutoFilePrice } from "@/backend/autoPricing";
+import { convertStepToStl, type DerivedStlArtifact } from "@/backend/modelConversion";
 import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
 import { addQuoteDraftFile, openDatabase } from "@/backend/database";
 import { getPrusaSlicerConfig, runPrusaSlicer } from "@/backend/slicer";
-import { analyzeStlTopology } from "@/backend/stlAnalysis";
+import { analyzeStlTopology, readStlDimensions } from "@/backend/stlAnalysis";
 import { saveUploadFile, type SavedUpload } from "@/backend/uploads";
+import { evaluateAutoQuoteDimensions, type ModelDimensionsMm } from "@/shared/modelGeometry";
 
 export const runtime = "nodejs";
 
@@ -42,6 +44,8 @@ type QuoteSliceResponse = {
   };
   draft_file_id?: number;
   error?: string;
+  preview_available?: boolean;
+  preview_filename?: string;
 };
 
 export async function POST(request: Request) {
@@ -63,30 +67,98 @@ export async function POST(request: Request) {
     }
 
     const savedFile = await saveUploadFile(file);
+    const slicerConfig = getPrusaSlicerConfig();
+    let sliceInputFilepath = savedFile.filepath;
+    let derivedArtifact: DerivedStlArtifact | null = null;
 
-    if (!file.name.toLowerCase().endsWith(".stl")) {
-      const draftFileId = saveQuoteDraftFile({
-        customerId: customer.customerId,
-        originalFilename: file.name,
-        savedFile,
-        material,
-        color,
-        quantity,
-        sliceStatus: "manual",
-        errorMessage: "Only STL files support automatic slicing",
-      });
+    if (savedFile.sourceFormat === "STEP") {
+      if (!slicerConfig.enabled) {
+        const draftFileId = saveQuoteDraftFile({
+          customerId: customer.customerId,
+          originalFilename: file.name,
+          savedFile,
+          material,
+          color,
+          quantity,
+          sliceStatus: "manual",
+          errorMessage: "STEP 转换服务未启用，需人工确认",
+          manualQuoteReasonCode: "STEP_CONVERTER_DISABLED",
+          conversionStatus: "pending",
+        });
+        return jsonResponse({
+          success: true,
+          message: "STEP 转换服务未启用，需人工确认",
+          saved_upload: savedFile,
+          draft_file_id: draftFileId,
+          error: "STEP_CONVERTER_DISABLED",
+        });
+      }
 
-      return jsonResponse({
-        success: true,
-        message: "需人工确认",
-        saved_upload: savedFile,
-        draft_file_id: draftFileId,
-        error: "Only STL files support automatic slicing",
-      });
+      try {
+        derivedArtifact = await enqueueSlice(() => convertStepToStl({
+          sourceFilepath: savedFile.filepath,
+          sourceSha256: savedFile.sourceSha256 || "",
+          config: slicerConfig,
+          toolVersion: process.env.PRUSASLICER_PACKAGE_VERSION || "unknown",
+        }));
+        sliceInputFilepath = derivedArtifact.filepath;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "STEP 转换失败";
+        const draftFileId = saveQuoteDraftFile({
+          customerId: customer.customerId,
+          originalFilename: file.name,
+          savedFile,
+          material,
+          color,
+          quantity,
+          sliceStatus: "manual",
+          errorMessage: message,
+          geometryStatus: "conversion_failed",
+          manualQuoteReasonCode: "STEP_CONVERSION_FAILED",
+          conversionStatus: "failed",
+          conversionError: message,
+        });
+        return jsonResponse({
+          success: true,
+          message: "STEP 转换失败，需人工确认",
+          saved_upload: savedFile,
+          draft_file_id: draftFileId,
+          error: "STEP_CONVERSION_FAILED",
+        });
+      }
     }
 
+    let dimensions: ModelDimensionsMm;
     try {
-      const analysis = await analyzeStlTopology(savedFile.filepath);
+      dimensions = await readStlDimensions(sliceInputFilepath);
+      const eligibility = evaluateAutoQuoteDimensions(dimensions);
+      if (!eligibility.eligible) {
+        const draftFileId = saveQuoteDraftFile({
+          customerId: customer.customerId,
+          originalFilename: file.name,
+          savedFile,
+          material,
+          color,
+          quantity,
+          sliceStatus: "manual",
+          errorMessage: eligibility.message,
+          dimensions,
+          manualQuoteReasonCode: eligibility.reasonCode,
+          derivedArtifact,
+        });
+
+        return jsonResponse({
+          success: true,
+          message: eligibility.message,
+          saved_upload: savedFile,
+          draft_file_id: draftFileId,
+          error: eligibility.reasonCode,
+          preview_available: Boolean(derivedArtifact),
+          preview_filename: derivedArtifact?.filename,
+        });
+      }
+
+      const analysis = await analyzeStlTopology(sliceInputFilepath);
 
       if (analysis.componentCount > 1) {
         const draftFileId = saveQuoteDraftFile({
@@ -98,6 +170,9 @@ export async function POST(request: Request) {
           quantity,
           sliceStatus: "manual",
           errorMessage: `${MULTI_ENTITY_MANUAL_MESSAGE} 实体数量：${analysis.componentCount}`,
+          dimensions,
+          manualQuoteReasonCode: "MULTIPLE_STL_COMPONENTS",
+          derivedArtifact,
         });
 
         return jsonResponse({
@@ -106,6 +181,8 @@ export async function POST(request: Request) {
           saved_upload: savedFile,
           draft_file_id: draftFileId,
           error: "Multiple independent STL bodies",
+          preview_available: Boolean(derivedArtifact),
+          preview_filename: derivedArtifact?.filename,
         });
       }
     } catch (error) {
@@ -118,6 +195,9 @@ export async function POST(request: Request) {
         quantity,
         sliceStatus: "manual",
         errorMessage: error instanceof Error ? error.message : "模型网格异常，需要人工确认后报价。",
+        geometryStatus: "invalid",
+        manualQuoteReasonCode: "GEOMETRY_INVALID",
+        derivedArtifact,
       });
 
       return jsonResponse({
@@ -129,8 +209,6 @@ export async function POST(request: Request) {
       });
     }
 
-    const slicerConfig = getPrusaSlicerConfig();
-
     if (!slicerConfig.enabled) {
       const draftFileId = saveQuoteDraftFile({
         customerId: customer.customerId,
@@ -141,6 +219,9 @@ export async function POST(request: Request) {
         quantity,
         sliceStatus: "failed",
         errorMessage: "PrusaSlicer disabled",
+        dimensions,
+        manualQuoteReasonCode: "SLICER_DISABLED",
+        derivedArtifact,
       });
 
       return jsonResponse({
@@ -162,6 +243,9 @@ export async function POST(request: Request) {
         quantity,
         sliceStatus: "failed",
         errorMessage: `Profile not found: ${slicerConfig.profilePath}`,
+        dimensions,
+        manualQuoteReasonCode: "SLICER_PROFILE_MISSING",
+        derivedArtifact,
       });
 
       return jsonResponse({
@@ -177,7 +261,7 @@ export async function POST(request: Request) {
     await mkdir(dirname(gcodeFilePath), { recursive: true });
     const metadata = await enqueueSlice(() =>
       runPrusaSlicer({
-        inputFilePath: savedFile.filepath,
+        inputFilePath: sliceInputFilepath,
         gcodeFilePath,
         material: SLICER_BASE_MATERIAL,
         metadataMaterial: WEIGHT_MATERIAL,
@@ -198,6 +282,9 @@ export async function POST(request: Request) {
         quantity,
         sliceStatus: "failed",
         errorMessage: "G-code metadata parse failed",
+        dimensions,
+        manualQuoteReasonCode: "GCODE_METADATA_INVALID",
+        derivedArtifact,
       });
 
       return jsonResponse({
@@ -223,6 +310,8 @@ export async function POST(request: Request) {
       color,
       quantity,
       sliceStatus: "success",
+      dimensions,
+      derivedArtifact,
       filamentWeightG: metadata.filamentWeightG,
       printTimeSeconds: metadata.printTimeSeconds,
       rawFilamentUsedMm: metadata.rawFilamentUsedMm,
@@ -252,6 +341,8 @@ export async function POST(request: Request) {
       },
       saved_upload: savedFile,
       draft_file_id: draftFileId,
+      preview_available: Boolean(derivedArtifact),
+      preview_filename: derivedArtifact?.filename,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -309,6 +400,12 @@ function saveQuoteDraftFile(input: {
   materialFee?: number | null;
   timeFee?: number | null;
   basePrintPrice?: number | null;
+  dimensions?: ModelDimensionsMm | null;
+  geometryStatus?: string | null;
+  manualQuoteReasonCode?: string | null;
+  conversionStatus?: string | null;
+  conversionError?: string | null;
+  derivedArtifact?: DerivedStlArtifact | null;
 }) {
   const db = openDatabase();
 
@@ -334,6 +431,23 @@ function saveQuoteDraftFile(input: {
       materialFee: input.materialFee,
       timeFee: input.timeFee,
       basePrintPrice: input.basePrintPrice,
+      boundingBoxX: input.dimensions?.x,
+      boundingBoxY: input.dimensions?.y,
+      boundingBoxZ: input.dimensions?.z,
+      sourceFormat: input.savedFile.sourceFormat,
+      sourceSha256: input.savedFile.sourceSha256,
+      geometryStatus: input.geometryStatus || input.savedFile.validationStatus || "valid",
+      geometryUnits: "mm",
+      geometryAnalyzedAt: getBeijingTimestampForGeometry(),
+      quoteMode: input.sliceStatus === "success" ? "AUTO" : "MANUAL",
+      manualQuoteReasonCode: input.manualQuoteReasonCode,
+      conversionError: input.conversionError,
+      derivedStlFilepath: input.derivedArtifact?.filepath,
+      derivedStlSha256: input.derivedArtifact?.sha256,
+      derivedStlFilesize: input.derivedArtifact?.filesize,
+      geometryToolName: input.derivedArtifact?.toolName || (input.savedFile.sourceFormat === "STL" ? "make3d-stl-analysis" : "make3d-part21-validator"),
+      geometryToolVersion: input.derivedArtifact?.toolVersion || "phase07-a2-v1",
+      conversionStatus: input.derivedArtifact ? "success" : input.conversionStatus || (input.savedFile.sourceFormat === "STEP" ? "pending" : "not_required"),
     });
 
     return draftFile.id;
@@ -343,6 +457,19 @@ function saveQuoteDraftFile(input: {
   } finally {
     db.close();
   }
+}
+
+function getBeijingTimestampForGeometry() {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
 }
 
 function jsonResponse(body: QuoteSliceResponse, status = 200) {

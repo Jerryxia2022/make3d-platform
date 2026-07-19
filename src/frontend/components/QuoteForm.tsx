@@ -53,7 +53,8 @@ const guestUploadGateMessage = "请先登录后使用在线上传和自动报价
 type SelectedModelFile = SelectedQuoteFile & {
   file: File | QuoteFileLike;
   draftFileId?: number;
-  fileUrl?: string;
+  modelFileUrl?: string;
+  previewFilename?: string;
 };
 
 type SliceQuoteStatus = "waiting" | "calculating" | "success" | "failed" | "manual";
@@ -72,6 +73,7 @@ type SliceQuoteResult = {
 };
 
 type SavedUploadInfo = {
+  originalFilename?: string;
   filename: string;
   filepath: string;
   filesize: number;
@@ -101,6 +103,8 @@ type QuoteDraftFile = {
   materialFee: number | null;
   timeFee: number | null;
   basePrintPrice: number | null;
+  derivedStlFilepath: string | null;
+  conversionStatus: string | null;
 };
 
 type QuoteDraftResponse = {
@@ -175,7 +179,7 @@ export function QuoteForm({
     [addresses, selectedAddressId],
   );
   const hasAddresses = addresses.length > 0;
-  const fileEstimates = useMemo(() => estimateFiles(files), [files]);
+  const fileEstimates = useMemo(() => estimateFiles(files, stlDimensions), [files, stlDimensions]);
   const orderSummary = useMemo(
     () => buildOrderSummary(files, fileEstimates, sliceQuotes, shippingMethod),
     [files, fileEstimates, sliceQuotes, shippingMethod],
@@ -404,7 +408,11 @@ export function QuoteForm({
     addFiles(event.dataTransfer.files);
   }
 
-  function rememberDraftFile(id: string, draftFileId: number | undefined) {
+  function rememberDraftFile(
+    id: string,
+    draftFileId: number | undefined,
+    preview?: { available: boolean; filename?: string },
+  ) {
     if (!draftFileId) {
       return;
     }
@@ -415,7 +423,8 @@ export function QuoteForm({
           ? {
               ...item,
               draftFileId,
-              fileUrl: `/api/quote/draft/files/${draftFileId}/download`,
+              modelFileUrl: `/api/quote/draft/files/${draftFileId}/download${preview?.available ? "?artifact=preview" : ""}`,
+              previewFilename: preview?.available ? preview.filename || "derived-preview.stl" : undefined,
             }
           : item,
       ),
@@ -489,7 +498,10 @@ export function QuoteForm({
       const savedUpload = normalizeSavedUploadInfo(result.saved_upload);
       const draftFileId = normalizeDraftFileId(result.draft_file_id);
 
-      rememberDraftFile(item.id, draftFileId);
+      rememberDraftFile(item.id, draftFileId, {
+        available: result.preview_available === true,
+        filename: typeof result.preview_filename === "string" ? result.preview_filename : undefined,
+      });
 
       if (savedUpload && !quoteResult) {
         setSliceQuotes((quotes) => ({
@@ -721,8 +733,10 @@ export function QuoteForm({
       formData.delete("fileUnitPrice");
       formData.delete("fileSubtotalPrice");
       formData.delete("savedFilenames");
+      formData.delete("savedOriginalFilenames");
       formData.delete("savedFilepaths");
       formData.delete("savedFilesizes");
+      formData.delete("savedDraftFileIds");
       formData.set("customerName", customer?.name || "");
       formData.set("phone", phone);
       formData.set("addressId", String(selectedAddress.id));
@@ -741,8 +755,10 @@ export function QuoteForm({
         }
 
         formData.append("savedFilenames", savedUpload.filename);
+        formData.append("savedOriginalFilenames", savedUpload.originalFilename || item.file.name || savedUpload.filename);
         formData.append("savedFilepaths", savedUpload.filepath);
         formData.append("savedFilesizes", String(savedUpload.filesize));
+        formData.append("savedDraftFileIds", item.draftFileId ? String(item.draftFileId) : "");
         formData.append("fileMaterials", item.material);
         formData.append("fileColors", item.color);
         formData.append("fileDimensionX", formatDimensionFormValue(dimensions?.x));
@@ -857,7 +873,9 @@ export function QuoteForm({
           <div className="space-y-3 p-4">
           {fileEstimates.map(({ item, dimensions, estimate }) => {
             const quote = getVisibleSliceQuote(item, sliceQuotes[item.id]);
-            const displayDimensions = stlDimensions[item.id] || dimensions;
+            const sourceIsStl = item.file.name?.toLowerCase().endsWith(".stl");
+            const displayDimensions = stlDimensions[item.id] || (sourceIsStl ? dimensions : null);
+            const riskNotice = sourceIsStl || stlDimensions[item.id] ? estimate.riskNotice : "";
             const filePrice = getFileDisplayPrice(quote, files.length, item.material);
             const fileSubtotal = getFileSubtotalPrice(quote, files.length, item.quantity, item.material);
 
@@ -883,8 +901,9 @@ export function QuoteForm({
                   compact
                   color={item.color}
                   dimensions={displayDimensions}
-                  file={item.file instanceof File ? item.file : undefined}
-                  fileUrl={item.fileUrl}
+                  file={item.file instanceof File && item.file.name.toLowerCase().endsWith(".stl") ? item.file : undefined}
+                  modelFileUrl={item.modelFileUrl}
+                  previewFilename={item.previewFilename}
                   filename={item.file.name || ""}
                   filesize={item.file.size || 0}
                   material={item.material}
@@ -910,7 +929,7 @@ export function QuoteForm({
                       <p className="mt-1 text-sm text-graphite">
                         如需加急，请在备注中说明，加急可能产生额外费用。
                       </p>
-                      {estimate.riskNotice ? (
+                      {riskNotice ? (
                         <p
                           className={
                             estimate.riskLevel === "danger"
@@ -918,7 +937,7 @@ export function QuoteForm({
                               : "notice-warning mt-2 px-3 py-2 text-sm font-semibold"
                           }
                         >
-                          {estimate.riskNotice}
+                          {riskNotice}
                         </p>
                       ) : null}
                     </div>
@@ -1468,7 +1487,8 @@ function createDraftModelFile(draftFile: QuoteDraftFile): SelectedModelFile {
   return {
     id: createDraftModelFileId(draftFile.id),
     draftFileId: draftFile.id,
-    fileUrl: `/api/quote/draft/files/${draftFile.id}/download`,
+    modelFileUrl: `/api/quote/draft/files/${draftFile.id}/download${draftFile.derivedStlFilepath ? "?artifact=preview" : ""}`,
+    previewFilename: draftFile.derivedStlFilepath ? "derived-preview.stl" : undefined,
     file: {
       name: displayName,
       size: draftFile.filesize,
@@ -1482,6 +1502,7 @@ function createDraftModelFile(draftFile: QuoteDraftFile): SelectedModelFile {
 
 function createDraftQuoteState(draftFile: QuoteDraftFile): SliceQuoteState {
   const savedUpload = {
+    originalFilename: draftFile.originalFilename,
     filename: draftFile.filename,
     filepath: draftFile.filepath,
     filesize: draftFile.filesize,
@@ -1696,6 +1717,8 @@ async function readSliceQuoteResponse(response: Response) {
       result?: Record<string, unknown>;
       saved_upload?: Record<string, unknown>;
       draft_file_id?: unknown;
+      preview_available?: boolean;
+      preview_filename?: string;
     };
   } catch (error) {
     console.error("Auto quote API response JSON parse failed", error);
@@ -1713,10 +1736,15 @@ function normalizeSavedUploadInfo(value: Record<string, unknown> | undefined) {
   }
 
   const filename = typeof value.filename === "string" ? value.filename : "";
+  const originalFilename = typeof value.originalFilename === "string"
+    ? value.originalFilename
+    : typeof value.original_filename === "string"
+      ? value.original_filename
+      : undefined;
   const filepath = typeof value.filepath === "string" ? value.filepath : "";
   const filesize = typeof value.filesize === "number" ? value.filesize : 0;
 
-  return filename && filepath && filesize > 0 ? { filename, filepath, filesize } : undefined;
+  return filename && filepath && filesize > 0 ? { originalFilename, filename, filepath, filesize } : undefined;
 }
 
 function normalizeDraftFileId(value: unknown) {

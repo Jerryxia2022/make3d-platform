@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import type { ModelDimensionsMm } from "../shared/modelGeometry.ts";
 
 export type StlTopologyAnalysis = {
   componentCount: number;
@@ -24,6 +25,23 @@ export async function analyzeStlTopology(filePath: string): Promise<StlTopologyA
   return {
     componentCount: countConnectedComponents(triangles),
     triangleCount: triangles.length,
+  };
+}
+
+export async function readStlDimensions(filePath: string): Promise<ModelDimensionsMm> {
+  const buffer = await readFile(filePath);
+  const vertices = looksLikeBinaryStl(buffer)
+    ? readBinaryStlVertices(buffer)
+    : readAsciiStlVertices(buffer.toString("utf8"));
+  if (vertices.length === 0) {
+    throw new Error("模型尺寸无法识别，需人工确认。");
+  }
+
+  const axes = [0, 1, 2].map((axis) => vertices.map((vertex) => vertex[axis]));
+  return {
+    x: roundDimension(Math.max(...axes[0]) - Math.min(...axes[0])),
+    y: roundDimension(Math.max(...axes[1]) - Math.min(...axes[1])),
+    z: roundDimension(Math.max(...axes[2]) - Math.min(...axes[2])),
   };
 }
 
@@ -60,6 +78,23 @@ function parseBinaryStlTriangles(buffer: Buffer): Triangle[] {
   return triangles;
 }
 
+function readBinaryStlVertices(buffer: Buffer): number[][] {
+  const triangleCount = buffer.readUInt32LE(80);
+  const vertices: number[][] = [];
+  for (let index = 0; index < triangleCount; index += 1) {
+    const start = 84 + index * 50 + 12;
+    for (let vertexIndex = 0; vertexIndex < 3; vertexIndex += 1) {
+      const offset = start + vertexIndex * 12;
+      vertices.push([
+        buffer.readFloatLE(offset),
+        buffer.readFloatLE(offset + 4),
+        buffer.readFloatLE(offset + 8),
+      ]);
+    }
+  }
+  return vertices.filter((vertex) => vertex.every(Number.isFinite));
+}
+
 function readVertexKey(buffer: Buffer, offset: number) {
   return [
     normalizeCoordinate(buffer.readFloatLE(offset)),
@@ -84,6 +119,16 @@ function parseAsciiStlTriangles(source: string): Triangle[] {
   }
 
   return triangles;
+}
+
+function readAsciiStlVertices(source: string): number[][] {
+  return [...source.matchAll(/vertex\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)/gi)]
+    .map((match) => [Number(match[1]), Number(match[2]), Number(match[3])])
+    .filter((vertex) => vertex.every(Number.isFinite));
+}
+
+function roundDimension(value: number) {
+  return Math.round(value * 1000) / 1000;
 }
 
 function countConnectedComponents(triangles: Triangle[]) {

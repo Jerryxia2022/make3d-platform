@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 export type PrusaSlicerConfig = {
   enabled: boolean;
   bin: string;
+  commandPrefixArgs: string[];
+  pathMode: "native" | "wsl";
   profilePath: string;
   timeoutSeconds: number;
   maxConcurrency: number;
@@ -45,6 +47,8 @@ export function getPrusaSlicerConfig(env: NodeJS.ProcessEnv = process.env): Prus
   return {
     enabled: env.PRUSASLICER_ENABLED === "true",
     bin: env.PRUSASLICER_BIN || "prusa-slicer",
+    commandPrefixArgs: parseCommandPrefixArgs(env.PRUSASLICER_COMMAND_PREFIX_ARGS_JSON),
+    pathMode: env.PRUSASLICER_PATH_MODE === "wsl" ? "wsl" : "native",
     profilePath: env.PRUSASLICER_PROFILE_PATH || "/app/profiles/bambu-p1s.ini",
     timeoutSeconds: parsePositiveInteger(env.SLICE_TIMEOUT_SECONDS, 120),
     maxConcurrency: parsePositiveInteger(env.MAX_SLICE_CONCURRENCY, 1),
@@ -86,15 +90,41 @@ export async function runPrusaSlicer(input: RunPrusaSlicerInput) {
     throw new Error("PrusaSlicer is disabled");
   }
 
-  const args = buildPrusaSlicerArgs({
-    ...input,
-    profilePath: input.profilePath || config.profilePath,
-  });
+  const args = [
+    ...config.commandPrefixArgs,
+    ...buildPrusaSlicerArgs({
+      ...input,
+      inputFilePath: formatPrusaSlicerPath(input.inputFilePath, config.pathMode),
+      gcodeFilePath: formatPrusaSlicerPath(input.gcodeFilePath, config.pathMode),
+      profilePath: formatPrusaSlicerPath(input.profilePath || config.profilePath, config.pathMode),
+    }),
+  ];
 
   await spawnWithTimeout(config.bin, args, config.timeoutSeconds * 1000);
 
   const gcode = await readFile(input.gcodeFilePath, "utf8");
   return parseGcodeMetadata(gcode, input.metadataMaterial || input.material);
+}
+
+export function formatPrusaSlicerPath(path: string, mode: PrusaSlicerConfig["pathMode"]) {
+  return mode === "wsl" && /^[A-Za-z]:[\\/]/.test(path) ? path.replaceAll("\\", "/") : path;
+}
+
+function parseCommandPrefixArgs(value: string | undefined) {
+  if (!value) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("PRUSASLICER_COMMAND_PREFIX_ARGS_JSON must be valid JSON");
+  }
+
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string" || item.includes("\0"))) {
+    throw new Error("PRUSASLICER_COMMAND_PREFIX_ARGS_JSON must be a JSON string array");
+  }
+
+  return parsed;
 }
 
 export function parseGcodeMetadata(gcode: string, material = "PLA"): GcodeMetadata {

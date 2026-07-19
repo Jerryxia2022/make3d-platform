@@ -83,6 +83,7 @@ export type OrderInput = {
 };
 
 export type OrderFileInput = {
+  originalFilename?: string | null;
   filename: string;
   filepath: string;
   filesize: number;
@@ -103,6 +104,20 @@ export type OrderFileInput = {
   quantity?: number;
   unitPrice?: number | null;
   subtotalPrice?: number | null;
+  sourceFormat?: string | null;
+  sourceSha256?: string | null;
+  geometryStatus?: string | null;
+  geometryUnits?: string | null;
+  geometryAnalyzedAt?: string | null;
+  geometryToolName?: string | null;
+  geometryToolVersion?: string | null;
+  quoteMode?: string | null;
+  manualQuoteReasonCode?: string | null;
+  derivedStlFilepath?: string | null;
+  derivedStlSha256?: string | null;
+  derivedStlFilesize?: number | null;
+  conversionStatus?: string | null;
+  conversionError?: string | null;
 };
 
 export const QUOTE_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -131,6 +146,20 @@ export type QuoteDraftFileInput = {
   materialFee?: number | null;
   timeFee?: number | null;
   basePrintPrice?: number | null;
+  sourceFormat?: string | null;
+  sourceSha256?: string | null;
+  geometryStatus?: string | null;
+  geometryUnits?: string | null;
+  geometryAnalyzedAt?: string | null;
+  geometryToolName?: string | null;
+  geometryToolVersion?: string | null;
+  quoteMode?: string | null;
+  manualQuoteReasonCode?: string | null;
+  derivedStlFilepath?: string | null;
+  derivedStlSha256?: string | null;
+  derivedStlFilesize?: number | null;
+  conversionStatus?: string | null;
+  conversionError?: string | null;
 };
 
 export type QuoteDraftFileUpdateInput = {
@@ -176,6 +205,20 @@ export type QuoteDraftFileRecord = {
   materialFee: number | null;
   timeFee: number | null;
   basePrintPrice: number | null;
+  sourceFormat: string | null;
+  sourceSha256: string | null;
+  geometryStatus: string | null;
+  geometryUnits: string | null;
+  geometryAnalyzedAt: string | null;
+  geometryToolName: string | null;
+  geometryToolVersion: string | null;
+  quoteMode: string | null;
+  manualQuoteReasonCode: string | null;
+  derivedStlFilepath: string | null;
+  derivedStlSha256: string | null;
+  derivedStlFilesize: number | null;
+  conversionStatus: string | null;
+  conversionError: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -527,6 +570,7 @@ export type OrderFileRecord = {
   id: number;
   orderId: number;
   filename: string;
+  originalFilename: string | null;
   filepath: string;
   filesize: number;
   material: string | null;
@@ -549,6 +593,16 @@ export type OrderFileRecord = {
   quantity: number;
   unitPrice: number | null;
   subtotalPrice: number | null;
+  sourceFormat: string | null;
+  sourceSha256: string | null;
+  geometryStatus: string | null;
+  geometryUnits: string | null;
+  quoteMode: string | null;
+  manualQuoteReasonCode: string | null;
+  derivedStlFilepath: string | null;
+  derivedStlSha256: string | null;
+  derivedStlFilesize: number | null;
+  conversionStatus: string | null;
   createdAt: string;
 };
 
@@ -1306,6 +1360,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
       material_fee REAL,
       time_fee REAL,
       base_print_price REAL,
+      source_format TEXT,
+      source_sha256 TEXT,
+      geometry_status TEXT,
+      geometry_units TEXT,
+      geometry_analyzed_at TEXT,
+      geometry_tool_name TEXT,
+      geometry_tool_version TEXT,
+      quote_mode TEXT,
+      manual_quote_reason_code TEXT,
+      derived_stl_filepath TEXT,
+      derived_stl_sha256 TEXT,
+      derived_stl_filesize INTEGER,
+      conversion_status TEXT,
+      conversion_error TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (draft_id) REFERENCES quote_drafts(id) ON DELETE CASCADE
@@ -1315,6 +1383,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
       filename TEXT NOT NULL,
+      original_filename TEXT,
       filepath TEXT NOT NULL,
       filesize INTEGER NOT NULL,
       material TEXT,
@@ -1337,6 +1406,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
       quantity INTEGER NOT NULL DEFAULT 1,
       unit_price REAL,
       subtotal_price REAL,
+      source_format TEXT,
+      source_sha256 TEXT,
+      geometry_status TEXT,
+      geometry_units TEXT,
+      geometry_analyzed_at TEXT,
+      geometry_tool_name TEXT,
+      geometry_tool_version TEXT,
+      quote_mode TEXT,
+      manual_quote_reason_code TEXT,
+      derived_stl_filepath TEXT,
+      derived_stl_sha256 TEXT,
+      derived_stl_filesize INTEGER,
+      conversion_status TEXT,
+      conversion_error TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
@@ -1960,6 +2043,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["material_fee", "REAL"],
     ["time_fee", "REAL"],
     ["base_print_price", "REAL"],
+    ["source_format", "TEXT"],
+    ["source_sha256", "TEXT"],
+    ["geometry_status", "TEXT"],
+    ["geometry_units", "TEXT"],
+    ["geometry_analyzed_at", "TEXT"],
+    ["geometry_tool_name", "TEXT"],
+    ["geometry_tool_version", "TEXT"],
+    ["quote_mode", "TEXT"],
+    ["manual_quote_reason_code", "TEXT"],
+    ["derived_stl_filepath", "TEXT"],
+    ["derived_stl_sha256", "TEXT"],
+    ["derived_stl_filesize", "INTEGER"],
+    ["conversion_status", "TEXT"],
+    ["conversion_error", "TEXT"],
     ["created_at", "DATETIME"],
     ["updated_at", "DATETIME"],
   ]);
@@ -1968,6 +2065,7 @@ export function initDatabase(dbPath = getDatabasePath()) {
     CREATE INDEX IF NOT EXISTS idx_quote_draft_files_draft ON quote_draft_files(draft_id);
   `);
   ensureColumns(db, "files", [
+    ["original_filename", "TEXT"],
     ["bounding_box_x", "REAL"],
     ["bounding_box_y", "REAL"],
     ["bounding_box_z", "REAL"],
@@ -1988,6 +2086,20 @@ export function initDatabase(dbPath = getDatabasePath()) {
     ["quantity", "INTEGER NOT NULL DEFAULT 1"],
     ["unit_price", "REAL"],
     ["subtotal_price", "REAL"],
+    ["source_format", "TEXT"],
+    ["source_sha256", "TEXT"],
+    ["geometry_status", "TEXT"],
+    ["geometry_units", "TEXT"],
+    ["geometry_analyzed_at", "TEXT"],
+    ["geometry_tool_name", "TEXT"],
+    ["geometry_tool_version", "TEXT"],
+    ["quote_mode", "TEXT"],
+    ["manual_quote_reason_code", "TEXT"],
+    ["derived_stl_filepath", "TEXT"],
+    ["derived_stl_sha256", "TEXT"],
+    ["derived_stl_filesize", "INTEGER"],
+    ["conversion_status", "TEXT"],
+    ["conversion_error", "TEXT"],
   ]);
   ensureColumns(db, "local_file_sync_jobs", [
     ["source_version", "TEXT NOT NULL DEFAULT 'upload_v1'"],
@@ -2114,9 +2226,23 @@ export function addQuoteDraftFile(
         material_fee,
         time_fee,
         base_print_price,
+        source_format,
+        source_sha256,
+        geometry_status,
+        geometry_units,
+        geometry_analyzed_at,
+        geometry_tool_name,
+        geometry_tool_version,
+        quote_mode,
+        manual_quote_reason_code,
+        derived_stl_filepath,
+        derived_stl_sha256,
+        derived_stl_filesize,
+        conversion_status,
+        conversion_error,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (${Array.from({ length: 39 }, () => "?").join(", ")})`,
     )
     .run(
       draft.id,
@@ -2142,6 +2268,20 @@ export function addQuoteDraftFile(
       input.materialFee ?? null,
       input.timeFee ?? null,
       input.basePrintPrice ?? null,
+      input.sourceFormat ?? null,
+      input.sourceSha256 ?? null,
+      input.geometryStatus ?? null,
+      input.geometryUnits ?? null,
+      input.geometryAnalyzedAt ?? null,
+      input.geometryToolName ?? null,
+      input.geometryToolVersion ?? null,
+      input.quoteMode ?? null,
+      input.manualQuoteReasonCode ?? null,
+      input.derivedStlFilepath ?? null,
+      input.derivedStlSha256 ?? null,
+      input.derivedStlFilesize ?? null,
+      input.conversionStatus ?? null,
+      input.conversionError ?? null,
       timestamp,
       timestamp,
     );
@@ -3172,6 +3312,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
       `INSERT INTO files (
         order_id,
         filename,
+        original_filename,
         filepath,
         filesize,
         material,
@@ -3191,14 +3332,29 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         quantity,
         unit_price,
         subtotal_price,
+        source_format,
+        source_sha256,
+        geometry_status,
+        geometry_units,
+        geometry_analyzed_at,
+        geometry_tool_name,
+        geometry_tool_version,
+        quote_mode,
+        manual_quote_reason_code,
+        derived_stl_filepath,
+        derived_stl_sha256,
+        derived_stl_filesize,
+        conversion_status,
+        conversion_error,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (${Array.from({ length: 37 }, () => "?").join(", ")})`,
     );
 
     for (const file of input.files) {
       const insertedFile = insertFile.run(
         orderId,
         file.filename,
+        file.originalFilename ?? file.filename,
         file.filepath,
         file.filesize,
         file.material,
@@ -3218,6 +3374,20 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         file.quantity ?? 1,
         file.unitPrice ?? null,
         file.subtotalPrice ?? null,
+        file.sourceFormat ?? null,
+        file.sourceSha256 ?? null,
+        file.geometryStatus ?? null,
+        file.geometryUnits ?? null,
+        file.geometryAnalyzedAt ?? null,
+        file.geometryToolName ?? null,
+        file.geometryToolVersion ?? null,
+        file.quoteMode ?? null,
+        file.manualQuoteReasonCode ?? null,
+        file.derivedStlFilepath ?? null,
+        file.derivedStlSha256 ?? null,
+        file.derivedStlFilesize ?? null,
+        file.conversionStatus ?? null,
+        file.conversionError ?? null,
         now,
       );
       createLocalFileSyncJobForOrderFile(db, {
@@ -3225,7 +3395,7 @@ export function createOrderWithFiles(db: DatabaseSync, input: OrderInput): Creat
         orderId,
         customerId: input.customerId ?? null,
         orderNo,
-        originalFilename: file.filename,
+        originalFilename: file.originalFilename ?? file.filename,
         storedFilename: file.filename,
         relativePath: file.filename,
         fileSizeBytes: file.filesize,
@@ -3326,6 +3496,7 @@ function loadOrderDetail(db: DatabaseSync, order: OrderRecord): OrderDetail {
         id,
         order_id AS orderId,
         filename,
+        original_filename AS originalFilename,
         filepath,
         filesize,
         material,
@@ -3348,6 +3519,16 @@ function loadOrderDetail(db: DatabaseSync, order: OrderRecord): OrderDetail {
         quantity,
         unit_price AS unitPrice,
         subtotal_price AS subtotalPrice,
+        source_format AS sourceFormat,
+        source_sha256 AS sourceSha256,
+        geometry_status AS geometryStatus,
+        geometry_units AS geometryUnits,
+        quote_mode AS quoteMode,
+        manual_quote_reason_code AS manualQuoteReasonCode,
+        derived_stl_filepath AS derivedStlFilepath,
+        derived_stl_sha256 AS derivedStlSha256,
+        derived_stl_filesize AS derivedStlFilesize,
+        conversion_status AS conversionStatus,
         created_at AS createdAt
       FROM files
       WHERE order_id = ?
@@ -3373,6 +3554,7 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
         id,
         order_id AS orderId,
         filename,
+        original_filename AS originalFilename,
         filepath,
         filesize,
         material,
@@ -3395,6 +3577,16 @@ export function getFileById(db: DatabaseSync, id: number): OrderFileRecord {
         quantity,
         unit_price AS unitPrice,
         subtotal_price AS subtotalPrice,
+        source_format AS sourceFormat,
+        source_sha256 AS sourceSha256,
+        geometry_status AS geometryStatus,
+        geometry_units AS geometryUnits,
+        quote_mode AS quoteMode,
+        manual_quote_reason_code AS manualQuoteReasonCode,
+        derived_stl_filepath AS derivedStlFilepath,
+        derived_stl_sha256 AS derivedStlSha256,
+        derived_stl_filesize AS derivedStlFilesize,
+        conversion_status AS conversionStatus,
         created_at AS createdAt
       FROM files
       WHERE id = ?`,
@@ -5326,6 +5518,20 @@ function quoteDraftFileSelectSql(suffix: string) {
     quote_draft_files.material_fee AS materialFee,
     quote_draft_files.time_fee AS timeFee,
     quote_draft_files.base_print_price AS basePrintPrice,
+    quote_draft_files.source_format AS sourceFormat,
+    quote_draft_files.source_sha256 AS sourceSha256,
+    quote_draft_files.geometry_status AS geometryStatus,
+    quote_draft_files.geometry_units AS geometryUnits,
+    quote_draft_files.geometry_analyzed_at AS geometryAnalyzedAt,
+    quote_draft_files.geometry_tool_name AS geometryToolName,
+    quote_draft_files.geometry_tool_version AS geometryToolVersion,
+    quote_draft_files.quote_mode AS quoteMode,
+    quote_draft_files.manual_quote_reason_code AS manualQuoteReasonCode,
+    quote_draft_files.derived_stl_filepath AS derivedStlFilepath,
+    quote_draft_files.derived_stl_sha256 AS derivedStlSha256,
+    quote_draft_files.derived_stl_filesize AS derivedStlFilesize,
+    quote_draft_files.conversion_status AS conversionStatus,
+    quote_draft_files.conversion_error AS conversionError,
     quote_draft_files.created_at AS createdAt,
     quote_draft_files.updated_at AS updatedAt
   FROM quote_draft_files

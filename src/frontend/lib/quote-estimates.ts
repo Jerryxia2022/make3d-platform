@@ -39,12 +39,15 @@ export function createQuoteFileId(file: QuoteFileLike) {
   return `${file.name || "model"}-${safeFileSize(file)}-${file.lastModified || 0}-${randomId}`;
 }
 
-export function estimateFiles<T extends SelectedQuoteFile>(files: T[]) {
+export function estimateFiles<T extends SelectedQuoteFile>(
+  files: T[],
+  verifiedDimensionsById: Record<string, QuoteDimensions> = {},
+) {
   const safeFiles = Array.isArray(files) ? files : [];
   const packagingShare = safeFiles.length > 0 ? PACKAGING_FEE / safeFiles.length : 0;
 
   return safeFiles.map((item) => {
-    const dimensions = estimateDisplayDimensions(item.file);
+    const dimensions = verifiedDimensionsById[item.id] || estimateDisplayDimensions(item.file);
     const estimate = estimateFileBySize(safeFileSize(item.file), item.material, dimensions);
 
     return {

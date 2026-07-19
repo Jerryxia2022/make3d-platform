@@ -107,3 +107,19 @@ test("still returns risk hints when dimensions are available", () => {
     "模型尺寸较小，可能无法稳定打印，需要人工确认。",
   );
 });
+
+test("verified server dimensions replace temporary STEP size heuristics", () => {
+  const item = {
+    id: "verified-step",
+    file: { name: "04NF12.STEP", size: 512 * 1024, lastModified: 1 },
+    material: "PETG",
+    color: "白",
+    quantity: 1,
+  };
+  const dimensions = { x: 30.95, y: 140.006, z: 173.512 };
+  const [result] = estimateFiles([item], { [item.id]: dimensions });
+
+  assert.deepEqual(result.dimensions, dimensions);
+  assert.equal(result.estimate.riskNotice, "");
+  assert.equal(result.estimate.riskLevel, "none");
+});

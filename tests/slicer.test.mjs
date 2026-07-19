@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import {
   buildPrusaSlicerArgs,
+  formatPrusaSlicerPath,
   getPrusaSlicerConfig,
   isPrusaSlicerEnabled,
   parseGcodeMetadata,
@@ -190,6 +191,8 @@ test("PrusaSlicer is disabled by default and refuses execution", async () => {
 
     assert.equal(config.enabled, false);
     assert.equal(config.bin, "prusa-slicer");
+    assert.deepEqual(config.commandPrefixArgs, []);
+    assert.equal(config.pathMode, "native");
     assert.equal(config.profilePath, "/app/profiles/bambu-p1s.ini");
     assert.equal(config.timeoutSeconds, 120);
     assert.equal(config.maxConcurrency, 1);
@@ -212,6 +215,28 @@ test("PrusaSlicer is disabled by default and refuses execution", async () => {
       process.env.PRUSASLICER_ENABLED = originalEnabled;
     }
   }
+});
+
+test("parses an explicit PrusaSlicer command prefix without shell evaluation", () => {
+  const config = getPrusaSlicerConfig({
+    PRUSASLICER_ENABLED: "true",
+    PRUSASLICER_BIN: "wsl.exe",
+    PRUSASLICER_COMMAND_PREFIX_ARGS_JSON: '["-d","Ubuntu-24.04","--","/safe/bridge.sh"]',
+    PRUSASLICER_PATH_MODE: "wsl",
+  });
+
+  assert.deepEqual(config.commandPrefixArgs, ["-d", "Ubuntu-24.04", "--", "/safe/bridge.sh"]);
+  assert.equal(config.pathMode, "wsl");
+  assert.equal(formatPrusaSlicerPath("C:\\safe\\model.step", "wsl"), "C:/safe/model.step");
+  assert.equal(formatPrusaSlicerPath("/safe/model.step", "wsl"), "/safe/model.step");
+  assert.throws(
+    () => getPrusaSlicerConfig({ PRUSASLICER_COMMAND_PREFIX_ARGS_JSON: "not-json" }),
+    /must be valid JSON/,
+  );
+  assert.throws(
+    () => getPrusaSlicerConfig({ PRUSASLICER_COMMAND_PREFIX_ARGS_JSON: '["ok",1]' }),
+    /must be a JSON string array/,
+  );
 });
 
 function createBinaryStl(triangles) {

@@ -10,6 +10,7 @@ import {
   createSliceJob,
   getCustomerAddressByIdForCustomer,
   getCustomerInvoiceProfileByIdForCustomer,
+  getQuoteDraftFileForCustomer,
   getBeijingTimestamp,
   getCustomerById,
   getOrderById,
@@ -23,6 +24,7 @@ import {
   logCustomerSessionDiagnostics,
 } from "@/backend/accountAuth";
 import { calculateAutoLeadTimeHours } from "@/backend/autoPricing";
+import { readStlDimensions } from "@/backend/stlAnalysis";
 import { estimateFileBySize, estimateOrderSummary, getShippingEstimate } from "@/backend/estimates";
 import { notifyAdminNewOrder } from "@/backend/email";
 import { consumeUploadRateLimit, getClientIp } from "@/backend/rateLimit";
@@ -51,6 +53,7 @@ import {
   ORDER_RISK_CONFIRMATION_VERSION,
 } from "@/shared/legalPolicy";
 import { calculateLinePrintTotal, isSameMoney, roundMoney, safePositiveMoney } from "@/shared/pricing";
+import { evaluateAutoQuoteDimensions } from "@/shared/modelGeometry";
 
 export const runtime = "nodejs";
 
@@ -117,6 +120,7 @@ export async function POST(request: Request) {
     );
 
     const savedUploadRefs = getSavedUploadList(formData);
+    const savedDraftFileIds = getPositiveIntegerList(formData, "savedDraftFileIds");
     const fileCount = savedUploadRefs.length || uploadedFiles.length;
 
     if (fileCount === 0) {
@@ -151,17 +155,43 @@ export async function POST(request: Request) {
       savedUploadRefs.length > 0
         ? await Promise.all(savedUploadRefs.map((upload) => validateSavedUploadReference(upload)))
         : await Promise.all(uploadedFiles.map((file) => saveUploadFile(file)));
+    const draftFiles = savedDraftFileIds.length === fileCount
+      ? loadSubmissionDraftFiles(customer.id, savedDraftFileIds, uploadReferences)
+      : Array.from({ length: fileCount }, () => null);
+    const authoritativeDimensions = await Promise.all(
+      uploadReferences.map(async (upload, index) => {
+        const draftFile = draftFiles[index];
+        if (
+          draftFile?.boundingBoxX != null &&
+          draftFile.boundingBoxY != null &&
+          draftFile.boundingBoxZ != null
+        ) {
+          return { x: draftFile.boundingBoxX, y: draftFile.boundingBoxY, z: draftFile.boundingBoxZ };
+        }
+        if (extname(upload.filename).toLowerCase() !== ".stl") return null;
+        try {
+          return await readStlDimensions(upload.filepath);
+        } catch {
+          return null;
+        }
+      }),
+    );
     const savedFiles = uploadReferences.map((upload, index) => {
+        const draftFile = draftFiles[index];
         const material = materials[index] || "PLA";
         const quantity = quantities[index];
-        const dimensions = {
+        const dimensions = authoritativeDimensions[index] || {
           x: dimensionXs[index],
           y: dimensionYs[index],
           z: dimensionZs[index],
         };
         const estimate = estimateFileBySize(upload.filesize, material, dimensions);
         const sliceQuote = sliceQuotes[index];
-        const manualReviewReason = getManualReviewReason(upload.filename, sliceQuote, estimate);
+        const dimensionEligibility = evaluateAutoQuoteDimensions(authoritativeDimensions[index]);
+        const manualReviewReason =
+          dimensionEligibility && !dimensionEligibility.eligible
+            ? dimensionEligibility.message
+            : getManualReviewReason(sliceQuote, estimate);
         const estimatedFilePrice =
           sliceQuote?.status === "success"
             ? roundMoney(sliceQuote.materialFee + sliceQuote.timeFee)
@@ -169,6 +199,7 @@ export async function POST(request: Request) {
 
         return {
           ...upload,
+          originalFilename: draftFile?.originalFilename || upload.originalFilename || upload.filename,
           material,
           color: colors[index] || "黑",
           boundingBoxX: dimensions.x,
@@ -181,6 +212,22 @@ export async function POST(request: Request) {
           riskNotice: manualReviewReason || estimate.riskNotice,
           riskLevel: manualReviewReason ? "danger" : estimate.riskLevel,
           requiresManualConfirmation: Boolean(manualReviewReason || estimate.requiresManualConfirmation),
+          geometryStatus: authoritativeDimensions[index] ? "valid" : "unit_unknown",
+          geometryUnits: authoritativeDimensions[index] ? "mm" : null,
+          geometryAnalyzedAt: authoritativeDimensions[index] ? getBeijingTimestamp() : null,
+          geometryToolName: authoritativeDimensions[index] ? "make3d-stl-analysis" : null,
+          geometryToolVersion: authoritativeDimensions[index] ? "phase07-a2-v1" : null,
+          quoteMode: manualReviewReason ? "MANUAL" : "AUTO",
+          manualQuoteReasonCode: dimensionEligibility && !dimensionEligibility.eligible
+            ? dimensionEligibility.reasonCode
+            : manualReviewReason
+              ? "EXISTING_MANUAL_RULE"
+              : null,
+          derivedStlFilepath: draftFile?.derivedStlFilepath || null,
+          derivedStlSha256: draftFile?.derivedStlSha256 || null,
+          derivedStlFilesize: draftFile?.derivedStlFilesize || null,
+          conversionStatus: draftFile?.conversionStatus || (upload.sourceFormat === "STEP" ? "pending" : "not_required"),
+          conversionError: draftFile?.conversionError || null,
           materialSalesRate: estimate.materialSalesRate,
           materialCostRate: estimate.materialCostRate,
           quantity,
@@ -604,7 +651,40 @@ function getQuantityList(formData: FormData, key: string) {
   });
 }
 
+function getPositiveIntegerList(formData: FormData, key: string) {
+  return formData.getAll(key).map((value) => {
+    const parsed = typeof value === "string" ? Number(value) : NaN;
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+  });
+}
+
+function loadSubmissionDraftFiles(
+  customerId: number,
+  ids: number[],
+  uploads: SavedUpload[],
+) {
+  const db = openDatabase();
+  try {
+    return ids.map((id, index) => {
+      if (!id) return null;
+      const draftFile = getQuoteDraftFileForCustomer(db, customerId, id);
+      const upload = uploads[index];
+      if (
+        draftFile.filename !== upload.filename ||
+        draftFile.filepath !== upload.filepath ||
+        draftFile.filesize !== upload.filesize
+      ) {
+        throw new Error("报价草稿文件与上传文件不一致，请重新上传");
+      }
+      return draftFile;
+    });
+  } finally {
+    db.close();
+  }
+}
+
 function getSavedUploadList(formData: FormData): SavedUpload[] {
+  const originalFilenames = getStringList(formData, "savedOriginalFilenames");
   const filenames = getStringList(formData, "savedFilenames");
   const filepaths = getStringList(formData, "savedFilepaths");
   const filesizes = getNumberList(formData, "savedFilesizes");
@@ -613,7 +693,11 @@ function getSavedUploadList(formData: FormData): SavedUpload[] {
     return [];
   }
 
-  if (filenames.length !== filepaths.length || filenames.length !== filesizes.length) {
+  if (
+    filenames.length !== filepaths.length ||
+    filenames.length !== filesizes.length ||
+    (originalFilenames.length > 0 && originalFilenames.length !== filenames.length)
+  ) {
     throw new Error("文件信息不完整，请重新上传");
   }
 
@@ -625,6 +709,7 @@ function getSavedUploadList(formData: FormData): SavedUpload[] {
     }
 
     return {
+      originalFilename: originalFilenames[index] || filename,
       filename,
       filepath: filepaths[index],
       filesize,
@@ -665,16 +750,9 @@ function getSliceQuoteList(formData: FormData) {
 }
 
 function getManualReviewReason(
-  filename: string,
   sliceQuote: ReturnType<typeof getSliceQuoteList>[number] | undefined,
   estimate: ReturnType<typeof estimateFileBySize>,
 ) {
-  const extension = extname(filename).toLowerCase();
-
-  if (extension === ".step" || extension === ".stp") {
-    return "该模型需要人工确认后报价。原因：STEP/STP 文件暂不自动切片。";
-  }
-
   if (sliceQuote?.status === "manual") {
     return sliceQuote.message || "该模型需要人工确认后报价。";
   }

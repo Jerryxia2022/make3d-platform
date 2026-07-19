@@ -162,7 +162,7 @@ export default async function CustomerOrderDetailPage({
                           color={file.color}
                           compact
                           dimensions={getFileDimensions(file)}
-                          fileUrl={`/api/account/files/${file.id}/download`}
+                          modelFileUrl={`/api/account/files/${file.id}/download`}
                           filename={file.filename}
                           filesize={file.filesize}
                           material={file.material}

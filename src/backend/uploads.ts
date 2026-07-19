@@ -1,7 +1,8 @@
-import { appendFile, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { basename, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
+import { inspectModelFile, type ModelSourceFormat } from "./modelFileValidation.ts";
 
 const MODEL_EXTENSIONS = [".stl", ".step", ".stp"];
 const REQUEST_ATTACHMENT_EXTENSIONS = [
@@ -25,13 +26,19 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 export type UploadLike = {
   name: string;
   size: number;
+  type?: string;
   arrayBuffer: () => Promise<ArrayBuffer>;
 };
 
 export type SavedUpload = {
+  originalFilename?: string;
   filename: string;
   filepath: string;
   filesize: number;
+  sourceFormat?: ModelSourceFormat;
+  sourceSha256?: string;
+  validationStatus?: "valid";
+  validationDetail?: string;
 };
 
 export type DeletedUploadArtifacts = {
@@ -75,13 +82,22 @@ export async function saveUploadFile(file: UploadLike, uploadDir = getUploadDir(
   const filename = `${Date.now()}-${randomUUID()}-${safeBaseName || "model"}${extension}`;
   const filepath = join(uploadDir, filename);
   const buffer = Buffer.from(await file.arrayBuffer());
+  if (buffer.length !== file.size) {
+    throw new Error("模型文件大小校验失败");
+  }
+  const inspection = inspectModelFile(file.name, buffer, file.type);
 
   await writeFile(filepath, buffer);
 
   return {
+    originalFilename: file.name,
     filename,
     filepath,
     filesize: file.size,
+    sourceFormat: inspection.sourceFormat,
+    sourceSha256: inspection.sourceSha256,
+    validationStatus: inspection.validationStatus,
+    validationDetail: inspection.validationDetail,
   };
 }
 
@@ -117,7 +133,9 @@ export async function validateSavedUploadReference(
     throw new Error("文件信息无效或已失效，请重新上传");
   }
 
-  return upload;
+  const buffer = await readFile(resolvedFilePath);
+  const inspection = inspectModelFile(upload.filename, buffer);
+  return { ...upload, ...inspection };
 }
 
 export async function deleteSavedUploadArtifacts(upload: Pick<SavedUpload, "filename" | "filepath">) {
