@@ -626,6 +626,10 @@ test("quote form displays zero before valid auto quotes and removes the whole-or
   assert.match(orderSource, /报价金额已更新，请刷新后重试/);
   assert.match(orderSource, /请先上传模型并完成报价/);
   assert.match(orderSource, /payablePrice: exactOrderPrice/);
+  assert.match(orderSource, /const allFilesAutoQuoted = savedFilesWithPackaging\.every/);
+  assert.match(orderSource, /printFeeTotal: allFilesAutoQuoted \? autoPrintPrice : undefined/);
+  assert.match(orderSource, /estimatedPrice: exactOrderPrice == null \? 0 : adjustedOrderPrice/);
+  assert.match(orderSource, /allFilesAutoQuoted && allFilesSliced/);
   assert.doesNotMatch(orderSource, /Math\.max\(autoPrintPrice \+ shippingAmount, 20\)/);
   assert.doesNotMatch(estimateSource, /ORDER_MIN_PRICE/);
 });

@@ -291,9 +291,9 @@ export async function POST(request: Request) {
     );
     const allFilesSliced =
       successfulPrintTimes.length === fileCount && successfulPrintTimes.length > 0;
-    const exactLeadTimeHours = allFilesSliced
+    const exactLeadTimeHours = allFilesAutoQuoted && allFilesSliced
       ? calculateAutoLeadTimeHours(successfulPrintTimes)
-      : estimate.leadTimeMaxHours;
+      : undefined;
     const exactOrderPrice =
       allFilesAutoQuoted && shipping.includedInAutoPrice
         ? roundMoney(autoPrintPrice + shippingAmount)
@@ -358,7 +358,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "请选择对应类型的发票资料" }, { status: 400 });
       }
 
-      const baseAmountCents = yuanToCents(exactOrderPrice ?? autoPrintPrice + shippingAmount);
+      const baseAmountCents = exactOrderPrice == null ? 0 : yuanToCents(exactOrderPrice);
       const invoiceCalculation = calculateInvoiceTotalCents(baseAmountCents, invoiceType);
       const adjustedOrderPrice = centsToYuan(invoiceCalculation.invoiceTotalAmountCents);
       const invoiceProfileSnapshot = invoiceProfile
@@ -402,14 +402,14 @@ export async function POST(request: Request) {
         color: firstFile.color,
         quantity: totalQuantity,
         remark: getString(formData, "remark"),
-        estimatedPrice: adjustedOrderPrice,
+        estimatedPrice: exactOrderPrice == null ? 0 : adjustedOrderPrice,
         estimatedPriceMin: exactOrderPrice == null ? null : adjustedOrderPrice,
         estimatedPriceMax: exactOrderPrice == null ? null : adjustedOrderPrice,
         estimatedLeadTimeMinHours: exactLeadTimeHours,
         estimatedLeadTimeMaxHours: exactLeadTimeHours,
         packagingFee: estimate.packagingFee,
         shippingFee: allFilesAutoQuoted ? shipping.amount : null,
-        printFeeTotal: autoPrintPrice,
+        printFeeTotal: allFilesAutoQuoted ? autoPrintPrice : undefined,
         payablePrice: exactOrderPrice == null ? null : adjustedOrderPrice,
         estimatedLeadTimeHours: exactLeadTimeHours,
         shippingMethod: getString(formData, "shippingMethod"),
@@ -478,7 +478,7 @@ export async function POST(request: Request) {
         companySnapshotJson: JSON.stringify(COMPANY_LEGAL_SNAPSHOT),
       });
 
-      orderDetail.files.forEach((file, index) => {
+      if (allFilesAutoQuoted) orderDetail.files.forEach((file, index) => {
         const sliceQuote = sliceQuotes[index];
         if (sliceQuote?.status !== "success") {
           return;
