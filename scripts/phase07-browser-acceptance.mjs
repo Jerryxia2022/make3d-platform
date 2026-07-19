@@ -10,7 +10,7 @@ const stlPath = resolve(process.env.PHASE07_STL_PATH || "tests/fixtures/prusasli
 const cookieJarPath = resolve(process.env.PHASE07_COOKIE_JAR || "tmp/phase07-browser/cookies.txt");
 const loginPhone = process.env.PHASE07_LOGIN_PHONE;
 const loginPassword = process.env.PHASE07_LOGIN_PASSWORD;
-const evidenceDir = resolve("reports/evidence/phase07-a2");
+const evidenceDir = resolve(process.env.PHASE07_EVIDENCE_DIR || "reports/evidence/phase07-a2");
 const chromePath = process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const profileDir = await mkdtemp(join(tmpdir(), "make3d-phase07-browser-"));
 const invalidStepPath = resolve("tmp/phase07-browser/invalid-part21.step");
@@ -20,7 +20,7 @@ const evidence = {
   baseUrl,
   stepPath,
   stlPath,
-  home: {},
+  home: { viewports: {} },
   quote: {},
   network: { gcodeRequests: [] },
   consoleErrors: [],
@@ -50,26 +50,29 @@ try {
     if (/\.gcode(?:$|\?)/i.test(event.request.url)) evidence.network.gcodeRequests.push(event.request.url);
   });
 
-  await setViewport(1440, 900);
-  progress("capture desktop home");
-  await navigate("/");
-  await screenshot("home-desktop.png");
-  evidence.home.desktop = await evaluate(`({
-    title: document.title,
-    h1: document.querySelector('h1')?.innerText || '',
-    quoteLinks: [...document.querySelectorAll('a')].filter((item) => item.getAttribute('href') === '/quote').length,
-    text: document.body.innerText.slice(0, 1800),
-    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
-  })`);
-
-  await setViewport(390, 844, true);
-  progress("capture mobile home");
-  await screenshot("home-mobile.png");
-  evidence.home.mobile = await evaluate(`({
-    width: innerWidth,
-    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-    h1Box: (() => { const box=document.querySelector('h1')?.getBoundingClientRect(); return box ? {left:box.left,right:box.right,width:box.width} : null; })()
-  })`);
+  for (const viewport of [
+    { key: "1920x1080", width: 1920, height: 1080, mobile: false },
+    { key: "1366x768", width: 1366, height: 768, mobile: false },
+    { key: "1024x768", width: 1024, height: 768, mobile: false },
+    { key: "390x844", width: 390, height: 844, mobile: true },
+  ]) {
+    progress(`capture home ${viewport.key}`);
+    await setViewport(viewport.width, viewport.height, viewport.mobile);
+    await navigate("/");
+    await screenshot(`home-${viewport.key}.png`);
+    evidence.home.viewports[viewport.key] = await evaluate(`({
+      width: innerWidth,
+      height: innerHeight,
+      title: document.title,
+      h1: document.querySelector('h1')?.innerText || '',
+      quoteLinks: [...document.querySelectorAll('a')].filter((item) => item.getAttribute('href') === '/quote').length,
+      text: document.body.innerText.slice(0, 1800),
+      horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      h1Box: (() => { const box=document.querySelector('h1')?.getBoundingClientRect(); return box ? {left:box.left,right:box.right,width:box.width} : null; })()
+    })`);
+  }
+  evidence.home.desktop = evidence.home.viewports["1920x1080"];
+  evidence.home.mobile = evidence.home.viewports["390x844"];
 
   await setViewport(1440, 900);
   await installCustomerCookie();
@@ -147,9 +150,7 @@ try {
   progress("write acceptance evidence");
   evidence.finishedAt = new Date().toISOString();
   evidence.passed =
-    evidence.home.desktop.quoteLinks > 0 &&
-    !evidence.home.desktop.horizontalOverflow &&
-    !evidence.home.mobile.horizontalOverflow &&
+    Object.values(evidence.home.viewports).every((viewport) => viewport.quoteLinks > 0 && !viewport.horizontalOverflow) &&
     evidence.quote.initial.canvasCount === 0 &&
     evidence.quote.stlUploadSuccess.response.status === 200 &&
     evidence.quote.stlUploadSuccess.response.body?.success === true &&
