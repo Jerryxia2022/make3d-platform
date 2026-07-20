@@ -14,12 +14,51 @@ test("order list prioritizes blockers and calculates real summary counts", () =>
     [2, { order_id: 2, state: "REVIEWING", slice_status: "failed" }],
     [3, { order_id: 3, state: "CLOSED", slice_status: "parsed", confirmed_price_cents: 1200 }],
   ]);
-  const view = buildOrderListView({ orders, localOverviews: local, now: new Date("2026-07-18T12:00:00Z") });
+  const view = buildOrderListView({
+    orders,
+    localOverviews: local,
+    query: { sort: "priority" },
+    now: new Date("2026-07-18T12:00:00Z"),
+  });
   assert.deepEqual(view.rows.map((row) => row.id), [2, 1, 3]);
   assert.equal(view.stats.all, 3);
   assert.equal(view.stats.fileAbnormal, 1);
   assert.equal(view.stats.sliceFailed, 1);
   assert.equal(view.stats.todayNew, 2);
+});
+
+test("order list defaults to stable newest-created ordering only when sort is absent", () => {
+  const orders = [
+    order(1, { created_at: "2026-07-18T08:00:00Z" }),
+    order(2, { created_at: "2026-07-19T08:00:00Z" }),
+    order(3, { created_at: "2026-07-19T08:00:00Z" }),
+  ];
+
+  const newestFirst = buildOrderListView({ orders });
+  assert.equal(newestFirst.query.sort, "created_desc");
+  assert.deepEqual(newestFirst.rows.map((row) => row.id), [3, 2, 1]);
+
+  const oldestFirst = buildOrderListView({ orders, query: { sort: "created_asc" } });
+  assert.deepEqual(oldestFirst.rows.map((row) => row.id), [1, 2, 3]);
+
+  const priority = buildOrderListView({
+    orders,
+    localOverviews: new Map([[1, { order_id: 1, state: "REVIEWING", slice_status: "failed" }]]),
+    query: { sort: "priority" },
+  });
+  assert.equal(priority.rows[0].id, 1);
+
+  const recentlyUpdated = buildOrderListView({
+    orders: [
+      order(1, { updated_at: "2026-07-20T08:00:00Z" }),
+      order(2, { updated_at: "2026-07-20T10:00:00Z" }),
+    ],
+    query: { sort: "updated_desc" },
+  });
+  assert.deepEqual(recentlyUpdated.rows.map((row) => row.id), [2, 1]);
+
+  const invalidSort = buildOrderListView({ orders, query: { sort: "not-a-sort" } });
+  assert.equal(invalidSort.query.sort, "created_desc");
 });
 
 test("order list supports filename, order id, customer type, filters, and pagination", () => {

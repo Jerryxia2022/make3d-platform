@@ -1,5 +1,6 @@
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+const ORDER_LIST_SORTS = new Set(["priority", "updated_desc", "created_desc", "created_asc", "amount_desc"]);
 
 export function buildOrderListView({ orders = [], localOverviews = new Map(), details = new Map(), query = {}, now = new Date() }) {
   const normalizedQuery = normalizeQuery(query);
@@ -122,6 +123,7 @@ function sorter(sort) {
   const byNewest = (a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt) || Number(b.id) - Number(a.id);
   if (sort === "created_desc") return (a, b) => timestamp(b.created_at) - timestamp(a.created_at) || Number(b.id) - Number(a.id);
   if (sort === "created_asc") return (a, b) => timestamp(a.created_at) - timestamp(b.created_at) || Number(a.id) - Number(b.id);
+  if (sort === "updated_desc") return byNewest;
   if (sort === "amount_desc") return (a, b) => amount(b) - amount(a) || byNewest(a, b);
   return (a, b) => a.next.priority - b.next.priority || byNewest(a, b);
 }
@@ -135,6 +137,7 @@ function deriveReplyState(localState, requests, local) {
 
 function normalizeQuery(query) {
   const pageSize = clampInteger(query.page_size, DEFAULT_PAGE_SIZE, 10, MAX_PAGE_SIZE);
+  const requestedSort = String(query.sort || "created_desc").trim();
   return {
     q: String(query.q || "").trim().slice(0, 120),
     localState: String(query.local_state || "").trim(),
@@ -145,7 +148,7 @@ function normalizeQuery(query) {
     date: String(query.date || "").trim(),
     exception: String(query.exception || "").trim(),
     customerReply: String(query.customer_reply || "").trim(),
-    sort: String(query.sort || "priority").trim(),
+    sort: ORDER_LIST_SORTS.has(requestedSort) ? requestedSort : "created_desc",
     page: clampInteger(query.page, 1, 1, 10_000),
     pageSize,
   };

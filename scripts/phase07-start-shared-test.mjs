@@ -67,7 +67,7 @@ writeFileSync(resolve(root, "runtime-secrets.json"), JSON.stringify({ phone, pas
 const wslBridge = toWslPath(resolve(repoRoot, "scripts", "prusaslicer-wsl-bridge.sh"));
 const stdoutFd = openSync(resolve(logsPath, "app.stdout.log"), "a");
 const stderrFd = openSync(resolve(logsPath, "app.stderr.log"), "a");
-const child = spawn(process.execPath, [resolve(repoRoot, "node_modules", "next", "dist", "bin", "next"), "start", "-H", "0.0.0.0", "-p", String(args.port)], {
+const child = spawn(process.execPath, [resolve(repoRoot, "node_modules", "next", "dist", "bin", "next"), "start", "-H", args.host, "-p", String(args.port)], {
   cwd: repoRoot,
   detached: true,
   windowsHide: true,

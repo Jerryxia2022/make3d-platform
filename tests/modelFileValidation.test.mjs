@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   getModelSourceFormat,
+  inspectStepPart21Metadata,
   inspectModelFile,
   validateStepPart21,
   validateStlContent,
@@ -42,6 +43,31 @@ test("validates ASCII STL and STEP Part 21 content and records source SHA", () =
   const inspected = inspectModelFile("04NF12.STEP", validStep, "application/step");
   assert.equal(inspected.sourceFormat, "STEP");
   assert.match(inspected.sourceSha256, /^[a-f0-9]{64}$/);
+});
+
+test("STEP Part 21 diagnostics identify schema, units, solids, shells, and surfaces", () => {
+  const source = Buffer.from(`ISO-10303-21;
+HEADER;
+FILE_SCHEMA (('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1=(LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.));
+#2=ADVANCED_FACE('',(),#3,.T.);
+#3=B_SPLINE_SURFACE_WITH_KNOTS('',1,1,(),.UNSPECIFIED.,.F.,.F.,.F.,(),(),.UNSPECIFIED.);
+#4=CLOSED_SHELL('',(#2));
+#5=MANIFOLD_SOLID_BREP('body',#4);
+ENDSEC;
+END-ISO-10303-21;
+`);
+  const metadata = inspectStepPart21Metadata(source);
+  assert.equal(metadata.schema, "AUTOMOTIVE_DESIGN");
+  assert.equal(metadata.unit, "mm");
+  assert.equal(metadata.solidCount, 1);
+  assert.equal(metadata.closedShellCount, 1);
+  assert.equal(metadata.openShellCount, 0);
+  assert.equal(metadata.advancedFaceCount, 1);
+  assert.equal(metadata.bSplineSurfaceCount, 1);
+  assert.equal(inspectModelFile("part.stp", source).stepMetadata?.unit, "mm");
 });
 
 test("rejects extension-content mismatch, malformed Part 21, null bytes, and MIME mismatch", () => {

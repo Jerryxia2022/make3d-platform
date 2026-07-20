@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promis
 import { dirname, extname, join } from "node:path";
 import { basename, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
-import { inspectModelFile, type ModelSourceFormat } from "./modelFileValidation.ts";
+import { inspectModelFile, type ModelSourceFormat, type StepPart21Metadata } from "./modelFileValidation.ts";
 
 const MODEL_EXTENSIONS = [".stl", ".step", ".stp"];
 const REQUEST_ATTACHMENT_EXTENSIONS = [
@@ -39,6 +39,7 @@ export type SavedUpload = {
   sourceSha256?: string;
   validationStatus?: "valid";
   validationDetail?: string;
+  stepMetadata?: StepPart21Metadata;
 };
 
 export type DeletedUploadArtifacts = {
@@ -98,6 +99,7 @@ export async function saveUploadFile(file: UploadLike, uploadDir = getUploadDir(
     sourceSha256: inspection.sourceSha256,
     validationStatus: inspection.validationStatus,
     validationDetail: inspection.validationDetail,
+    stepMetadata: inspection.stepMetadata,
   };
 }
 

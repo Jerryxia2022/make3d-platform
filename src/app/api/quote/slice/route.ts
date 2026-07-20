@@ -1,13 +1,13 @@
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { NextResponse } from "next/server";
 import { calculateAutoFilePrice } from "@/backend/autoPricing";
-import { convertStepToStl, type DerivedStlArtifact } from "@/backend/modelConversion";
+import { convertStepToStl, StepConversionError, type DerivedStlArtifact } from "@/backend/modelConversion";
 import { getCustomerFromRequestCookie } from "@/backend/accountAuth";
 import { addQuoteDraftFile, openDatabase } from "@/backend/database";
 import { getPrusaSlicerConfig, runPrusaSlicer } from "@/backend/slicer";
-import { analyzeStlTopology, readStlDimensions } from "@/backend/stlAnalysis";
+import { inspectStlMesh, StlAnalysisError } from "@/backend/stlAnalysis";
 import { saveUploadFile, type SavedUpload } from "@/backend/uploads";
 import { evaluateAutoQuoteDimensions, type ModelDimensionsMm } from "@/shared/modelGeometry";
 
@@ -46,11 +46,13 @@ type QuoteSliceResponse = {
   };
   draft_file_id?: number;
   error?: string;
+  error_code?: string;
   preview_available?: boolean;
   preview_filename?: string;
 };
 
 export async function POST(request: Request) {
+  const requestStartedAt = Date.now();
   try {
     const customer = getCustomerFromRequestCookie(request);
 
@@ -69,6 +71,16 @@ export async function POST(request: Request) {
     }
 
     const savedFile = await saveUploadFile(file);
+    logQuoteDiagnostic("upload_validated", {
+      originalFilename: file.name,
+      actualPath: savedFile.filepath,
+      byteSize: savedFile.filesize,
+      mimeType: file.type || "generic",
+      sourceFormat: savedFile.sourceFormat,
+      validationDetail: savedFile.validationDetail,
+      sourceSha256: savedFile.sourceSha256,
+      stepMetadata: savedFile.stepMetadata,
+    });
     const slicerConfig = getPrusaSlicerConfig();
     let sliceInputFilepath = savedFile.filepath;
     let derivedArtifact: DerivedStlArtifact | null = null;
@@ -104,8 +116,26 @@ export async function POST(request: Request) {
           toolVersion: process.env.PRUSASLICER_PACKAGE_VERSION || "unknown",
         }));
         sliceInputFilepath = derivedArtifact.filepath;
+        logQuoteDiagnostic("step_converted", {
+          originalFilename: file.name,
+          sourcePath: savedFile.filepath,
+          derivedPath: derivedArtifact.filepath,
+          derivedSizeBytes: derivedArtifact.filesize,
+          derivedSha256: derivedArtifact.sha256,
+          toolName: derivedArtifact.toolName,
+          toolVersion: derivedArtifact.toolVersion,
+          ...derivedArtifact.diagnostics,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : "STEP 转换失败";
+        const errorCode = error instanceof StepConversionError ? error.code : "STEP_CONVERSION_FAILED";
+        logQuoteDiagnostic("step_conversion_failed", {
+          originalFilename: file.name,
+          sourcePath: savedFile.filepath,
+          errorCode,
+          message,
+          totalDurationMs: Date.now() - requestStartedAt,
+        });
         const draftFileId = saveQuoteDraftFile({
           customerId: customer.customerId,
           originalFilename: file.name,
@@ -116,23 +146,31 @@ export async function POST(request: Request) {
           sliceStatus: "manual",
           errorMessage: message,
           geometryStatus: "conversion_failed",
-          manualQuoteReasonCode: "STEP_CONVERSION_FAILED",
+          manualQuoteReasonCode: errorCode,
           conversionStatus: "failed",
           conversionError: message,
         });
         return jsonResponse({
           success: true,
-          message: "STEP 转换失败，需人工确认",
+          message: getPublicModelErrorMessage(errorCode),
           saved_upload: savedFile,
           draft_file_id: draftFileId,
-          error: "STEP_CONVERSION_FAILED",
+          error: errorCode,
+          error_code: errorCode,
         });
       }
     }
 
     let dimensions: ModelDimensionsMm;
     try {
-      dimensions = await readStlDimensions(sliceInputFilepath);
+      const mesh = await inspectStlMesh(sliceInputFilepath);
+      dimensions = mesh.dimensions;
+      logQuoteDiagnostic("mesh_analyzed", {
+        originalFilename: file.name,
+        meshPath: sliceInputFilepath,
+        meshSizeBytes: (await stat(sliceInputFilepath)).size,
+        ...mesh,
+      });
       const eligibility = evaluateAutoQuoteDimensions(dimensions);
       if (!eligibility.eligible) {
         const draftFileId = saveQuoteDraftFile({
@@ -160,9 +198,7 @@ export async function POST(request: Request) {
         });
       }
 
-      const analysis = await analyzeStlTopology(sliceInputFilepath);
-
-      if (analysis.componentCount > 1) {
+      if (mesh.componentCount > 1) {
         const draftFileId = saveQuoteDraftFile({
           customerId: customer.customerId,
           originalFilename: file.name,
@@ -171,7 +207,7 @@ export async function POST(request: Request) {
           color,
           quantity,
           sliceStatus: "manual",
-          errorMessage: `${MULTI_ENTITY_MANUAL_MESSAGE} 实体数量：${analysis.componentCount}`,
+          errorMessage: `${MULTI_ENTITY_MANUAL_MESSAGE} 实体数量：${mesh.componentCount}`,
           dimensions,
           manualQuoteReasonCode: "MULTIPLE_STL_COMPONENTS",
           derivedArtifact,
@@ -188,6 +224,15 @@ export async function POST(request: Request) {
         });
       }
     } catch (error) {
+      const errorCode = error instanceof StlAnalysisError ? error.code : "GEOMETRY_ANALYSIS_FAILED";
+      const publicMessage = getPublicModelErrorMessage(errorCode);
+      logQuoteDiagnostic("mesh_analysis_failed", {
+        originalFilename: file.name,
+        meshPath: sliceInputFilepath,
+        errorCode,
+        message: error instanceof Error ? error.message : publicMessage,
+        totalDurationMs: Date.now() - requestStartedAt,
+      });
       const draftFileId = saveQuoteDraftFile({
         customerId: customer.customerId,
         originalFilename: file.name,
@@ -198,16 +243,17 @@ export async function POST(request: Request) {
         sliceStatus: "manual",
         errorMessage: error instanceof Error ? error.message : "模型网格异常，需要人工确认后报价。",
         geometryStatus: "invalid",
-        manualQuoteReasonCode: "GEOMETRY_INVALID",
+        manualQuoteReasonCode: errorCode,
         derivedArtifact,
       });
 
       return jsonResponse({
         success: true,
-        message: "模型网格异常，需要人工确认后报价。",
+        message: publicMessage,
         saved_upload: savedFile,
         draft_file_id: draftFileId,
-        error: "STL topology analysis failed",
+        error: errorCode,
+        error_code: errorCode,
       });
     }
 
@@ -277,8 +323,18 @@ export async function POST(request: Request) {
           config: slicerConfig,
         }),
       );
-    } catch {
-      const message = "自动切片失败，需人工确认。";
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown slicer error";
+      const errorCode = /timeout|timed out|超时/i.test(errorMessage) ? "SLICER_TIMEOUT" : "SLICER_EXECUTION_FAILED";
+      const message = getPublicModelErrorMessage(errorCode);
+      logQuoteDiagnostic("slicing_failed", {
+        originalFilename: file.name,
+        meshPath: sliceInputFilepath,
+        gcodePath: gcodeFilePath,
+        errorCode,
+        message: errorMessage,
+        totalDurationMs: Date.now() - requestStartedAt,
+      });
       const draftFileId = saveQuoteDraftFile({
         customerId: customer.customerId,
         originalFilename: file.name,
@@ -289,7 +345,7 @@ export async function POST(request: Request) {
         sliceStatus: "manual",
         errorMessage: message,
         dimensions,
-        manualQuoteReasonCode: "SLICER_EXECUTION_FAILED",
+        manualQuoteReasonCode: errorCode,
         derivedArtifact,
       });
 
@@ -298,7 +354,8 @@ export async function POST(request: Request) {
         message,
         saved_upload: savedFile,
         draft_file_id: draftFileId,
-        error: "SLICER_EXECUTION_FAILED",
+        error: errorCode,
+        error_code: errorCode,
         preview_available: Boolean(derivedArtifact),
         preview_filename: derivedArtifact?.filename,
       });
@@ -354,6 +411,19 @@ export async function POST(request: Request) {
       materialFee: price.materialFee,
       timeFee: price.laborFee,
       basePrintPrice: price.estimatedPrice,
+    });
+    logQuoteDiagnostic("quote_completed", {
+      originalFilename: file.name,
+      sourcePath: savedFile.filepath,
+      meshPath: sliceInputFilepath,
+      gcodePath: gcodeFilePath,
+      gcodeSizeBytes: (await stat(gcodeFilePath)).size,
+      filamentWeightG: metadata.filamentWeightG,
+      printTimeSeconds: metadata.printTimeSeconds,
+      materialFee: price.materialFee,
+      timeFee: price.laborFee,
+      basePrintPrice: price.estimatedPrice,
+      totalDurationMs: Date.now() - requestStartedAt,
     });
 
     return jsonResponse({
@@ -502,6 +572,35 @@ function getBeijingTimestampForGeometry() {
     second: "2-digit",
     hour12: false,
   }).format(new Date());
+}
+
+function getPublicModelErrorMessage(errorCode: string) {
+  switch (errorCode) {
+    case "STEP_NO_PRINTABLE_SOLID":
+    case "STEP_EMPTY_MESH":
+    case "MESH_EMPTY":
+      return "STEP 文件中未检测到可打印实体。";
+    case "STEP_DIMENSION_MISMATCH":
+    case "STEP_DIMENSION_MISSING":
+    case "MESH_DIMENSIONS_MISSING":
+      return "模型转换后尺寸异常，请确认导出单位。";
+    case "STEP_CONVERSION_TIMEOUT":
+    case "SLICER_TIMEOUT":
+    case "MESH_COMPONENT_ANALYSIS_LIMIT":
+      return "模型过于复杂，自动处理超时，文件已保存，请联系人工报价。";
+    case "STEP_ENTITY_LOSS":
+    case "STEP_TOPOLOGY_UNREPAIRABLE":
+    case "STEP_MODEL_INFO_INVALID":
+    case "STEP_CONVERSION_PROCESS_FAILED":
+    case "STEP_CONVERSION_FAILED":
+      return "STEP 几何存在无法自动修复的拓扑错误，文件已保存，请联系人工报价。";
+    default:
+      return "模型网格异常，文件已保存，请联系人工报价。";
+  }
+}
+
+function logQuoteDiagnostic(stage: string, details: Record<string, unknown>) {
+  console.info("[make3d:quote-pipeline]", JSON.stringify({ stage, ...details }));
 }
 
 function jsonResponse(body: QuoteSliceResponse, status = 200) {

@@ -12,7 +12,7 @@ import {
   parseGcodeMetadata,
   runPrusaSlicer,
 } from "../src/backend/slicer.ts";
-import { analyzeStlTopology } from "../src/backend/stlAnalysis.ts";
+import { analyzeStlTopology, readStlDimensions } from "../src/backend/stlAnalysis.ts";
 
 test("parses PrusaSlicer G-code printing time and filament weight from tail comments", () => {
   const metadata = parseGcodeMetadata(`
@@ -179,6 +179,28 @@ test("builds PrusaSlicer command as argument array without shell concatenation",
     "--support-material",
     "/uploads/model.stl",
   ]);
+});
+
+test("large converted STEP meshes compute dimensions without call-stack overflow", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "make3d-large-step-mesh-"));
+  const filepath = join(dir, "04NF14-regression.stl");
+  const triangleCount = 65_710;
+  const triangles = Array.from({ length: triangleCount }, (_, index) => [
+    [index, 0, 0],
+    [index + 1, 0, 0],
+    [index, 1, 1],
+  ]);
+
+  try {
+    await writeFile(filepath, createBinaryStl(triangles));
+    assert.deepEqual(await readStlDimensions(filepath), { x: triangleCount, y: 1, z: 1 });
+    assert.deepEqual(await analyzeStlTopology(filepath), {
+      componentCount: 1,
+      triangleCount,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("supports an isolated quote-only virtual bed without changing the profile", () => {

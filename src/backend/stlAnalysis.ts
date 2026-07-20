@@ -6,6 +6,16 @@ export type StlTopologyAnalysis = {
   triangleCount: number;
 };
 
+export type StlMeshInspection = StlTopologyAnalysis & {
+  dimensions: ModelDimensionsMm;
+  format: "binary" | "ascii";
+  degenerateTriangleCount: number;
+  boundaryEdgeCount: number;
+  nonManifoldEdgeCount: number;
+  selfIntersectionCheck: "not_performed";
+  normalCheck: "not_performed";
+};
+
 const MAX_ANALYSIS_TRIANGLES = 120_000;
 
 type Triangle = [string, string, string];
@@ -13,14 +23,7 @@ type Triangle = [string, string, string];
 export async function analyzeStlTopology(filePath: string): Promise<StlTopologyAnalysis> {
   const buffer = await readFile(filePath);
   const triangles = parseStlTriangles(buffer);
-
-  if (triangles.length === 0) {
-    throw new Error("模型网格异常，需要人工确认后报价。");
-  }
-
-  if (triangles.length > MAX_ANALYSIS_TRIANGLES) {
-    return { componentCount: 1, triangleCount: triangles.length };
-  }
+  validateTriangleCount(triangles.length);
 
   return {
     componentCount: countConnectedComponents(triangles),
@@ -29,35 +32,67 @@ export async function analyzeStlTopology(filePath: string): Promise<StlTopologyA
 }
 
 export async function readStlDimensions(filePath: string): Promise<ModelDimensionsMm> {
+  return readStlDimensionsFromBuffer(await readFile(filePath));
+}
+
+export async function inspectStlMesh(filePath: string): Promise<StlMeshInspection> {
   const buffer = await readFile(filePath);
-  const vertices = looksLikeBinaryStl(buffer)
-    ? readBinaryStlVertices(buffer)
-    : readAsciiStlVertices(buffer.toString("utf8"));
-  if (vertices.length === 0) {
-    throw new Error("模型尺寸无法识别，需人工确认。");
+  const triangles = parseStlTriangles(buffer);
+  validateTriangleCount(triangles.length);
+
+  const edgeCounts = new Map<string, number>();
+  let degenerateTriangleCount = 0;
+  for (const triangle of triangles) {
+    if (new Set(triangle).size < 3) degenerateTriangleCount += 1;
+    for (const [left, right] of [
+      [triangle[0], triangle[1]],
+      [triangle[1], triangle[2]],
+      [triangle[2], triangle[0]],
+    ]) {
+      const key = left < right ? `${left}|${right}` : `${right}|${left}`;
+      edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
+    }
   }
 
-  const axes = [0, 1, 2].map((axis) => vertices.map((vertex) => vertex[axis]));
+  let boundaryEdgeCount = 0;
+  let nonManifoldEdgeCount = 0;
+  for (const count of edgeCounts.values()) {
+    if (count === 1) boundaryEdgeCount += 1;
+    if (count > 2) nonManifoldEdgeCount += 1;
+  }
+
   return {
-    x: roundDimension(Math.max(...axes[0]) - Math.min(...axes[0])),
-    y: roundDimension(Math.max(...axes[1]) - Math.min(...axes[1])),
-    z: roundDimension(Math.max(...axes[2]) - Math.min(...axes[2])),
+    componentCount: countConnectedComponents(triangles),
+    triangleCount: triangles.length,
+    dimensions: readStlDimensionsFromBuffer(buffer),
+    format: looksLikeBinaryStl(buffer) ? "binary" : "ascii",
+    degenerateTriangleCount,
+    boundaryEdgeCount,
+    nonManifoldEdgeCount,
+    selfIntersectionCheck: "not_performed",
+    normalCheck: "not_performed",
   };
 }
 
-function parseStlTriangles(buffer: Buffer): Triangle[] {
-  if (looksLikeBinaryStl(buffer)) {
-    return parseBinaryStlTriangles(buffer);
+function validateTriangleCount(triangleCount: number) {
+  if (triangleCount === 0) {
+    throw new StlAnalysisError("MESH_EMPTY", "STEP 文件中未检测到可打印实体。");
   }
+  if (triangleCount > MAX_ANALYSIS_TRIANGLES) {
+    throw new StlAnalysisError(
+      "MESH_COMPONENT_ANALYSIS_LIMIT",
+      "模型网格过于复杂，无法安全确认独立实体数量，请联系人工报价。",
+    );
+  }
+}
 
+function parseStlTriangles(buffer: Buffer): Triangle[] {
+  if (looksLikeBinaryStl(buffer)) return parseBinaryStlTriangles(buffer);
   return parseAsciiStlTriangles(buffer.toString("utf8"));
 }
 
 function looksLikeBinaryStl(buffer: Buffer) {
-  if (buffer.length < 84) {
-    return false;
-  }
-
+  if (buffer.length < 84) return false;
   const triangleCount = buffer.readUInt32LE(80);
   return 84 + triangleCount * 50 === buffer.length;
 }
@@ -78,21 +113,20 @@ function parseBinaryStlTriangles(buffer: Buffer): Triangle[] {
   return triangles;
 }
 
-function readBinaryStlVertices(buffer: Buffer): number[][] {
+function visitBinaryStlVertices(buffer: Buffer, visit: (vertex: [number, number, number]) => void) {
   const triangleCount = buffer.readUInt32LE(80);
-  const vertices: number[][] = [];
   for (let index = 0; index < triangleCount; index += 1) {
     const start = 84 + index * 50 + 12;
     for (let vertexIndex = 0; vertexIndex < 3; vertexIndex += 1) {
       const offset = start + vertexIndex * 12;
-      vertices.push([
+      const vertex: [number, number, number] = [
         buffer.readFloatLE(offset),
         buffer.readFloatLE(offset + 4),
         buffer.readFloatLE(offset + 8),
-      ]);
+      ];
+      if (vertex.every(Number.isFinite)) visit(vertex);
     }
   }
-  return vertices.filter((vertex) => vertex.every(Number.isFinite));
 }
 
 function readVertexKey(buffer: Buffer, offset: number) {
@@ -121,10 +155,37 @@ function parseAsciiStlTriangles(source: string): Triangle[] {
   return triangles;
 }
 
-function readAsciiStlVertices(source: string): number[][] {
-  return [...source.matchAll(/vertex\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)/gi)]
-    .map((match) => [Number(match[1]), Number(match[2]), Number(match[3])])
-    .filter((vertex) => vertex.every(Number.isFinite));
+function visitAsciiStlVertices(source: string, visit: (vertex: [number, number, number]) => void) {
+  for (const match of source.matchAll(/vertex\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:e[+-]?\d+)?)/gi)) {
+    const vertex: [number, number, number] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    if (vertex.every(Number.isFinite)) visit(vertex);
+  }
+}
+
+function readStlDimensionsFromBuffer(buffer: Buffer): ModelDimensionsMm {
+  const min = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+  const max = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+  let vertexCount = 0;
+  const visit = (vertex: [number, number, number]) => {
+    vertexCount += 1;
+    for (let axis = 0; axis < 3; axis += 1) {
+      if (vertex[axis] < min[axis]) min[axis] = vertex[axis];
+      if (vertex[axis] > max[axis]) max[axis] = vertex[axis];
+    }
+  };
+
+  if (looksLikeBinaryStl(buffer)) visitBinaryStlVertices(buffer, visit);
+  else visitAsciiStlVertices(buffer.toString("utf8"), visit);
+
+  if (vertexCount === 0) {
+    throw new StlAnalysisError("MESH_DIMENSIONS_MISSING", "模型尺寸无法识别，需人工确认。");
+  }
+
+  return {
+    x: roundDimension(max[0] - min[0]),
+    y: roundDimension(max[1] - min[1]),
+    z: roundDimension(max[2] - min[2]),
+  };
 }
 
 function roundDimension(value: number) {
@@ -133,40 +194,54 @@ function roundDimension(value: number) {
 
 function countConnectedComponents(triangles: Triangle[]) {
   const parent = Array.from({ length: triangles.length }, (_, index) => index);
+  const rank = new Uint8Array(triangles.length);
   const vertexToTriangle = new Map<string, number>();
 
   triangles.forEach((triangle, triangleIndex) => {
     for (const vertex of triangle) {
       const previousTriangle = vertexToTriangle.get(vertex);
-
-      if (previousTriangle == null) {
-        vertexToTriangle.set(vertex, triangleIndex);
-      } else {
-        union(parent, triangleIndex, previousTriangle);
-      }
+      if (previousTriangle == null) vertexToTriangle.set(vertex, triangleIndex);
+      else union(parent, rank, triangleIndex, previousTriangle);
     }
   });
 
   return new Set(parent.map((_, index) => find(parent, index))).size;
 }
 
-function union(parent: number[], left: number, right: number) {
+function union(parent: number[], rank: Uint8Array, left: number, right: number) {
   const leftRoot = find(parent, left);
   const rightRoot = find(parent, right);
+  if (leftRoot === rightRoot) return;
 
-  if (leftRoot !== rightRoot) {
+  if (rank[leftRoot] < rank[rightRoot]) parent[leftRoot] = rightRoot;
+  else if (rank[leftRoot] > rank[rightRoot]) parent[rightRoot] = leftRoot;
+  else {
     parent[rightRoot] = leftRoot;
+    rank[leftRoot] += 1;
   }
 }
 
 function find(parent: number[], index: number): number {
-  if (parent[index] !== index) {
-    parent[index] = find(parent, parent[index]);
+  let root = index;
+  while (parent[root] !== root) root = parent[root];
+  while (parent[index] !== index) {
+    const next = parent[index];
+    parent[index] = root;
+    index = next;
   }
-
-  return parent[index];
+  return root;
 }
 
 function normalizeCoordinate(value: number) {
   return Number.isFinite(value) ? value.toFixed(5) : "NaN";
+}
+
+export class StlAnalysisError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "StlAnalysisError";
+    this.code = code;
+  }
 }

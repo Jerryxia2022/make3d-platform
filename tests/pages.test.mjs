@@ -927,8 +927,11 @@ test("customer APIs require login before quote slicing and order submission", as
   const orderSource = await readSource("src/app/api/orders/route.ts");
 
   assert.match(sliceSource, /getCustomerFromRequestCookie/);
-  assert.match(sliceSource, /analyzeStlTopology/);
+  assert.match(sliceSource, /inspectStlMesh/);
   assert.match(sliceSource, /检测到该文件包含多个可拆分实体，需要人工确认报价。/);
+  assert.match(sliceSource, /STEP 文件中未检测到可打印实体。/);
+  assert.match(sliceSource, /模型转换后尺寸异常，请确认导出单位。/);
+  assert.match(sliceSource, /模型过于复杂，自动处理超时/);
   assert.match(sliceSource, /status\), 401\)|}, 401\)/);
   assert.match(orderSource, /getCustomerFromRequest/);
   assert.match(orderSource, /status: 401/);

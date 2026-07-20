@@ -19,7 +19,8 @@ test("quote slicing covers the inclusive 300mm envelope and persists execution f
 
   assert.match(source, /QUOTE_BED_SHAPE = "0x0,320x0,320x320,0x320"/);
   assert.match(source, /QUOTE_CENTER = "160,160"/);
-  assert.match(source, /manualQuoteReasonCode: "SLICER_EXECUTION_FAILED"/);
+  assert.match(source, /"SLICER_TIMEOUT" : "SLICER_EXECUTION_FAILED"/);
+  assert.match(source, /manualQuoteReasonCode: errorCode/);
   assert.match(source, /sliceStatus: "manual"/);
 });
 
